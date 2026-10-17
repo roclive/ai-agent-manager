@@ -1,10 +1,58 @@
-import { openSync,readFileSync,writeFileSync,closeSync,unlinkSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { Repo } from '../db/index.js';
-import { alive } from './process.js';
-export function withLock<T>(repo:Repo,fn:()=>T):T|undefined{const path=resolve(repo.home,'tick.lock');let fd:number;
- try{fd=openSync(path,'wx');}catch(e){if((e as NodeJS.ErrnoException).code!=='EEXIST')throw e;let pid:number;try{pid=Number(readFileSync(path,'utf8'));}catch{return;}
- // A fresh empty file may belong to a contender that has not written its pid yet.
- if(!Number.isInteger(pid)||pid<=0||alive(pid))return;
- try{unlinkSync(path);}catch{return;}return withLock(repo,fn);}
- writeFileSync(fd,String(process.pid));closeSync(fd);try{return fn();}finally{try{if(readFileSync(path,'utf8')===String(process.pid))unlinkSync(path);}catch{ /* already removed */ }}}
+import {
+  openSync,
+  readFileSync,
+  writeFileSync,
+  closeSync,
+  unlinkSync,
+  statSync,
+} from "node:fs";
+import { resolve } from "node:path";
+import { Repo } from "../db/index.js";
+import { alive } from "./process.js";
+export function withLock<T>(repo: Repo, fn: () => T): T | undefined {
+  const path = resolve(repo.home, "tick.lock");
+  // Serialize acquisition (including stale-file replacement) across manager processes.
+  // The transaction ends before the heartbeat; the file guards the actual work.
+  const acquired = repo.db
+    .transaction(() => {
+      try {
+        const raw = readFileSync(path, "utf8");
+        const pid = Number(raw);
+        if (Number.isInteger(pid) && pid > 0) {
+          if (alive(pid)) return false;
+        } else if (Date.now() - statSync(path).mtimeMs < 30000) return false;
+        unlinkSync(path);
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+      }
+      let fd: number;
+      try {
+        fd = openSync(path, "wx");
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === "EEXIST") return false;
+        throw e;
+      }
+      try {
+        writeFileSync(fd, String(process.pid));
+      } finally {
+        closeSync(fd);
+      }
+      return true;
+    })
+    .immediate();
+  if (!acquired) return;
+  try {
+    return fn();
+  } finally {
+    repo.db
+      .transaction(() => {
+        try {
+          if (readFileSync(path, "utf8") === String(process.pid))
+            unlinkSync(path);
+        } catch (e) {
+          if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+        }
+      })
+      .immediate();
+  }
+}

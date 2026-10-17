@@ -3,3 +3,7 @@ node_modules/
 vendor/
 *.db-wal
 *.db-shm
+dist/
+*.log
+.DS_Store
+aam-implementation.bundle
