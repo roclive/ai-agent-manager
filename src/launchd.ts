@@ -1,4 +1,5 @@
 import {
+  realpathSync,
   mkdirSync,
   writeFileSync,
   readFileSync,
@@ -22,7 +23,10 @@ export function nodePath(exists = existsSync) {
     ? "/opt/homebrew/bin/node"
     : process.execPath;
 }
-export function plist(repo: Repo, manager = process.cwd()) {
+export function daemonLogPath() {
+  return resolve(homedir(), "Library/Logs/aam/daemon.log");
+}
+export function plist(repo: Repo) {
   const root = fileURLToPath(new URL("..", import.meta.url));
   const args = [
     nodePath(),
@@ -36,11 +40,11 @@ export function plist(repo: Repo, manager = process.cwd()) {
 <plist version="1.0"><dict>
 <key>Label</key><string>com.aam.daemon</string>
 <key>ProgramArguments</key><array>${args.map((a) => `<string>${xml(a)}</string>`).join("")}</array>
-<key>WorkingDirectory</key><string>${xml(manager)}</string>
+<key>WorkingDirectory</key><string>${xml(homedir())}</string>
 <key>EnvironmentVariables</key><dict><key>AAM_HOME</key><string>${xml(repo.home)}</string><key>PATH</key><string>${xml(`/opt/homebrew/bin:${homedir()}/.local/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH || ""}`)}</string></dict>
 <key>KeepAlive</key><true/><key>RunAtLoad</key><true/>
-<key>StandardOutPath</key><string>${xml(resolve(repo.home, "daemon.log"))}</string>
-<key>StandardErrorPath</key><string>${xml(resolve(repo.home, "daemon.log"))}</string>
+<key>StandardOutPath</key><string>${xml(daemonLogPath())}</string>
+<key>StandardErrorPath</key><string>${xml(daemonLogPath())}</string>
 </dict></plist>\n`;
 }
 export function launchd(
@@ -52,6 +56,7 @@ export function launchd(
   const path = resolve(homedir(), "Library/LaunchAgents/com.aam.daemon.plist");
   if (action === "install") {
     const body = plist(repo);
+    mkdirSync(dirname(daemonLogPath()), { recursive: true });
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, body);
     if (load) {
@@ -87,6 +92,7 @@ export function launchd(
     );
     const protectedRepo = [
       process.cwd(),
+      repo.home,
       ...repo.projects().map((p) => p.repo_path),
     ].some((path) =>
       protectedPaths.some(
@@ -95,9 +101,10 @@ export function launchd(
     );
     return {
       lastExitCode,
+      logPath: daemonLogPath(),
       ...(lastExitCode === 78 && protectedRepo
         ? {
-            hint: "macOS privacy protection can block launchd jobs in Desktop, Documents or Downloads. Grant Full Disk Access to the node binary or move the repos.",
+            hint: `macOS privacy protection can block launchd access to Desktop, Documents or Downloads. Grant Full Disk Access to the node binary (${realpathSync(nodePath())}) or move the repos. The plist already keeps its cwd and logs outside protected folders.`,
           }
         : {}),
       installed: existsSync(path),

@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { writeFileSync, readFileSync } from "node:fs";
+import { writeFileSync, readFileSync, realpathSync } from "node:fs";
+import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { Repo } from "../src/db/index.js";
 import { fixture } from "./helpers.js";
@@ -9,7 +10,7 @@ import { rateLimited } from "../src/core/finalize.js";
 import { codex, opencode, command, prompt } from "../src/workers/index.js";
 import { parseVerdict, claudeReview } from "../src/core/review.js";
 import { withLock } from "../src/core/lock.js";
-import { plist } from "../src/launchd.js";
+import { plist, nodePath, daemonLogPath } from "../src/launchd.js";
 import { fireRoutine, validateRoutine } from "../src/scheduler.js";
 let f: ReturnType<typeof fixture>;
 afterEach(() => f?.cleanup());
@@ -233,8 +234,28 @@ it("runs create_task and shell routines and generates launchd plist", () => {
   });
   fireRoutine(f.repo, f.repo.routines()[1]);
   expect(JSON.stringify(f.repo.events())).toContain("routine-output");
-  const xml = plist(f.repo, "/tmp/a&b");
-  expect(xml).toContain("/tmp/a&amp;b");
+  // Generate only; never install or load the live launchd job.
+  const xml = plist(f.repo);
+  const escape = (value: string) =>
+    value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&apos;");
+  expect(xml).toContain(
+    `<key>WorkingDirectory</key><string>${escape(homedir())}</string>`,
+  );
+  for (const key of ["StandardOutPath", "StandardErrorPath"])
+    expect(xml).toContain(
+      `<key>${key}</key><string>${escape(daemonLogPath())}</string>`,
+    );
+  expect(xml).toContain(
+    `<key>AAM_HOME</key><string>${escape(f.repo.home)}</string>`,
+  );
+  const tempPlist = resolve(f.root, "daemon.plist");
+  writeFileSync(tempPlist, xml);
+  expect(readFileSync(tempPlist, "utf8")).toBe(xml);
   expect(xml).toContain("RunAtLoad");
   expect(xml).toContain("KeepAlive");
   expect(xml).toContain(f.repo.home);
@@ -287,10 +308,40 @@ it("reports launchd exit 78 with a privacy hint for protected repos", async () =
   expect(status).toMatchObject({
     loaded: true,
     lastExitCode: 78,
+    logPath: resolve(homedir(), "Library/Logs/aam/daemon.log"),
     hint: expect.stringContaining("Full Disk Access"),
   });
+  expect(status).toHaveProperty(
+    "hint",
+    expect.stringContaining(realpathSync(nodePath())),
+  );
+  expect(status).toHaveProperty(
+    "hint",
+    expect.stringContaining(
+      "already keeps its cwd and logs outside protected folders",
+    ),
+  );
   expect(calls[1]).toEqual([
     "print",
     `gui/${process.getuid?.() ?? 0}/com.aam.daemon`,
   ]);
+});
+
+it("migrates start_sha idempotently without inventing snapshots for old runs", () => {
+  f = fixture();
+  const t = f.task();
+  f.repo.db.exec("ALTER TABLE runs DROP COLUMN start_sha");
+  f.repo.db
+    .prepare(
+      "INSERT INTO runs(task_id,worker,status,started_at,log_path,last_message_path) VALUES (?,'codex','lost','','','')",
+    )
+    .run(t.id);
+  for (let i = 0; i < 2; i++) {
+    const other = new Repo(f.repo.home);
+    try {
+      expect(other.runs()[0].start_sha).toBeNull();
+    } finally {
+      other.close();
+    }
+  }
 });

@@ -471,3 +471,31 @@ it("keeps a run alive through worker.pid when its wrapper dies", async () => {
   // Cleanup can still kill the detached group even though the DB wrapper pid is absent.
   f.repo.db.prepare("UPDATE runs SET pid=? WHERE id=?").run(run.pid, id);
 });
+
+it("does not recover an unchanged lost retry from commits in an earlier attempt", async () => {
+  f = fixture("printf previous > previous.txt");
+  f.repo.db.prepare("UPDATE projects SET test_cmd='echo passed'").run();
+  const t = f.task();
+  const first = dispatch(f.repo, t.identifier);
+  await waitExit(f.repo, first);
+  finalize(f.repo, f.repo.runs()[0]);
+  const wt = f.repo.task(t.id).worktree_path!;
+  const previousSha = git(wt, ["rev-parse", "HEAD"]);
+  expect(
+    Number(git(wt, ["rev-list", "--count", "main..HEAD"])),
+  ).toBeGreaterThan(0);
+  f.repo.updateTask(t.id, { status: "ready", attempts: 1 });
+  writeFileSync(f.fake, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  const retry = dispatch(f.repo, t.identifier);
+  expect(f.repo.runs()[0].start_sha).toBe(previousSha);
+  await waitExit(f.repo, retry);
+  finalize(f.repo, f.repo.runs()[0], "lost");
+  expect(f.repo.task(t.id)).toMatchObject({
+    status: "ready",
+    attempts: 1,
+    lost_count: 1,
+    feedback: "passed",
+  });
+  expect(git(wt, ["rev-parse", "HEAD"])).toBe(previousSha);
+  expect(JSON.stringify(f.repo.events())).not.toContain("lost run recovered");
+});

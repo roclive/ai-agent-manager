@@ -87,7 +87,7 @@ aam launchd status
 aam launchd uninstall
 ```
 
-The plist lives at `~/Library/LaunchAgents/com.aam.daemon.plist`, includes absolute Node/tsx paths, and runs from the manager's working directory. Output goes to `<home>/daemon.log`. It includes `/opt/homebrew/bin` and `~/.local/bin` in PATH. Reinstall after moving the manager or changing the Node installation.
+The plist lives at `~/Library/LaunchAgents/com.aam.daemon.plist`, includes absolute Node/tsx paths, and runs from the user's home directory with absolute `AAM_HOME`. Output goes to `~/Library/Logs/aam/daemon.log` (the directory is created on install), keeping cwd and logs outside macOS privacy-protected folders. It includes `/opt/homebrew/bin` and `~/.local/bin` in PATH. Reinstall after moving the manager or changing the Node installation.
 
 ## Settings, recovery, and files
 

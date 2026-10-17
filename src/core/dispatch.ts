@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { Repo, type Task } from "../db/index.js";
+import { git } from "./process.js";
 import { ensureWorktree } from "./worktree.js";
 import { prompt, spawnWorker } from "../workers/index.js";
 export function dependenciesDone(repo: Repo, t: Task) {
@@ -31,12 +32,13 @@ export function dispatch(repo: Repo, id: string, force = false) {
     repo.event("dispatch_error", message, t.id);
     throw e;
   }
+  const startSha = git(worktree, ["rev-parse", "HEAD"]);
   const started = new Date().toISOString();
   const result = repo.db
     .prepare(
-      "INSERT INTO runs(task_id,worker,status,started_at,log_path,last_message_path) VALUES (?,?,'running',?,'','')",
+      "INSERT INTO runs(task_id,worker,status,started_at,start_sha,log_path,last_message_path) VALUES (?,?,'running',?,?,'','')",
     )
-    .run(t.id, t.worker, started);
+    .run(t.id, t.worker, started, startSha);
   const idRun = Number(result.lastInsertRowid);
   const runDir = resolve(repo.home, "runs", String(idRun));
   try {

@@ -49,6 +49,7 @@ export interface Run {
   worker: string;
   pid: number | null;
   status: string;
+  start_sha: string | null;
   started_at: string;
   ended_at: string | null;
   exit_code: number | null;
@@ -88,6 +89,9 @@ export class Repo {
       this.db.exec(
         "ALTER TABLE tasks ADD COLUMN lost_count INTEGER NOT NULL DEFAULT 0",
       );
+    const runColumns = this.db.pragma("table_info(runs)") as { name: string }[];
+    if (!runColumns.some((c) => c.name === "start_sha"))
+      this.db.exec("ALTER TABLE runs ADD COLUMN start_sha TEXT");
     for (const [k, v] of Object.entries({
       max_parallel: "2",
       worker_timeout_min: "45",

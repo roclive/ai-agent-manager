@@ -172,15 +172,10 @@ export function finalize(repo: Repo, run: Run, terminal?: "timeout" | "lost") {
   ) {
     try {
       recovered =
-        Number(
-          git(t.worktree_path!, [
-            "rev-list",
-            "--count",
-            `${p.base_branch}..HEAD`,
-          ]),
-        ) > 0;
+        !!run.start_sha &&
+        git(t.worktree_path!, ["rev-parse", "HEAD"]) !== run.start_sha;
     } catch {
-      /* Cannot establish recovery without a valid base. */
+      /* Cannot establish recovery without a valid HEAD. */
     }
   }
   const success =
