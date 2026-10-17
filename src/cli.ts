@@ -22,6 +22,10 @@ export function tail(path:string,lines=100){if(!Number.isInteger(lines)||lines<0
 async function main(){const repo=new Repo();try{const app=cli(repo);await register(app,repo);await app.parseAsync();}finally{repo.close();}}
 async function register(app:Command,repo:Repo){
  const {tick}=await import('./core/tick.js');const {dispatch}=await import('./core/dispatch.js');const {withLock}=await import('./core/lock.js');
+ const {daemon,validateRoutine}=await import('./scheduler.js');const {launchd}=await import('./launchd.js');
+ app.command('daemon').option('--interval <seconds>','heartbeat interval','60').action(o=>daemon(repo,Number(o.interval)));
+ const routine=app.command('routine');routine.command('add').requiredOption('--name <name>').requiredOption('--cron <cron>').requiredOption('--action <action>').option('--payload <json>','JSON payload','{}').action(o=>{const p=JSON.parse(o.payload);validateRoutine(o.cron,o.action,p);repo.addRoutine(o.name,o.cron,o.action,p);});routine.command('list').action(()=>output(repo.routines()));for(const action of ['enable','disable'])routine.command(`${action} <name>`).action(name=>{const r=repo.db.prepare('UPDATE routines SET enabled=? WHERE name=?').run(action==='enable'?1:0,name);if(!r.changes)throw new Error('Routine not found');});
+ const launch=app.command('launchd');for(const action of ['install','uninstall','status'])launch.command(action).option('--load').action(o=>output(launchd(repo,action,Boolean(o.load))));
  app.command('tick').action(()=>output(tick(repo)?'Heartbeat complete':'Heartbeat already running'));
  app.command('run <id>').option('--force').action((id,o)=>{const run=withLock(repo,()=>dispatch(repo,id,Boolean(o.force)));if(run===undefined)throw new Error('Heartbeat already running');output({run});});
 }
