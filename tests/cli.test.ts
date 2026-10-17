@@ -1,7 +1,7 @@
 import { it, expect, afterEach } from "vitest";
 import { spawnSync, spawn } from "node:child_process";
 import { resolve } from "node:path";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { fixture, waitExit } from "./helpers.js";
 import { tick } from "../src/core/tick.js";
 let f: ReturnType<typeof fixture>;
@@ -37,6 +37,16 @@ it("runs executable CLI management commands and reaps workers after the launchin
   expect(run(["task", "list", "--json"])).toContain("CLI task");
   expect(run(["task", "show", "T-1"])).toContain("literal $(false)");
   run(["task", "edit", "T-1", "--title", "Edited", "--priority", "P0"]);
+  const feedback = resolve(f.root, "feedback.txt");
+  writeFileSync(feedback, "literal $(false)\nfeedback");
+  run(["task", "edit", "T-1", "--attempts", "2", "--feedback-file", feedback]);
+  expect(f.repo.task("T-1")).toMatchObject({
+    attempts: 2,
+    feedback: "literal $(false)\nfeedback",
+  });
+  for (const invalid of ["-1", "1.5", "NaN"])
+    run(["task", "edit", "T-1", "--attempts", invalid], false);
+  run(["task", "edit", "T-1", "--attempts", "0"]);
   run(["settings", "set", "max_parallel", "1"]);
   expect(run(["settings", "get", "max_parallel"])).toContain("1");
   run([

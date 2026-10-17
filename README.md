@@ -87,7 +87,7 @@ aam launchd status
 aam launchd uninstall
 ```
 
-The plist lives at `~/Library/LaunchAgents/com.aam.daemon.plist`, includes absolute Node/tsx paths, and runs from the manager's working directory. Output goes to `<home>/daemon.log`. It includes `/opt/homebrew/bin` and `~/.local/bin` in PATH. Reinstall after moving the manager or changing the Node installation.
+The plist lives at `~/Library/LaunchAgents/com.aam.daemon.plist`, includes absolute Node/tsx paths, and runs from the user's home directory with absolute `AAM_HOME`. Output goes to `~/Library/Logs/aam/daemon.log` (the directory is created on install), keeping cwd and logs outside macOS privacy-protected folders. It includes `/opt/homebrew/bin` and `~/.local/bin` in PATH. Reinstall after moving the manager or changing the Node installation.
 
 ## Settings, recovery, and files
 
@@ -160,3 +160,7 @@ npm run typecheck
 Vitest tests run offline against temporary SQLite databases and Git repositories, using executable fake workers and injected review runners. They cover adapters, ordering/dependencies, views, locks, lifecycle success/failure/retries, rate limits, timeout/lost processes, review, isolated merge/prune, CLI recovery, graceful daemon shutdown, routines, launchd plist generation, and HTTP operations. Tests are restricted to `tests/`; vendored Paperclip tests are excluded. Real worker CLIs are never needed.
 
 See `NOTES.md` for implementation choices and delivery constraints.
+
+Stop the daemon with `kill -TERM <pid>`; detached workers keep running and are reaped on the next start. Never kill the daemon’s process tree.
+
+Reset retry accounting with `aam task edit <ID> --attempts 0` and replace feedback with `aam task edit <ID> --feedback-file feedback.txt`.

@@ -3,7 +3,7 @@ import { dirname, resolve } from "node:path";
 import { Repo } from "../db/index.js";
 import { alive, killGroup, type Runner, runner } from "./process.js";
 import { withLock } from "./lock.js";
-import { finalize } from "./finalize.js";
+import { finalize, read } from "./finalize.js";
 import { dispatch, dependenciesDone } from "./dispatch.js";
 import { claudeReview } from "./review.js";
 import { exportViews } from "../views/index.js";
@@ -19,7 +19,13 @@ export function tick(repo: Repo, reviewRunner: Runner = runner) {
         ) {
           killGroup(r.pid);
           finalize(repo, r, "timeout");
-        } else if (!alive(r.pid)) finalize(repo, r, "lost");
+        } else if (!alive(r.pid)) {
+          const pidText = read(
+            resolve(dirname(r.log_path), "worker.pid"),
+          ).trim();
+          const workerPid = /^[1-9]\d*$/.test(pidText) ? Number(pidText) : null;
+          if (!alive(workerPid)) finalize(repo, r, "lost");
+        }
       } catch (e) {
         repo.event("reap_error", String(e), r.task_id);
       }
