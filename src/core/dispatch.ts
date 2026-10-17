@@ -22,7 +22,15 @@ export function dispatch(repo: Repo, id: string, force = false) {
     throw new Error("Dependencies not done");
   if (Date.parse(repo.getSetting("cooldown_until") || "") > Date.now())
     throw new Error("Workers are in cooldown");
-  const worktree = ensureWorktree(repo, t);
+  let worktree: string;
+  try {
+    worktree = ensureWorktree(repo, t);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    repo.updateTask(t.id, { status: "blocked", blocker: message });
+    repo.event("dispatch_error", message, t.id);
+    throw e;
+  }
   const started = new Date().toISOString();
   const result = repo.db
     .prepare(

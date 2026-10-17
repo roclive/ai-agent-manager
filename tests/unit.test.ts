@@ -89,8 +89,26 @@ it("renders status groups, feedback, last 20 done and recent 50 events", () => {
 });
 it("detects rate limit text", () => {
   for (const s of ["USAGE LIMIT", "rate limit", "429", "quota exceeded"])
-    expect(rateLimited(s)).toBe(true);
+    expect(rateLimited(`Error: ${s}`, 1)).toBe(true);
   expect(rateLimited("success")).toBe(false);
+  for (const text of [
+    "Error: rate_limited",
+    '{"type":"error","message":"insufficient_quota"}',
+    '{"type":"turn.failed","message":"429"}',
+    '{"type":"result","error":{"message":"quota exceeded"}}',
+  ]) {
+    expect(rateLimited(text, 1)).toBe(true);
+    expect(rateLimited(text, null)).toBe(true);
+    expect(rateLimited(text, 0)).toBe(false);
+  }
+  for (const text of [
+    "rate limit test passed",
+    "Error: quota variable",
+    "Error: 14290",
+    '{"type":"item.completed","text":"Error: rate limit test"}',
+    "Error: unrelated failure\n429 rate limit",
+  ])
+    expect(rateLimited(text, 1)).toBe(false);
 });
 it("builds safe adapter commands and full prompt", () => {
   f = fixture();
@@ -137,6 +155,7 @@ it("builds safe adapter commands and full prompt", () => {
     "testing",
     "fix tests",
     "Do not push",
+    "Do not run git add or git commit; aam commits",
     "outside",
   ])
     expect(p).toContain(s);

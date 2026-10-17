@@ -12,8 +12,26 @@ export function read(path: string) {
 export function logTail(text: string, n = 80) {
   return text.trimEnd().split("\n").slice(-n).join("\n");
 }
-export function rateLimited(text: string) {
-  return /usage limit|rate limit|429|quota/i.test(text);
+export function rateLimited(text: string, exitCode: number | null = null) {
+  if (exitCode === 0) return false;
+  return text.split("\n").some((line) => {
+    let errorish: boolean;
+    try {
+      const event = JSON.parse(line);
+      errorish =
+        event?.type === "error" ||
+        event?.type === "turn.failed" ||
+        /"error"\s*:/.test(line);
+    } catch {
+      errorish = /\b(error|ERROR|Error)\b/.test(line);
+    }
+    return (
+      errorish &&
+      /usage limit|rate[ _-]?limit(ed)?|\b429\b|quota exceeded|insufficient_quota/i.test(
+        line,
+      )
+    );
+  });
 }
 export function finalize(repo: Repo, run: Run, terminal?: "timeout" | "lost") {
   if (repo.runs().find((r) => r.id === run.id)?.status !== "running") return;
@@ -23,7 +41,7 @@ export function finalize(repo: Repo, run: Run, terminal?: "timeout" | "lost") {
   const exitText = read(resolve(dir, "exit_code")).trim();
   const exit = /^\d+$/.test(exitText) ? Number(exitText) : null;
   const workerLog = logTail(read(run.log_path));
-  if (!terminal && rateLimited(workerLog)) {
+  if (!terminal && rateLimited(workerLog, exit)) {
     repo.db.transaction(() => {
       repo.db
         .prepare(
@@ -50,10 +68,25 @@ export function finalize(repo: Repo, run: Run, terminal?: "timeout" | "lost") {
     try {
       if (git(t.worktree_path, ["status", "--porcelain"])) {
         git(t.worktree_path, ["add", "-A"]);
+        const last = read(resolve(dir, "last.md"));
+        const firstLine = last
+          .split("\n")
+          .map((line) => line.trim())
+          .find(Boolean);
+        const subject = firstLine
+          ? `${t.identifier}: ${firstLine.slice(0, 72)}`
+          : `aam: ${t.identifier} ${t.title}`;
+        // Bound the body in UTF-8 bytes without splitting a character.
+        let body = "";
+        for (const char of last) {
+          if (Buffer.byteLength(body + char) > 4096) break;
+          body += char;
+        }
         git(t.worktree_path, [
           "commit",
           "-m",
-          `aam: ${t.identifier} ${t.title}`,
+          subject,
+          ...(body ? ["-m", body] : []),
         ]);
       }
     } catch (e) {

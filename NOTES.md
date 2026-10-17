@@ -11,3 +11,5 @@
 - Setup/test commands have bounded execution times; shell routines and Claude reviews have a two-minute bound. Timeout/lost worker runs consume an attempt and follow the normal retry/block policy.
 - Cron routines are loaded and reconciled at each daemon interval; missed occurrences while the daemon is stopped are not replayed.
 - HTTP task creation uses `{project: "KEY", title, ...taskFields}`; dependency arrays are stored as JSON text in SQLite responses. Run selection (`logs --run`) uses the database run ID. Pruning refuses dirty worktrees rather than discarding uncommitted files.
+
+- Manager review fixes supersede the original spec: aam commits worker changes from last.md (summary line capped at 72 characters, body at 4096 UTF-8 bytes); workers leave changes uncommitted. Dependency merges precede setup, skip missing/contained branches, and abort conflicts; only newly created branches/worktrees are removed on conflict. Preparation errors block dispatch without consuming worker attempts. Rate-limit detection requires a failed/unknown exit and an error-bearing log line.

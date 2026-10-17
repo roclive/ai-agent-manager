@@ -6,6 +6,8 @@ export function ensureWorktree(repo: Repo, t: Task) {
   const p = repo.project(t.project_id);
   const path = resolve(repo.home, "worktrees", p.key, t.identifier);
   const branch = `aam/${t.identifier}`;
+  let newBranch = false;
+  let created = false;
   if (!existsSync(path)) {
     mkdirSync(dirname(path), { recursive: true });
     const exists =
@@ -21,6 +23,33 @@ export function ensureWorktree(repo: Repo, t: Task) {
       path,
       exists ? branch : p.base_branch,
     ]);
+    newBranch = !exists;
+    created = true;
+  }
+  for (const dep of JSON.parse(t.depends_on) as string[]) {
+    const ref = `refs/heads/aam/${dep}`;
+    if (
+      runner("git", ["show-ref", "--verify", "--quiet", ref], path).status !== 0
+    )
+      continue;
+    if (
+      runner("git", ["merge-base", "--is-ancestor", ref, "HEAD"], path)
+        .status === 0
+    )
+      continue;
+    try {
+      git(path, ["merge", "--no-edit", ref]);
+      repo.event("dependency_merge", `Merged dependency ${dep}`, t.id);
+    } catch {
+      runner("git", ["merge", "--abort"], path);
+      if (newBranch) {
+        git(p.repo_path, ["worktree", "remove", "--force", path]);
+        git(p.repo_path, ["branch", "-D", branch]);
+      }
+      throw new Error(`dependency merge conflict: ${dep}`);
+    }
+  }
+  if (created) {
     repo.updateTask(t.id, { branch, worktree_path: path });
     if (p.setup_cmd) {
       const r = runner("sh", ["-c", p.setup_cmd], path);
