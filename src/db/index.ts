@@ -34,6 +34,7 @@ export interface Task {
   worker: string;
   depends_on: string;
   attempts: number;
+  lost_count: number;
   max_attempts: number;
   branch: string | null;
   worktree_path: string | null;
@@ -82,6 +83,11 @@ export class Repo {
     CREATE TABLE IF NOT EXISTS routines(id INTEGER PRIMARY KEY,name TEXT UNIQUE NOT NULL,cron TEXT NOT NULL,action TEXT NOT NULL,payload TEXT NOT NULL DEFAULT '{}',enabled INTEGER NOT NULL DEFAULT 1,last_run_at TEXT);
     CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY,ts TEXT NOT NULL,task_id INTEGER REFERENCES tasks(id),kind TEXT NOT NULL,message TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);`);
+    const columns = this.db.pragma("table_info(tasks)") as { name: string }[];
+    if (!columns.some((c) => c.name === "lost_count"))
+      this.db.exec(
+        "ALTER TABLE tasks ADD COLUMN lost_count INTEGER NOT NULL DEFAULT 0",
+      );
     for (const [k, v] of Object.entries({
       max_parallel: "2",
       worker_timeout_min: "45",
@@ -225,6 +231,7 @@ export class Repo {
       "worker",
       "depends_on",
       "attempts",
+      "lost_count",
       "max_attempts",
       "branch",
       "worktree_path",
@@ -254,11 +261,11 @@ export class Repo {
         !(values as readonly unknown[]).includes(data[k])
       )
         throw new Error(`Invalid ${k}`);
-    for (const k of ["attempts", "max_attempts", "seq"])
+    for (const k of ["attempts", "lost_count", "max_attempts", "seq"])
       if (
         data[k] !== undefined &&
         (!Number.isInteger(data[k]) ||
-          Number(data[k]) < (k === "attempts" ? 0 : 1))
+          Number(data[k]) < (["attempts", "lost_count"].includes(k) ? 0 : 1))
       )
         throw new Error(`Invalid ${k}`);
     if (data.depends_on !== undefined) {

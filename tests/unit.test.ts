@@ -247,3 +247,50 @@ it("keeps identifiers monotonic when the API reorders sequence values", () => {
   expect(next.identifier).toBe("T-2");
   expect(next.seq).toBe(2);
 });
+
+it("prefers the stable Homebrew node path and falls back to the current executable", async () => {
+  const { nodePath } = await import("../src/launchd.js");
+  expect(nodePath(() => true)).toBe("/opt/homebrew/bin/node");
+  expect(nodePath(() => false)).toBe(process.execPath);
+});
+
+it("migrates existing tasks with a persistent default lost counter", () => {
+  f = fixture();
+  const t = f.task();
+  f.repo.db.exec("ALTER TABLE tasks DROP COLUMN lost_count");
+  const other = new Repo(f.repo.home);
+  try {
+    expect(other.task(t.id).lost_count).toBe(0);
+    other.updateTask(t.id, { lost_count: 2 });
+  } finally {
+    other.close();
+  }
+  expect(f.repo.task(t.id).lost_count).toBe(2);
+});
+
+it("reports launchd exit 78 with a privacy hint for protected repos", async () => {
+  f = fixture();
+  const { homedir } = await import("node:os");
+  const { launchd } = await import("../src/launchd.js");
+  f.repo.db
+    .prepare("UPDATE projects SET repo_path=?")
+    .run(resolve(homedir(), "Desktop", "project"));
+  const calls: string[][] = [];
+  const status = launchd(f.repo, "status", false, (_cmd, args) => {
+    calls.push(args);
+    return {
+      status: 0,
+      stdout: args[0] === "print" ? "last exit code = 78" : "",
+      stderr: "",
+    };
+  });
+  expect(status).toMatchObject({
+    loaded: true,
+    lastExitCode: 78,
+    hint: expect.stringContaining("Full Disk Access"),
+  });
+  expect(calls[1]).toEqual([
+    "print",
+    `gui/${process.getuid?.() ?? 0}/com.aam.daemon`,
+  ]);
+});

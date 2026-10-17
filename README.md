@@ -160,3 +160,7 @@ npm run typecheck
 Vitest tests run offline against temporary SQLite databases and Git repositories, using executable fake workers and injected review runners. They cover adapters, ordering/dependencies, views, locks, lifecycle success/failure/retries, rate limits, timeout/lost processes, review, isolated merge/prune, CLI recovery, graceful daemon shutdown, routines, launchd plist generation, and HTTP operations. Tests are restricted to `tests/`; vendored Paperclip tests are excluded. Real worker CLIs are never needed.
 
 See `NOTES.md` for implementation choices and delivery constraints.
+
+Stop the daemon with `kill -TERM <pid>`; detached workers keep running and are reaped on the next start. Never kill the daemon’s process tree.
+
+Reset retry accounting with `aam task edit <ID> --attempts 0` and replace feedback with `aam task edit <ID> --feedback-file feedback.txt`.

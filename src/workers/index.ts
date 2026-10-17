@@ -67,8 +67,14 @@ export function spawnWorker(worker: string, ctx: Context) {
   const c = command(worker, ctx);
   const log = openSync(`${ctx.runDir}/worker.log`, "a");
   // Shell code is constant; all paths and command arguments are positional parameters.
-  const script =
-    'exitfile=$1; input=$2; shift 2; if [ -n "$input" ]; then "$@" < "$input"; else "$@"; fi; result=$?; printf "%s\\n" "$result" > "$exitfile"';
+  const script = `trap '' HUP
+exitfile=$1; input=$2; pidfile=$3; shift 3
+if [ -n "$input" ]; then "$@" < "$input" & else "$@" & fi
+worker=$!
+printf "%s\\n" "$worker" > "$pidfile"
+wait "$worker"
+result=$?
+printf "%s\\n" "$result" > "$exitfile"`;
   writeFileSync(`${ctx.runDir}/wrapper.sh`, script + "\n");
   try {
     const child = spawn(
@@ -77,6 +83,7 @@ export function spawnWorker(worker: string, ctx: Context) {
         `${ctx.runDir}/wrapper.sh`,
         `${ctx.runDir}/exit_code`,
         c.stdinFile || "",
+        `${ctx.runDir}/worker.pid`,
         c.cmd,
         ...c.args,
       ],

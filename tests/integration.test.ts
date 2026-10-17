@@ -404,3 +404,70 @@ it("succeeds when external symlinks are the only worker changes", async () => {
     git(f.repo.task(t.id).worktree_path!, ["log", "-1", "--format=%s"]),
   ).toBe("initial");
 });
+
+it.each([
+  ["printf changed > recovered.txt", "echo passed", "in_review", 1],
+  ["true", "echo passed", "ready", 1],
+  ["printf changed > recovered.txt", "echo failed; exit 1", "blocked", 3],
+] as const)(
+  "handles lost work: %s / %s",
+  async (script, test, status, losses) => {
+    f = fixture(script);
+    f.repo.db.prepare("UPDATE projects SET test_cmd=?").run(test);
+    const t = f.task({ attempts: 2, lost_count: losses - 1 });
+    const id = dispatch(f.repo, t.identifier);
+    await waitExit(f.repo, id);
+    finalize(f.repo, f.repo.runs()[0], "lost");
+    expect(f.repo.task(t.id)).toMatchObject({
+      status,
+      attempts: 2,
+      lost_count: losses,
+      feedback: test.includes("failed") ? "failed" : "passed",
+      blocker: status === "blocked" ? "worker repeatedly lost" : "",
+    });
+    expect(f.repo.runs()[0]).toMatchObject({
+      status: "lost",
+      test_exit_code: test.includes("failed") ? 1 : 0,
+    });
+    finalize(f.repo, f.repo.runs()[0], "lost");
+    expect(f.repo.task(t.id).lost_count).toBe(losses);
+    if (status === "in_review")
+      expect(JSON.stringify(f.repo.events())).toContain("lost run recovered");
+  },
+);
+
+it("records a SIGKILLed worker exit and ignores wrapper SIGHUP", async () => {
+  f = fixture("kill -KILL $$");
+  const t = f.task();
+  const id = dispatch(f.repo, t.identifier);
+  await waitExit(f.repo, id);
+  const run = f.repo.runs()[0];
+  const dir = resolve(f.repo.home, "runs", String(id));
+  expect(
+    Number(readFileSync(resolve(dir, "worker.pid"), "utf8")),
+  ).toBeGreaterThan(0);
+  expect(
+    Number(readFileSync(resolve(dir, "exit_code"), "utf8")),
+  ).toBeGreaterThan(0);
+  finalize(f.repo, run);
+  expect(f.repo.task(t.id)).toMatchObject({ attempts: 1, lost_count: 0 });
+});
+
+it("keeps a run alive through worker.pid when its wrapper dies", async () => {
+  f = fixture("sleep 1; printf survived > survived.txt");
+  const t = f.task();
+  const id = dispatch(f.repo, t.identifier);
+  const run = f.repo.runs()[0];
+  const pidFile = resolve(f.repo.home, "runs", String(id), "worker.pid");
+  for (let i = 0; i < 100 && !existsSync(pidFile); i++)
+    await new Promise((r) => setTimeout(r, 10));
+  process.kill(run.pid!, "SIGHUP");
+  tick(f.repo);
+  expect(f.repo.runs()[0].status).toBe("running");
+  process.kill(run.pid!, "SIGKILL");
+  f.repo.db.prepare("UPDATE runs SET pid=NULL WHERE id=?").run(id);
+  tick(f.repo);
+  expect(f.repo.runs()[0].status).toBe("running");
+  // Cleanup can still kill the detached group even though the DB wrapper pid is absent.
+  f.repo.db.prepare("UPDATE runs SET pid=? WHERE id=?").run(run.pid, id);
+});

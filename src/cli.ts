@@ -92,6 +92,8 @@ export function cli(repo: Repo) {
     });
   task
     .command("edit <id>")
+    .option("--attempts <n>")
+    .option("--feedback-file <path>")
     .option("--title <title>")
     .option("--desc <text>")
     .option("--priority <priority>")
@@ -100,6 +102,11 @@ export function cli(repo: Repo) {
     .action((id, o) =>
       output(
         repo.updateTask(id, {
+          attempts: o.attempts === undefined ? undefined : Number(o.attempts),
+          feedback:
+            o.feedbackFile === undefined
+              ? undefined
+              : readFileSync(o.feedbackFile, "utf8"),
           title: o.title,
           description: o.desc,
           priority: o.priority,

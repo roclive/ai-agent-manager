@@ -164,18 +164,41 @@ export function finalize(repo: Repo, run: Run, terminal?: "timeout" | "lost") {
       writeFileSync(resolve(dir, "test.log"), testLog);
     }
   } else commitError = "Worktree missing";
+  let recovered = false;
+  if (
+    terminal === "lost" &&
+    !commitError &&
+    (testExit === null || testExit === 0)
+  ) {
+    try {
+      recovered =
+        Number(
+          git(t.worktree_path!, [
+            "rev-list",
+            "--count",
+            `${p.base_branch}..HEAD`,
+          ]),
+        ) > 0;
+    } catch {
+      /* Cannot establish recovery without a valid base. */
+    }
+  }
   const success =
-    !terminal &&
-    exit === 0 &&
-    (testExit === null || testExit === 0) &&
-    !commitError;
+    recovered ||
+    (!terminal &&
+      exit === 0 &&
+      (testExit === null || testExit === 0) &&
+      !commitError);
   const summary = logTail(
     [workerLog, testLog, commitError, terminal || ""]
       .filter(Boolean)
       .join("\n"),
   );
-  const attempts = t.attempts + (success ? 0 : 1);
-  const blocked = !success && attempts >= t.max_attempts;
+  const lost = terminal === "lost";
+  const lostCount = t.lost_count + (lost ? 1 : 0);
+  const attempts = t.attempts + (success || lost ? 0 : 1);
+  const blocked =
+    !success && (lost ? lostCount >= 3 : attempts >= t.max_attempts);
   repo.db.transaction(() => {
     repo.db
       .prepare(
@@ -192,12 +215,19 @@ export function finalize(repo: Repo, run: Run, terminal?: "timeout" | "lost") {
     repo.updateTask(t.id, {
       status: success ? "in_review" : blocked ? "blocked" : "ready",
       attempts,
-      feedback: success ? t.feedback : summary,
-      blocker: blocked ? summary || "Maximum attempts reached" : "",
+      lost_count: lostCount,
+      feedback: lost ? logTail(testLog) : success ? t.feedback : summary,
+      blocker: blocked
+        ? lost
+          ? "worker repeatedly lost"
+          : summary || "Maximum attempts reached"
+        : "",
     });
     repo.event(
       "finalize",
-      `Run ${run.id}: ${terminal || (success ? "succeeded" : "failed")}`,
+      recovered
+        ? "lost run recovered"
+        : `Run ${run.id}: ${terminal || (success ? "succeeded" : "failed")}`,
       t.id,
     );
   })();
