@@ -1,0 +1,2 @@
+#!/bin/sh
+exec node --import "$(dirname "$0")/../node_modules/tsx/dist/loader.mjs" "$(dirname "$0")/../src/cli.ts" "$@"
