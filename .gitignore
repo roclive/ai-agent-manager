@@ -8,3 +8,5 @@ dist/
 .DS_Store
 aam-implementation.bundle
 *.bundle
+BACKLOG.md
+PROGRESS.md
