@@ -21,7 +21,9 @@ export function cli(repo:Repo){const app=new Command().name('aam').description('
 export function tail(path:string,lines=100){if(!Number.isInteger(lines)||lines<0||lines>10000)throw new Error('Invalid tail count');try{return readFileSync(path,'utf8').split('\n').slice(-lines-1).join('\n');}catch{return '';}}
 async function main(){const repo=new Repo();try{const app=cli(repo);await register(app,repo);await app.parseAsync();}finally{repo.close();}}
 async function register(app:Command,repo:Repo){
- // Later milestones register runtime commands here.
+ const {tick}=await import('./core/tick.js');const {dispatch}=await import('./core/dispatch.js');const {withLock}=await import('./core/lock.js');
+ app.command('tick').action(()=>output(tick(repo)?'Heartbeat complete':'Heartbeat already running'));
+ app.command('run <id>').option('--force').action((id,o)=>{const run=withLock(repo,()=>dispatch(repo,id,Boolean(o.force)));if(run===undefined)throw new Error('Heartbeat already running');output({run});});
 }
 import { pathToFileURL } from 'node:url';
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href)main().catch(e=>{console.error(e.message);process.exitCode=1;});
