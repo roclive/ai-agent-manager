@@ -1,5 +1,12 @@
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import {
+  readFileSync,
+  writeFileSync,
+  existsSync,
+  lstatSync,
+  realpathSync,
+  readlinkSync,
+} from "node:fs";
+import { dirname, resolve, relative, isAbsolute } from "node:path";
 import { Repo, type Run } from "../db/index.js";
 import { git, runner } from "./process.js";
 export function read(path: string) {
@@ -31,6 +38,37 @@ export function rateLimited(text: string, exitCode: number | null = null) {
         line,
       )
     );
+  });
+}
+function externalSymlinks(worktree: string) {
+  const root = realpathSync(worktree);
+  const paths = git(worktree, [
+    "ls-files",
+    "--cached",
+    "--others",
+    "--exclude-standard",
+    "-z",
+  ])
+    .split("\0")
+    .filter(Boolean);
+  return [...new Set(paths)].filter((name) => {
+    const file = resolve(worktree, name);
+    let stat;
+    try {
+      stat = lstatSync(file);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+      throw error;
+    }
+    if (!stat.isSymbolicLink()) return false;
+    let target;
+    try {
+      target = realpathSync(file);
+    } catch {
+      target = resolve(dirname(file), readlinkSync(file));
+    }
+    const rel = relative(root, target);
+    return rel === ".." || rel.startsWith("../") || isAbsolute(rel);
   });
 }
 export function finalize(repo: Repo, run: Run, terminal?: "timeout" | "lost") {
@@ -67,7 +105,27 @@ export function finalize(repo: Repo, run: Run, terminal?: "timeout" | "lost") {
   if (t.worktree_path && existsSync(t.worktree_path)) {
     try {
       if (git(t.worktree_path, ["status", "--porcelain"])) {
-        git(t.worktree_path, ["add", "-A"]);
+        const skipped = externalSymlinks(t.worktree_path);
+        if (skipped.length) {
+          git(t.worktree_path, [
+            "reset",
+            "HEAD",
+            "--",
+            ...skipped.map((name) => `:(literal)${name}`),
+          ]);
+          repo.event(
+            "finalize_skip_symlink",
+            `Skipped external symlinks: ${JSON.stringify(skipped)}`,
+            t.id,
+          );
+        }
+        git(t.worktree_path, [
+          "add",
+          "-A",
+          "--",
+          ".",
+          ...skipped.map((name) => `:(exclude,literal)${name}`),
+        ]);
         const last = read(resolve(dir, "last.md"));
         const firstLine = last
           .split("\n")
@@ -82,12 +140,13 @@ export function finalize(repo: Repo, run: Run, terminal?: "timeout" | "lost") {
           if (Buffer.byteLength(body + char) > 4096) break;
           body += char;
         }
-        git(t.worktree_path, [
-          "commit",
-          "-m",
-          subject,
-          ...(body ? ["-m", body] : []),
-        ]);
+        if (git(t.worktree_path, ["diff", "--cached", "--name-only"]))
+          git(t.worktree_path, [
+            "commit",
+            "-m",
+            subject,
+            ...(body ? ["-m", body] : []),
+          ]);
       }
     } catch (e) {
       commitError = String(e);

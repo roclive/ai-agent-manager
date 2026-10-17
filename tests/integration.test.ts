@@ -1,5 +1,11 @@
 import { it, expect, afterEach } from "vitest";
-import { writeFileSync, readFileSync, existsSync } from "node:fs";
+import {
+  writeFileSync,
+  readFileSync,
+  existsSync,
+  symlinkSync,
+  mkdirSync,
+} from "node:fs";
 import { resolve } from "node:path";
 import { fixture, waitExit } from "./helpers.js";
 import { dispatch } from "../src/core/dispatch.js";
@@ -322,4 +328,79 @@ it("blocks setup failures with an event", () => {
       expect.objectContaining({ kind: "dispatch_error" }),
     ]),
   );
+});
+
+it("excludes setup symlinks from commits using the common exclude file", async () => {
+  f = fixture();
+  const outside = resolve(f.root, "dependencies");
+  mkdirSync(outside);
+  f.repo.db
+    .prepare("UPDATE projects SET setup_cmd=?")
+    .run(
+      `ln -s '${outside}' node_modules; mkdir -p cache; echo setup > cache/data`,
+    );
+  const t = f.task();
+  const id = dispatch(f.repo, t.identifier);
+  await waitExit(f.repo, id);
+  finalize(f.repo, f.repo.runs()[0]);
+  const path = f.repo.task(t.id).worktree_path!;
+  expect(f.repo.task(t.id).status).toBe("in_review");
+  expect(git(path, ["show", "HEAD:changed.txt"])).toBe("changed");
+  expect(git(path, ["ls-tree", "--name-only", "HEAD"])).not.toMatch(
+    /node_modules|cache/,
+  );
+  const exclude = resolve(
+    path,
+    git(path, ["rev-parse", "--git-common-dir"]),
+    "info/exclude",
+  );
+  expect(readFileSync(exclude, "utf8")).toContain("/node_modules\n");
+  expect(readFileSync(exclude, "utf8")).toContain("/cache\n");
+  expect(f.repo.events()).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        kind: "setup_exclude",
+        message: expect.stringContaining("node_modules"),
+      }),
+    ]),
+  );
+});
+it.each([false, true])(
+  "skips external symlinks at finalize (pre-staged %s)",
+  async (staged) => {
+    f = fixture();
+    const t = f.task();
+    const id = dispatch(f.repo, t.identifier);
+    await waitExit(f.repo, id);
+    const path = f.repo.task(t.id).worktree_path!;
+    symlinkSync(f.path, resolve(path, "external link"));
+    symlinkSync("changed.txt", resolve(path, "internal link"));
+    if (staged) git(path, ["add", "--", "external link"]);
+    finalize(f.repo, f.repo.runs()[0]);
+    expect(f.repo.task(t.id).status).toBe("in_review");
+    expect(git(path, ["show", "HEAD:changed.txt"])).toBe("changed");
+    expect(git(path, ["ls-tree", "--name-only", "HEAD"])).not.toContain(
+      "external link",
+    );
+    expect(git(path, ["show", "HEAD:internal link"])).toBe("changed.txt");
+    expect(f.repo.events()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "finalize_skip_symlink",
+          message: expect.stringContaining("external link"),
+        }),
+      ]),
+    );
+  },
+);
+it("succeeds when external symlinks are the only worker changes", async () => {
+  f = fixture("ln -s /tmp external");
+  const t = f.task();
+  const id = dispatch(f.repo, t.identifier);
+  await waitExit(f.repo, id);
+  finalize(f.repo, f.repo.runs()[0]);
+  expect(f.repo.task(t.id).status).toBe("in_review");
+  expect(
+    git(f.repo.task(t.id).worktree_path!, ["log", "-1", "--format=%s"]),
+  ).toBe("initial");
 });
