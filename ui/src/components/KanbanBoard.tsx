@@ -77,6 +77,14 @@ function KanbanCard({ task, run }: { task: Task; run?: Run }) {
   return (
     <Card
       ref={setNodeRef}
+      onPointerDown={(event) => {
+        if (
+          !(event.target as HTMLElement).closest(
+            "a,button,input,select,textarea",
+          )
+        )
+          listeners?.onPointerDown?.(event);
+      }}
       style={{
         transform: CSS.Transform.toString(transform),
         transition,
@@ -91,8 +99,12 @@ function KanbanCard({ task, run }: { task: Task; run?: Run }) {
           {...attributes}
           {...listeners}
           className="drag-handle"
+          aria-describedby={`drag-hint-${task.id}`}
           aria-label={`拖动 ${task.identifier}`}
         >
+          <span className="keyboard-drag-hint" id={`drag-hint-${task.id}`}>
+            按空格开始拖动，方向键移动，再按空格放下。
+          </span>
           <GripVertical size={14} />
         </button>
       </div>

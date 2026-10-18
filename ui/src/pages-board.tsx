@@ -1,21 +1,13 @@
+import { TaskDrawer } from "./components/TaskDrawer";
 import { useState, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Search, Plus } from "lucide-react";
 import { useTasks, useRuns, useEventStream, useProjects } from "./lib/queries";
 import { api } from "./lib/api";
 import { applyDrop } from "./lib/board";
 import type { Task, TaskStatus } from "./lib/types";
-import { statusLabels } from "./lib/types";
 import { KanbanBoard } from "./components/KanbanBoard";
 import { NewTaskDialog } from "./components/NewTaskDialog";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "./components/ui/sheet";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { NativeSelect } from "./components/ui/select";
@@ -32,14 +24,6 @@ export function BoardPage({ project }: { project: string }) {
     [toast, setToast] = useState(""),
     [pending, setPending] = useState(false);
   const moving = useRef(false);
-  const [params, setParams] = useSearchParams();
-  const selected = params.get("task");
-  const detail = useQuery({
-    queryKey: ["tasks", "detail", selected],
-    queryFn: () => api.task(selected!),
-    enabled: !!selected,
-    refetchInterval: live ? false : 5000,
-  });
   const move = async (
     id: number,
     patch: { status: TaskStatus; sort_order: number },
@@ -158,34 +142,7 @@ export function BoardPage({ project }: { project: string }) {
           onClose={() => setCreating(null)}
         />
       )}
-      <Sheet
-        open={!!selected}
-        onOpenChange={(open) => {
-          if (!open) {
-            const next = new URLSearchParams(params);
-            next.delete("task");
-            setParams(next);
-          }
-        }}
-      >
-        <SheetContent className="overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>{detail.data?.title ?? selected}</SheetTitle>
-            <SheetDescription>
-              {detail.data
-                ? `${detail.data.identifier} · ${statusLabels[detail.data.status]}`
-                : "任务详情"}
-            </SheetDescription>
-          </SheetHeader>
-          <div className="p-5 whitespace-pre-wrap">
-            {detail.isPending
-              ? "正在加载…"
-              : detail.isError
-                ? "无法加载任务详情"
-                : detail.data?.description || "暂无描述"}
-          </div>
-        </SheetContent>
-      </Sheet>
+      <TaskDrawer />
     </>
   );
 }

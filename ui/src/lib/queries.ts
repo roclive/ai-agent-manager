@@ -13,6 +13,8 @@ export function useEventStream() {
       void client.invalidateQueries({ queryKey: ["runs"] });
       void client.invalidateQueries({ queryKey: ["projects"] });
       void client.invalidateQueries({ queryKey: ["status"] });
+      for (const key of ["events", "routines", "settings"])
+        void client.invalidateQueries({ queryKey: [key] });
     };
     stream.onopen = () => {
       setLive(true);

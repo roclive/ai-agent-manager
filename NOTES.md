@@ -21,3 +21,9 @@
 - Legacy server rejects fractional `sort` values (it stores them in positive-integer seq). Midpoint reordering uses the AAM-4 contract; legacy fallback rounds to a positive integer so status moves still work. Adjacent legacy positions may tie until AAM-4 adds REAL sort_order. Task identifiers are never edited.
 - Missing legacy status/runs endpoints show unavailable daemon state / no running indicators; SSE failures fall back to polling.
 - Project colour is taken from the API when supplied, with a neutral fallback because AAM-4 does not specify a colour field.
+
+## AAM-6 UI
+- Routines use the local scheduler time zone. A small Chinese cron helper describes the four supported presets; custom expressions are displayed verbatim and validated by the server.
+- Activity uses an event-ID cursor and server-side project/task/kind filters. Project filters include events associated with that project's tasks; workspace settings/routine events remain in the all-projects feed.
+- Bulk task moves are independent requests: successful changes remain if another task is rejected, and an error reports the failed count. Task status protections remain enforced by the API.
+- Task descriptions render through react-markdown without raw HTML. Task/run statuses retain their original values in history; task status and role controls use Chinese labels.

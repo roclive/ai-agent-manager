@@ -89,9 +89,16 @@ export function createApp(
         ),
     ),
   );
-  app.post("/api/tasks", async (c) =>
-    c.json(repo.addTask(await c.req.json()), 201),
-  );
+  app.post("/api/tasks", async (c) => {
+    const input = await c.req.json();
+    const task = repo.addTask(input);
+    repo.event(
+      "create",
+      `Created via UI: ${Object.keys(input).join(", ")}`,
+      task.id,
+    );
+    return c.json(task, 201);
+  });
   app.get("/api/tasks/:id", (c) => c.json(taskDetail(repo, c.req.param("id"))));
   app.patch("/api/tasks/:id", async (c) => {
     const id = c.req.param("id");
@@ -120,7 +127,14 @@ export function createApp(
       patch.sort_order = sort;
     if (patch.depends_on !== undefined && !Array.isArray(patch.depends_on))
       throw new Error("Dependencies must be an array");
-    return c.json(repo.updateTask(id, patch));
+    const before = repo.task(id);
+    const task = repo.updateTask(id, patch);
+    repo.event(
+      before.status !== task.status ? "move" : "edit",
+      `${before.status !== task.status ? `status ${before.status} -> ${task.status} via UI; ` : "Edited via UI: "}${Object.keys(patch).join(", ")}`,
+      task.id,
+    );
+    return c.json(task);
   });
   app.get("/api/runs/:id/:kind", (c) => {
     if (!["log", "test-log"].includes(c.req.param("kind")))
@@ -142,6 +156,7 @@ export function createApp(
     const p = await c.req.json();
     validateRoutine(p.cron, p.action, p.payload || {});
     repo.addRoutine(p.name, p.cron, p.action, p.payload || {});
+    repo.event("routine", `Created ${p.name}: ${Object.keys(p).join(", ")}`);
     return c.json(
       routineJSON(repo.routines().find((r) => r.name === p.name)!),
       201,
@@ -178,6 +193,7 @@ export function createApp(
         next.enabled ? 1 : 0,
         r.id,
       );
+    repo.event("routine", `Updated ${r.name}: ${Object.keys(p).join(", ")}`);
     return routineJSON(repo.routines().find((x) => x.id === r.id)!);
   };
   app.patch("/api/routines/:id", async (c) =>
@@ -189,16 +205,50 @@ export function createApp(
       throw new Error("Routine id or name required");
     return c.json(await patchRoutine(String(p.id ?? p.name), p));
   });
-  app.post("/api/tick", (c) => c.json({ ran: Boolean(tick(repo)) }));
-  app.get("/api/events", (c) =>
-    c.json(repo.events(count(c.req.query("limit"), 50))),
-  );
+  app.post("/api/tick", (c) => {
+    const ran = Boolean(tick(repo));
+    repo.event("tick", `Heartbeat requested via UI: ran=${ran}`);
+    return c.json({ ran });
+  });
+  app.get("/api/events", (c) => {
+    const before = c.req.query("before");
+    const limit = count(c.req.query("limit"), 50);
+    if (
+      before !== undefined &&
+      (!/^\d+$/.test(before) || !Number.isSafeInteger(Number(before)))
+    )
+      throw new Error("Invalid event cursor");
+    const clauses: string[] = [];
+    const values: (string | number)[] = [];
+    for (const [clause, value] of [
+      ["e.id < ?", before],
+      ["e.kind = ?", c.req.query("kind")],
+      ["p.key = ?", c.req.query("project")],
+    ])
+      if (value) {
+        clauses.push(clause!);
+        values.push(value);
+      }
+    const task = c.req.query("task");
+    if (task) {
+      clauses.push("instr(lower(t.identifier), lower(?)) > 0");
+      values.push(task);
+    }
+    return c.json(
+      repo.db
+        .prepare(
+          `SELECT e.* FROM events e LEFT JOIN tasks t ON t.id=e.task_id LEFT JOIN projects p ON p.id=t.project_id ${clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""} ORDER BY e.id DESC LIMIT ?`,
+        )
+        .all(...values, limit),
+    );
+  });
   app.get("/api/settings", (c) => c.json(repo.settings()));
   app.put("/api/settings", async (c) => {
     const p = await c.req.json<Record<string, unknown>>();
     repo.db.transaction(() => {
       for (const [k, v] of Object.entries(p)) repo.setSetting(k, String(v));
     })();
+    repo.event("settings", `Updated via UI: ${Object.keys(p).join(", ")}`);
     return c.json(repo.settings());
   });
   uiRoutes(app, repo, options.dist);
