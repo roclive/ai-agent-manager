@@ -30,6 +30,8 @@ export interface Task {
   id: number;
   project_id: number;
   identifier: string;
+  integrated?: number;
+  resolves_task_id?: number | null;
   seq: number;
   sort_order?: number;
   title: string;
@@ -60,6 +62,9 @@ export interface Project {
   running?: number;
   counts?: Partial<Record<TaskStatus, number>>;
   repo_path: string;
+  integration_branch?: string;
+  ahead_of_base?: number | null;
+  integration_commits?: string;
   base_branch: string;
   test_cmd: string | null;
   setup_cmd: string | null;

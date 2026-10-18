@@ -78,12 +78,14 @@ export function ensureWorktree(repo: Repo, t: Task) {
       "add",
       ...(exists ? [] : ["-b", branch]),
       path,
-      exists ? branch : p.base_branch,
+      exists ? branch : p.integration_branch || p.base_branch,
     ]);
     newBranch = !exists;
     created = true;
   }
-  for (const dep of JSON.parse(t.depends_on) as string[]) {
+  for (const dep of (p.integration_branch
+    ? []
+    : JSON.parse(t.depends_on)) as string[]) {
     const ref = `refs/heads/aam/${dep}`;
     if (
       runner("git", ["show-ref", "--verify", "--quiet", ref], path).status !== 0

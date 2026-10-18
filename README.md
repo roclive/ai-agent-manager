@@ -218,3 +218,15 @@ aam settings set keep_awake 0
 ```
 
 全局 `review_mode` 保留为兼容设置；自动驾驶始终要求项目明确启用自动审查，其他项目仍需人工审查。
+
+### 集成分支
+
+项目默认关闭此功能。运行 `aam project edit KEY --integration on`，从基础分支创建
+`aam/integration`；`--integration off` 关闭后保留分支。新任务从集成分支创建，审批通过后自动合入。
+冲突会创建 P0「Resolve merge conflict」任务；原任务保持完成并显示「待集成」。
+解决任务必须保留双方意图、运行项目测试并提交合并；同一原任务最多创建两个解决任务，超限后受阻并记录事件。
+自动集成始终使用临时工作区，不修改基础分支。
+
+只有显式执行 `aam project promote KEY --yes [--into main]`，或调用
+`POST /api/projects/KEY/promote` 并提交 `{"confirm":true}`，才合并到配置的基础分支。
+设置页可预览提交并确认合并。基础分支工作区存在未提交修改时拒绝操作；推广冲突会中止合并。

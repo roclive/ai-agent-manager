@@ -1,3 +1,4 @@
+import { integrate } from "./integration.js";
 import { Repo } from "../db/index.js";
 import { git, runner, type Runner } from "./process.js";
 export function review(repo: Repo, id: string, verdict: string, notes = "") {
@@ -14,6 +15,7 @@ export function review(repo: Repo, id: string, verdict: string, notes = "") {
     blocker: blocked ? notes || "Review attempts exhausted" : "",
   });
   repo.event("review", `${verdict}: ${notes}`, t.id);
+  if (verdict === "approve") integrate(repo, id);
 }
 export function parseVerdict(
   text: string,

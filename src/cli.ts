@@ -1,3 +1,4 @@
+import { setIntegration, promote } from "./core/integration.js";
 import { Command } from "commander";
 import { readFileSync } from "node:fs";
 import { tail } from "./core/logs.js";
@@ -37,9 +38,15 @@ export function cli(repo: Repo) {
         }),
       ),
     );
+  project
+    .command("promote <key>")
+    .option("--into <branch>")
+    .option("--yes")
+    .action((key, o) => promote(repo, key, o.yes === true, o.into));
   project.command("list").action(() => output(repo.projects()));
   project
     .command("edit <key>")
+    .option("--integration <on|off>")
     .option("--auto-review <on|off>")
     .option("--autopilot <on|off>")
     .option("--goal-file <path>")
@@ -64,6 +71,7 @@ export function cli(repo: Repo) {
           o.goalFile !== undefined ? readFileSync(o.goalFile, "utf8") : o.goal;
       if (o.rank !== undefined) patch.autopilot_rank = Number(o.rank);
       if (o.contextFile !== undefined) patch.context_file = o.contextFile;
+      if (o.integration !== undefined) setIntegration(repo, key, o.integration);
       output(repo.updateProject(key, patch));
     });
   app
