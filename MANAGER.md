@@ -4,6 +4,9 @@
 
 ## 持续运行
 
+- 额度兜底已获用户授权并开启：`ollama_fallback_enabled=1`，主后端 `llm_backend=primary` 沿用现有 CLI 默认模型。备用 `ollama_model=gemma4:31b:cloud`、`ollama_base_url=http://127.0.0.1:11434/api/codex/v1`，已真实执行工具并返回 OK。这是 Ollama 云模型，不是离线推理；当前套餐拒绝 kimi-k3:cloud，不要尝试购买或升级。
+- 每次唤醒先调用 get_usage_limits；任一窗口已用达到90%或明确额度耗尽时设 `llm_backend=ollama`。任务执行、审核、规划与健康检查的额度错误也会自动触发切换；旧主模型并发失败不会暂停备用模型。切换不扣任务尝试次数，备用也限流时才保留30分钟退避。主模型恢复且所有可见窗口已用低于70%、健康检查通过后才能切回；不要消费重置券。当前聊天模型由应用控制，不要把队列切换说成聊天模型已切换。
+
 - 本聊天 heartbeat：`aam`（AAM 本机任务经理），每 15 分钟唤醒；只在实质进展、完成、失败或需要用户处理时通知。
 - 本机 launchd：`com.aam.daemon`，60 秒调度；`com.aam.ui` 提供 127.0.0.1:3199。守护进程启动 caffeinate 防止空闲睡眠。
 - worker/reviewer 已显式设置 `codex_worker_sandbox=danger-full-access`、`codex_reviewer_sandbox=danger-full-access`。不要改回只读，否则 worktree 外 Git 元数据和临时文件又会无法写入。

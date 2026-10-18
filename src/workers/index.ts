@@ -7,6 +7,7 @@ export interface Context {
   promptFile: string;
   runDir: string;
   sandbox?: string;
+  modelArgs?: string[];
 }
 export interface Command {
   cmd: string;
@@ -32,6 +33,7 @@ export const codex: Adapter = {
       'approval_policy="never"',
       "-c",
       "sandbox_workspace_write.network_access=true",
+      ...(c.modelArgs || []),
       "--skip-git-repo-check",
       "-o",
       `${c.runDir}/last.md`,
