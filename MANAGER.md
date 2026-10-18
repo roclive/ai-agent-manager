@@ -31,6 +31,16 @@
 
 ## 下一步优先级
 
+### 2026-10-18 22:22 JST 唤醒记录
+
+- 唤醒已实际触发；launchd 单实例、caffeinate、Codex full-access 及配额退避设置正常。审核预算 120，目前约 83 次，未遇配额冷却。
+- 找到剩余冲突循环根因：reconcile 反复合入旧的 done/unintegrated 解决分支，即使更新的解决分支已集成。已修复 reconcile 和显式 integrate 两条路径：必须确认较新的同源解决分支确实在 integration 历史中，才跳过旧分支；保留旧分支和真实 integrated=0。
+- 已核对原分支是 integration 的祖先，取消尚未启动、没有 worktree 的重复 SB-16、TM-31、TM-32。不要重新启动这些重复项。
+- SB-12 已完成 carryover 并发修复并集成；本轮在其稳定 worktree 重跑完整测试：203 passed。SB-15 审核新发现营销 log 与 replan 并发问题，worker 正在修复；不要同时编辑。
+- TM-29 已集成第 5–12 周语法；本轮稳定 worktree 重跑完整测试：299 passed。TM-30 仍在审查。TM-6 被退回，需修复副词被机械套成名词例句的问题，不能因 reviewed:false 忽略明显错误。
+- STR-2 已完成可移植启动器测试并获批准。本轮独立执行配置命令：38 passed（一个既有 pytest asyncio_mode 配置警告）；无需 torch/GPU/网络。真实 GPU 和原生依赖集成仍未验证。
+- SB-3/4/5 当前均已集成，已将 SB-6 周复盘和 SB-7 网页看板提升到 ready。NPO 出现另一聊天安排的新一轮任务（NPO-9～18），保持用户最新队列和目标，不覆盖其配置。
+
 1. 完成 SB-11、SB-12 及 TM-26 等冲突任务的本机修复、测试和集成；防止重复复制文件造成冲突循环。
 2. 验收并集成 TM-6；推进每日学习、离线网页和内容审核工具。
 3. 完成 STR-2 的可移植启动器测试；区别原型验收与真实 CUDA/ROCm 硬件验证。

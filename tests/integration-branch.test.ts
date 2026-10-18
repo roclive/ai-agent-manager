@@ -5,7 +5,12 @@ import { fixture } from "./helpers.js";
 import { git } from "../src/core/process.js";
 import { ensureWorktree } from "../src/core/worktree.js";
 import { review } from "../src/core/review.js";
-import { setIntegration, promote } from "../src/core/integration.js";
+import {
+  setIntegration,
+  promote,
+  reconcileIntegration,
+  integrate,
+} from "../src/core/integration.js";
 
 describe("integration branch", () => {
   it("queues conflicts, preserves both intents, and promotes only explicitly", () => {
@@ -49,6 +54,35 @@ describe("integration branch", () => {
       f.repo.updateTask(resolution.id, { status: "in_review" });
       review(f.repo, resolution.identifier, "approve");
       expect(f.repo.task(b.id).integrated).toBe(1);
+      // A stale, approved snapshot from an earlier attempt must not restart
+      // conflict resolution after the later genuine merge has landed.
+      const obsolete = f.task({
+        status: "done",
+        resolves_task_id: b.id,
+        integrated: 0,
+      });
+      const obsoletePath = ensureWorktree(f.repo, obsolete);
+      writeFileSync(resolve(obsoletePath, "initial.txt"), "obsolete snapshot");
+      git(obsoletePath, ["add", "."]);
+      git(obsoletePath, ["commit", "-m", "old snapshot"]);
+      // Reproduce legacy IDs: the already-integrated solution is the newer one.
+      f.repo.db
+        .prepare("UPDATE tasks SET resolves_task_id=NULL WHERE id=?")
+        .run(resolution.id);
+      const newer = f.task({
+        status: "done",
+        resolves_task_id: b.id,
+        integrated: 1,
+        branch: resolution.branch || `aam/${resolution.identifier}`,
+      });
+      const count = f.repo.tasks().length;
+      const tip = git(f.path, ["rev-parse", "aam/integration"]);
+      for (let i = 0; i < 3; i++) reconcileIntegration(f.repo);
+      integrate(f.repo, obsolete.identifier);
+      expect(f.repo.tasks()).toHaveLength(count);
+      expect(git(f.path, ["rev-parse", "aam/integration"])).toBe(tip);
+      expect(f.repo.task(obsolete.id).integrated).toBe(0);
+      expect(f.repo.task(newer.id).integrated).toBe(1);
       expect(git(f.path, ["show", "aam/integration:initial.txt"])).toBe(
         "first\nsecond",
       );

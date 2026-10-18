@@ -1,6 +1,6 @@
 import { mkdtempSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { Repo, type Project } from "../db/index.js";
+import { Repo, type Project, type Task } from "../db/index.js";
 import { withLock } from "./lock.js";
 import { git, runner } from "./process.js";
 
@@ -84,6 +84,26 @@ export function openResolution(repo: Repo, id: number, exclude?: number) {
         !["done", "cancelled"].includes(t.status),
     );
 }
+function supersededResolution(repo: Repo, task: Task) {
+  if (!task.resolves_task_id) return false;
+  const p = repo.project(task.project_id);
+  if (!p.integration_branch) return false;
+  return repo
+    .tasks()
+    .some(
+      (newer) =>
+        newer.id > task.id &&
+        newer.resolves_task_id === task.resolves_task_id &&
+        newer.status === "done" &&
+        newer.integrated === 1 &&
+        newer.branch &&
+        runner(
+          "git",
+          ["merge-base", "--is-ancestor", newer.branch, p.integration_branch],
+          p.repo_path,
+        ).status === 0,
+    );
+}
 export function reconcileIntegration(repo: Repo) {
   for (const t of repo
     .tasks({ status: "done" })
@@ -93,6 +113,7 @@ export function reconcileIntegration(repo: Repo) {
     if (
       t.branch &&
       !t.integrated &&
+      !supersededResolution(repo, t) &&
       !(
         !t.resolves_task_id &&
         repo
@@ -114,7 +135,8 @@ export function integrate(repo: Repo, id: string) {
   const task = repo.task(id);
   if (
     !repo.project(task.project_id).integration_branch ||
-    task.integration_attempts >= 5
+    task.integration_attempts >= 5 ||
+    supersededResolution(repo, task)
   )
     return;
   repo.updateTask(task.id, { integrated: 0 });
@@ -164,11 +186,10 @@ function integrateLocked(repo: Repo, id: string) {
           .tasks()
           .filter((x) => x.resolves_task_id === original.id).length;
         const max = Number(repo.getSetting("integration_max_resolves")) || 10;
-      if (count >= max) {
+        if (count >= max) {
           repo.updateTask(original.id, {
             status: "blocked",
-            blocker:
-              `Integration conflict: maximum ${max} resolution tasks exhausted`,
+            blocker: `Integration conflict: maximum ${max} resolution tasks exhausted`,
           });
           repo.event(
             "integration_blocked",
