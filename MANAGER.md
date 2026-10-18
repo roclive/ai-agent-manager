@@ -36,6 +36,13 @@
 
 ## 下一步优先级
 
+### 2026-10-18 23:55 JST 唤醒记录
+
+- 可见额度仍32%，普通使用正常，显式Ollama云路由健康，单daemon79478与caffeinate79480正常；heartbeat aam仍ACTIVE，未重启既有worker，GW-7暂停不变。跨午夜审核预算将按本地日自然归零，不手工增加120上限。 本轮AAM110项离线测试、typecheck通过。
+- BGM-3自动审核已在14:43批准并集成，但经理复核发现明确边界缺口。无worker时先blocked租约；先新增4条回归并真实看到全部失败：相同曲目跨block合并16秒超过可用10秒、2秒block/2秒track突破3秒cue下限、静默移位产生1秒cue。
+- 提交0883fc6修复累计merge时长、所有时长/静默/冷却变换后重新校验cue下限、移位/截短后重查对白保护及淡入淡出边界；另补冷却移入对白和无效/非有限时长回归。完整28测试通过。登记独立manager-validation run162，提交SHA0883fc6，送回in_review并置integrated=0（旧版历史仍在integration），尝试保持2；待正常审核，未直接批准。
+- AAM-16/GW-4仍由现有worker处理。AAM-16持续测试修复、GW-4正在修复python -m litellm无__main__导致的proxy测试启动失败；不要同时改动其工作区。全局规划DP与实际CLI接入仍应由BGM-3审核单独核实，不能把28测试或TTS smoke等同于全部需求通过。
+
 ### 2026-10-18 23:42 JST 唤醒记录
 
 - Codex额度32%、普通使用正常；Ollama云端路由保持，不切回primary。发现launchd长期运行的daemon仍保留旧llmArgs（仅根级openai_base_url），对daemon PID86927发SIGTERM使其正常退出后由launchd重启为79478；AAM-16/GW-4既有worker PID45294/45296/74546/74548均继续存在，没有重启。新健康检查实际参数含named aam-fallback provider、danger-full-access、approval_policy=never；首次瞬时超时后自动复查在14:41:57Z返回ok。
