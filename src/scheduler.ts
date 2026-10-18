@@ -1,4 +1,4 @@
-import { checkClaude } from "./core/autopilot.js";
+import { checkReviewer, healthSetting } from "./core/autopilot.js";
 import { keepAwake } from "./core/keep-awake.js";
 import { Cron } from "croner";
 import { Repo, type Routine } from "./db/index.js";
@@ -60,13 +60,13 @@ export function daemon(repo: Repo, interval = 60) {
     let stopped = false;
     // Healthy: re-check every 30 min. Unhealthy: every 2 min, so one transient failure cannot pause the autopilot for half an hour.
     const healthDue = () => {
-      const at = Date.parse(repo.getSetting("claude_checked_at") || "") || 0;
-      const gap = repo.getSetting("claude_ok") === "1" ? 30 * 60000 : 2 * 60000;
+      const at = Date.parse(healthSetting(repo, "checked_at") || "") || 0;
+      const gap = healthSetting(repo, "ok") === "1" ? 30 * 60000 : 2 * 60000;
       return Date.now() - at >= gap;
     };
     const health = (force = false) => {
       if (checking || stopped || (!force && !healthDue())) return;
-      checking = checkClaude(repo)
+      checking = checkReviewer(repo)
         .catch((e) => repo.event("daemon_error", String(e)))
         .finally(() => {
           checking = undefined;

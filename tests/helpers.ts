@@ -20,6 +20,7 @@ export function fixture(script = "printf changed > changed.txt\nexit 0") {
   git(path, ["add", "."]);
   git(path, ["commit", "-m", "initial"]);
   const repo = new Repo(resolve(root, ".aam"));
+  repo.setSetting("reviewer", "claude");
   repo.addProject({ key: "T", name: "Test", repo_path: path });
   const fake = resolve(root, "fake.sh");
   writeFileSync(fake, `#!/bin/sh\ncd "$1" || exit 1\n${script}\n`, {

@@ -82,15 +82,21 @@ export function Dashboard({ project }: { project: string }) {
         <section className="page-section">
           <h2>夜间自动驾驶</h2>
           <p>
-            {status.data.autopilot.claude_ok === false && (
+            {(status.data.autopilot.reviewer_ok ??
+              status.data.autopilot.claude_ok) === false && (
               <span
                 style={{
                   color: "var(--destructive, #dc2626)",
                   display: "block",
                 }}
               >
-                Claude 不可用，自动驾驶已暂停：
-                {status.data.autopilot.claude_error || "等待登录健康检查"}
+                {status.data.autopilot.reviewer === "codex"
+                  ? "Codex"
+                  : "Claude"}{" "}
+                不可用，自动驾驶已暂停：
+                {status.data.autopilot.reviewer_error ||
+                  status.data.autopilot.claude_error ||
+                  "等待登录健康检查"}
               </span>
             )}
             等待审查 {status.data.autopilot.waiting_for_review ?? 0} · 今日审查{" "}

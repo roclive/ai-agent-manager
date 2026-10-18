@@ -38,3 +38,10 @@ AAM-8: Project opt-in safety takes precedence over the legacy global review_mode
 AAM-9: Integration is opt-in; existing projects remain disabled. Promotion's --into must match the configured base branch. Conflicts are retried through at most two resolution tasks per original; operational Git failures are recorded as integration_error and leave the approved task pending integration. Integration-enabled worktrees skip dependency merges because approved dependencies are supplied through the integration tip.
 
 AAM-11: Review age uses task.updated_at (the existing review epoch); project rank breaks age ties. Consecutive timeout history is durable per task and resets on a non-timeout result; each timeout after the third renews the 30-minute pause. Eligibility delays are checked on heartbeats. Bottleneck counts subtract dependency-ready queued work after backlog promotion from free worker capacity. Large-file filtering uses the maximum blob size on the merge base and task branch, including deleted files.
+
+AAM-12: reviewer defaults to Codex for autopilot review/planning/health; legacy
+review_mode remains accepted. Claude health keys remain readable for Claude,
+while status exposes compatibility aliases for the selected reviewer.
+Verified codex exec --help flags. Manual minimal-environment smoke invocation was
+attempted once, but this execution sandbox rejected app-server initialization
+with EPERM before authentication; login success cannot be confirmed here.
