@@ -34,6 +34,14 @@
 
 ## 下一步优先级
 
+### 2026-10-18 23:10 JST 唤醒记录
+
+- 可见 Codex 额度已用32%，普通使用正常。本轮不是额度耗尽触发切换；排查到审核健康检查连续90秒超时，默认 CLI 模型为 gemma4:31b:cloud，但未配置 model_provider，根级 openai_base_url 不能保证覆盖账号路由。
+- AAM 的 ollama_fallback_enabled 当时为0。恢复本聊天已授权的云端兜底开关并设置 llm_backend=ollama，使用现有显式 aam-fallback provider 指向本机 Ollama 云网关；真实 `aam autopilot check` 返回 ok，14:09:57Z reviewer_ok=true，14:10 已重新开始 MUD-3 审核（审核预算100/120）。此切换修复路由故障，不代表当前聊天模型改变。
+- 没有重启既有 AAM-16/BGM-4 worker；真实参数仍为 danger-full-access、approval_policy=never。保留 GW-7 人工暂停，不加载 Saluki，不下载任何模型；本机入口调用的是 gemma4 云模型。
+- 修复后 MUD-3 审核实际完成并退回 ready：指出未知房间仍继续执行、固定路由未接入 BFS 两项实质缺口；保留反馈交给正常 worker 修复，未直接批准。AAM 本轮完整离线测试110项通过，类型检查通过。
+- launchd daemon/UI 单实例与 caffeinate 正常；heartbeat aam 仍可查看。内存空闲已回升63%，暂时保留 worker并发2/审核1，先确认队列稳定；无额度退避。后续所有可见额度<70%且主路由健康验证通过后再恢复primary，不能仅因当前额度低就切回错误路由。
+
 ### 2026-10-18 23:04 JST 唤醒记录
 
 - 额度已用30%，主后端继续运行，未触发切换。守护进程、唤醒和 Ollama 兜底正常。
