@@ -34,6 +34,14 @@
 
 ## 下一步优先级
 
+### 2026-10-18 23:32 JST 唤醒记录
+
+- Codex已用32%，普通使用正常，继续保留已验证的显式Ollama云端路由；不恢复旧primary错误路由。唤醒aam仍ACTIVE/15分钟，launchd/UI/caffeinate正常，全权限worker保持，不触碰GW-7人工暂停。
+- 接手无worker的BGM-4（blocked管理租约）。修复Python3.13 dataclass动态导入后发现时间戳回归及渲染器大规模功能丢失，恢复当前integration实现，再真正接入共享Edge适配层。MP3明确转PCM WAV、校验缓存、隔离配置、重试/局部say回退、失败终止混音，原渲染器/OpenAI/say/manifest/批处理保留。提交adf9605，真实merge97c66fd，证据6c9759a；完整12项离线测试通过，已在tick锁内批准并集成，尝试数2不重置。
+- 中日真实Edge短句分别2.928/3.816秒；完整渲染器实际输出一条2.928秒cue，含停顿最终WAV3.378秒。产物 `.aam/bgm4-tts-smoke`。Homebrew ffmpeg动态链接缺libx265.216，npocut bundled版本也缺动态库；使用已安装正确4.2库的进程级 `DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/Cellar/x265/4.2/lib` 验证成功，未修改任何系统库或全局环境。后续本机真实音频执行须保留该作用域环境或修复Homebrew。未做人声听感或真实BGM素材验收。
+- 同时定位BGM-3真实测试无限循环占用CPU和tick锁：对白保护边界赋同一值却再次changed=True。短暂暂停派发并仅终止卡死的测试PID24410，获取租约后恢复派发；没有终止其他worker。以有界排序区间扫描替代while，淡入淡出保留对白保护窗口，新增恰好边界与重叠窗口回归，提交d930256；真实合入BGM-4/integration提交32c55b1，完整22测试通过。送回in_review正常审核，保留尝试2；全局优化、冷却/时长和CLI集成仍必须严格审核，未直接批准。
+- AAM本轮110项离线测试与typecheck通过。保持并发2/审核1、每日审核预算120；不因剩余任务多而绕过验收或任意加预算。
+
 ### 2026-10-18 23:10 JST 唤醒记录
 
 - 可见 Codex 额度已用32%，普通使用正常。本轮不是额度耗尽触发切换；排查到审核健康检查连续90秒超时，默认 CLI 模型为 gemma4:31b:cloud，但未配置 model_provider，根级 openai_base_url 不能保证覆盖账号路由。
