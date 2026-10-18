@@ -6,11 +6,11 @@ import { ensureWorktree } from "./worktree.js";
 import { prompt, spawnWorker } from "../workers/index.js";
 import { checkQuota, QuotaUnavailableError } from "./usage.js";
 import {
-  providerRules,
   reserveProvider,
   releaseProvider,
   selectProvider,
 } from "./providers.js";
+import { providerPolicyConfigured } from "./provider-policy.js";
 
 import { llmArgs, recordBackend } from "./llm.js";
 export function dependenciesDone(repo: Repo, t: Task) {
@@ -53,7 +53,7 @@ export function dispatch(repo: Repo, id: string, force = false) {
       "Project has active work or review; serialize integration resolutions",
     );
   if (
-    !providerRules(repo).length &&
+    !providerPolicyConfigured(repo.getSetting("provider_policy")) &&
     Date.parse(repo.getSetting("cooldown_until") || "") > Date.now()
   )
     throw new Error("Workers are in cooldown");

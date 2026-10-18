@@ -9,7 +9,7 @@ import { dispatch, dependenciesDone, resolutionBusy } from "./dispatch.js";
 import { collectAutopilot, promoteIdle, startAutopilot } from "./autopilot.js";
 import { exportViews } from "../views/index.js";
 import { QuotaUnavailableError } from "./usage.js";
-import { providerRules } from "./providers.js";
+import { providerPolicyConfigured } from "./provider-policy.js";
 export function tick(repo: Repo, _reviewRunner: Runner = runner) {
   return withLock(repo, () => {
     repo.setSetting("last_tick_at", new Date().toISOString());
@@ -36,7 +36,7 @@ export function tick(repo: Repo, _reviewRunner: Runner = runner) {
     }
     reconcileIntegration(repo);
     if (
-      providerRules(repo).length ||
+      providerPolicyConfigured(repo.getSetting("provider_policy")) ||
       !(Date.parse(repo.getSetting("cooldown_until") || "") > Date.now())
     )
       for (const t of repo.tasks({ status: "ready" })) {

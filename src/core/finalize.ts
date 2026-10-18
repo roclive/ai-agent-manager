@@ -10,7 +10,8 @@ import { dirname, resolve, relative, isAbsolute } from "node:path";
 import { Repo, type Run } from "../db/index.js";
 import { git, runner } from "./process.js";
 import { quotaFallback, readBackend } from "./llm.js";
-import { freezeProvider, providerRules, releaseProvider } from "./providers.js";
+import { freezeProvider, releaseProvider } from "./providers.js";
+import { providerPolicyConfigured } from "./provider-policy.js";
 export function read(path: string) {
   try {
     return readFileSync(path, "utf8");
@@ -96,7 +97,7 @@ export function finalize(repo: Repo, run: Run, terminal?: "timeout" | "lost") {
         return;
       // Preserve the old single-provider signal for existing installations.
       // Configured multi-provider routing relies only on the scoped breaker.
-      if (!providerRules(repo).length) {
+      if (!providerPolicyConfigured(repo.getSetting("provider_policy"))) {
         repo.setSetting(
           "cooldown_until",
           new Date(Date.now() + 30 * 60000).toISOString(),

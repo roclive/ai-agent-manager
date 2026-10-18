@@ -1,6 +1,7 @@
 import { afterEach, expect, it } from "vitest";
 import { dispatch } from "../src/core/dispatch.js";
 import { finalize } from "../src/core/finalize.js";
+import { tick } from "../src/core/tick.js";
 import {
   activeReservation,
   freezeProvider,
@@ -44,6 +45,65 @@ const quota = (providerId: string, remaining: number | "unknown") =>
     }),
     "fixture",
   )[0];
+
+it("rejects an explicitly empty provider allowlist instead of enabling legacy routing", () => {
+  f = fixture();
+  expect(() => f.repo.setSetting("provider_policy", policy([]))).toThrow(
+    "provider_policy.providers must not be empty",
+  );
+  expect(f.repo.getSetting("provider_policy")).toBe("");
+
+  // Protect dispatch even if an older database already contains this value.
+  f.repo.db
+    .prepare("UPDATE settings SET value=? WHERE key='provider_policy'")
+    .run(policy([]));
+  const task = f.task();
+  expect(() => selectProvider(f.repo, task)).toThrow(
+    "provider_policy.providers must not be empty",
+  );
+  expect(f.repo.runs(task.id)).toHaveLength(0);
+});
+
+it("validates the complete provider policy before persisting it", () => {
+  f = fixture();
+  const valid = policy([provider("free")]);
+  f.repo.setSetting("provider_policy", valid);
+
+  for (const invalid of [
+    JSON.stringify({ version: 2, providers: [provider("free")] }),
+    policy([provider("free", { roles: [] })]),
+    policy([provider("free", { reserve_remaining: -1 })]),
+    policy([provider("free", { reservation: { low: 1, medium: 1 } })]),
+  ]) {
+    expect(() => f.repo.setSetting("provider_policy", invalid)).toThrow();
+    expect(f.repo.getSetting("provider_policy")).toBe(valid);
+  }
+});
+
+it("keeps heartbeat services running when a legacy database contains a malformed policy", () => {
+  f = fixture();
+  f.repo.db
+    .prepare("UPDATE settings SET value=? WHERE key='provider_policy'")
+    .run(JSON.stringify({ version: 1, providers: "invalid" }));
+  const task = f.task();
+
+  expect(() => tick(f.repo)).not.toThrow();
+  expect(f.repo.task(task.id).status).toBe("ready");
+  expect(f.repo.runs(task.id)).toHaveLength(0);
+  expect(
+    f.repo
+      .events(20)
+      .some(
+        (event: unknown) =>
+          typeof event === "object" &&
+          event !== null &&
+          "kind" in event &&
+          "message" in event &&
+          event.kind === "quota_deferred" &&
+          String(event.message).includes("provider_policy requires version 1"),
+      ),
+  ).toBe(true);
+});
 
 it("prefers legal free/local capability while unknown quota remains explicit and high work is reserved for premium", () => {
   f = fixture();

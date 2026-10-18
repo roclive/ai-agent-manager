@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { UsageSnapshot } from "./usage.js";
+import { parseProviderPolicy } from "../core/provider-policy.js";
 
 export const statuses = [
   "backlog",
@@ -216,7 +217,7 @@ export class Repo {
     if (key === "llm_backend" && !["primary", "ollama"].includes(value))
       throw new Error("Invalid LLM backend");
     if (key === "provider_policy" && value) {
-      JSON.parse(value);
+      parseProviderPolicy(value);
     }
     if (
       key === "ollama_model" &&
