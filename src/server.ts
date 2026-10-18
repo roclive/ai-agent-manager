@@ -1,3 +1,7 @@
+import { cors } from "hono/cors";
+import { resolve, dirname } from "node:path";
+import { uiRoutes, routineJSON, taskDetail } from "./api/ui.js";
+import { statuses } from "./db/index.js";
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import { Repo } from "./db/index.js";
@@ -10,24 +14,85 @@ function count(value: string | undefined, fallback: number) {
     throw new Error("Invalid count");
   return n;
 }
-export function createApp(repo: Repo) {
+export function createApp(
+  repo: Repo,
+  options: { port?: number; dist?: string } = {},
+) {
   const app = new Hono();
+  app.use(
+    "*",
+    cors({
+      origin: ["http://127.0.0.1:5174", "http://localhost:5174"],
+      allowHeaders: ["Content-Type", "X-AAM", "Last-Event-ID"],
+      allowMethods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+    }),
+  );
+  app.use("*", async (c, next) => {
+    if (c.req.method !== "GET" && c.req.header("X-AAM") !== "1") {
+      let valid = false;
+      try {
+        const source = new URL(
+          c.req.header("Origin") || c.req.header("Referer") || "",
+        );
+        valid =
+          ["127.0.0.1", "localhost"].includes(source.hostname) &&
+          Number(source.port || (source.protocol === "https:" ? 443 : 80)) ===
+            (options.port ?? 3199);
+      } catch {
+        /* invalid or absent origin */
+      }
+      if (!valid)
+        return c.json(
+          { error: "X-AAM: 1 or same-origin request required" },
+          403,
+        );
+    }
+    await next();
+  });
   app.onError((e, c) =>
     c.json({ error: e.message }, /not found/i.test(e.message) ? 404 : 400),
   );
-  app.get("/api/projects", (c) => c.json(repo.projects()));
+  app.get("/api/projects", (c) =>
+    c.json(
+      repo.projects().map((p) => ({
+        ...p,
+        counts: Object.fromEntries(
+          statuses.map((s) => [
+            s,
+            repo.tasks({ project: p.key, status: s }).length,
+          ]),
+        ),
+        running: repo
+          .runs()
+          .filter(
+            (r) =>
+              r.status === "running" &&
+              repo.task(r.task_id).project_id === p.id,
+          ).length,
+      })),
+    ),
+  );
   app.get("/api/tasks", (c) =>
     c.json(
-      repo.tasks({
-        status: c.req.query("status"),
-        project: c.req.query("project"),
-      }),
+      repo
+        .tasks({
+          status: c.req.query("status"),
+          project: c.req.query("project"),
+        })
+        .sort(
+          (a, b) =>
+            statuses.indexOf(a.status as (typeof statuses)[number]) -
+              statuses.indexOf(b.status as (typeof statuses)[number]) ||
+            a.sort_order - b.sort_order ||
+            a.priority.localeCompare(b.priority) ||
+            a.id - b.id,
+        ),
     ),
   );
   app.post("/api/tasks", async (c) =>
     c.json(repo.addTask(await c.req.json()), 201),
   );
-  app.get("/api/tasks/:id", (c) => c.json(repo.detail(c.req.param("id"))));
+  app.get("/api/tasks/:id", (c) => c.json(taskDetail(repo, c.req.param("id"))));
   app.patch("/api/tasks/:id", async (c) => {
     const id = c.req.param("id");
     const input = await c.req.json<Record<string, unknown>>();
@@ -38,6 +103,10 @@ export function createApp(repo: Repo) {
       "description",
       "worker",
       "sort",
+      "sort_order",
+      "depends_on",
+      "role",
+      "max_attempts",
     ];
     if (Object.keys(input).some((k) => !allowed.includes(k)))
       throw new Error("Unsupported task field");
@@ -47,24 +116,34 @@ export function createApp(repo: Repo) {
     )
       throw new Error("Task has a running worker");
     const { sort, ...patch } = input;
-    if (sort !== undefined) patch.seq = sort;
+    if (sort !== undefined && patch.sort_order === undefined)
+      patch.sort_order = sort;
+    if (patch.depends_on !== undefined && !Array.isArray(patch.depends_on))
+      throw new Error("Dependencies must be an array");
     return c.json(repo.updateTask(id, patch));
   });
-  app.get("/api/runs/:id/log", (c) => {
+  app.get("/api/runs/:id/:kind", (c) => {
+    if (!["log", "test-log"].includes(c.req.param("kind")))
+      return c.json({ error: "Not found" }, 404);
     const r = repo.runs().find((r) => r.id === Number(c.req.param("id")));
     if (!r) throw new Error("Run not found");
     return c.json({
       run_id: r.id,
-      log: tail(r.log_path, count(c.req.query("tail"), 100)),
+      log: tail(
+        c.req.param("kind") === "test-log"
+          ? resolve(dirname(r.log_path), "test.log")
+          : r.log_path,
+        count(c.req.query("tail"), 100),
+      ),
     });
   });
-  app.get("/api/routines", (c) => c.json(repo.routines()));
+  app.get("/api/routines", (c) => c.json(repo.routines().map(routineJSON)));
   app.post("/api/routines", async (c) => {
     const p = await c.req.json();
     validateRoutine(p.cron, p.action, p.payload || {});
     repo.addRoutine(p.name, p.cron, p.action, p.payload || {});
     return c.json(
-      repo.routines().find((r) => r.name === p.name),
+      routineJSON(repo.routines().find((r) => r.name === p.name)!),
       201,
     );
   });
@@ -79,6 +158,8 @@ export function createApp(repo: Repo) {
     )
       throw new Error("Unsupported routine field");
     const next = { ...r, ...p };
+    if (typeof next.name !== "string" || !next.name.trim())
+      throw new Error("Routine name required");
     const payload = Object.hasOwn(p, "payload")
       ? p.payload
       : JSON.parse(r.payload);
@@ -97,7 +178,7 @@ export function createApp(repo: Repo) {
         next.enabled ? 1 : 0,
         r.id,
       );
-    return repo.routines().find((x) => x.id === r.id);
+    return routineJSON(repo.routines().find((x) => x.id === r.id)!);
   };
   app.patch("/api/routines/:id", async (c) =>
     c.json(await patchRoutine(c.req.param("id"), await c.req.json())),
@@ -120,13 +201,14 @@ export function createApp(repo: Repo) {
     })();
     return c.json(repo.settings());
   });
+  uiRoutes(app, repo, options.dist);
   return app;
 }
 export function startServer(repo: Repo, port = 3199) {
   if (!Number.isInteger(port) || port < 1 || port > 65535)
     throw new Error("Invalid port");
   const server = serve({
-    fetch: createApp(repo).fetch,
+    fetch: createApp(repo, { port }).fetch,
     hostname: "127.0.0.1",
     port,
   });

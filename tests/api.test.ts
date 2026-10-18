@@ -9,7 +9,7 @@ it("serves task, routine, event and settings operations with validation", async 
   const req = (path: string, method = "GET", body?: unknown) =>
     app.request(`/api/${path}`, {
       method,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-AAM": "1" },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
   expect(await (await req("projects")).json()).toHaveLength(1);

@@ -134,21 +134,36 @@ aam serve --port 3199
 
 The JSON API binds only to `127.0.0.1`.
 
-| Method           | Path                         |
-| ---------------- | ---------------------------- |
-| GET              | `/api/projects`              |
-| GET, POST        | `/api/tasks`                 |
-| GET, PATCH       | `/api/tasks/:id`             |
-| GET              | `/api/runs/:id/log?tail=100` |
-| GET, POST, PATCH | `/api/routines`              |
-| PATCH            | `/api/routines/:id`          |
-| POST             | `/api/tick`                  |
-| GET              | `/api/events?limit=50`       |
-| GET, PUT         | `/api/settings`              |
+Non-GET API requests require `X-AAM: 1`, or an Origin/Referer from localhost/127.0.0.1 on the server port. Vite CORS is allowed only on port 5174 (localhost and 127.0.0.1), with `X-AAM` support. Errors are JSON `{ "error": "..." }` (400/403/404).
 
-Task lists accept `?status=ready&project=NPO`. Create a task with `{"project":"NPO","title":"Fix validation","status":"ready"}` and optional task fields such as `description`, `priority`, `role`, `worker`, and `depends_on` (an array of identifiers). Task paths accept identifiers or numeric database IDs. PATCH supports status, priority, title, description, worker, and numeric `sort` (positive sequence within priority). Dependency fields in database responses are JSON text.
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET, POST | `/api/projects` | Project counts/running totals; create project |
+| PATCH | `/api/projects/:key` | Name, existing Git repo_path, base_branch, test_cmd, setup_cmd |
+| GET, POST | `/api/tasks` | Filter by status/project; create task |
+| GET, PATCH | `/api/tasks/:id` | Detail with runs/events/diff_stat/last_message; edit task |
+| POST | `/api/tasks/:id/review` | `{verdict: "approve" or "reject", note}` |
+| POST | `/api/tasks/:id/run` | Dispatch immediately, `{force?: boolean}` |
+| POST | `/api/tasks/:id/merge` | `{into: "integration"}`; refuses base branch |
+| POST | `/api/tasks/:id/cancel` | Kill worker group, fail run, block task |
+| GET | `/api/runs?status=&task=&limit=50` | Newest runs with task/project and elapsed_s |
+| GET | `/api/runs/:id/log?tail=100` | Worker log |
+| GET | `/api/runs/:id/test-log?tail=100` | Test log |
+| GET | `/api/status` | Live tick lock or heartbeat within 180s; daemon.last_tick_age_s, cooldown, concurrency, task counts |
+| GET | `/api/stream` | SSE new `events` rows with IDs; Last-Event-ID or ?since=N resumes; ?replay=K replays the last K (default 0); ping every 20s |
+| GET, POST, PATCH | `/api/routines` | List/create; legacy edit by id/name |
+| PATCH, DELETE | `/api/routines/:id` | Edit or delete routine |
+| POST | `/api/routines/:id/run` | Fire immediately |
+| GET | `/api/routines/:id/runs` | Last 20 firings |
+| POST | `/api/tick` | Run heartbeat |
+| GET | `/api/events?limit=50` | Recent events |
+| GET, PUT | `/api/settings` | Read/update settings |
 
-Create routines with `name`, `cron`, `action`, and an object `payload`. PATCH `/api/routines` identifies an existing routine by `id` or `name`; the path variant also supports renaming. PUT settings accepts an object such as `{"max_parallel":3}`. Errors return `{ "error": "..." }` with status 400 or 404.
+Create tasks with `{project: "NPO", title: "Fix validation", status: "ready"}` (JSON keys must be quoted). Task paths accept identifiers or numeric IDs. PATCH supports status, priority, title, description, worker, role, max_attempts, depends_on (identifier array), and finite numeric sort_order. The deprecated sort alias maps to sort_order; seq remains unchanged. Lists sort by status (backlog, ready, in_progress, in_review, done, blocked, cancelled), sort_order, priority. Dependencies must exist and cannot introduce cycles. Moving blocked tasks to ready clears blocker and retains feedback. Dependency arrays remain JSON text in responses.
+
+Routines require name, valid cron, action (heartbeat/create_task/shell), and object payload. Responses include next_run_at (null when disabled); PATCH accepts enabled, cron, name, payload and action. Firings are recorded independently of routine name. Settings PUT accepts an object such as `{"max_parallel":3}`.
+
+The server serves ui/dist with SPA fallback for non-API GETs, content types, and immutable hashed assets. Before the UI is built it displays “UI not built — run npm run ui:build”. UI package commands: `npm run ui:install`, `npm run ui:build`, `npm run ui:dev`.
 
 ## Development
 

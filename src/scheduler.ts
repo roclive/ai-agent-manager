@@ -7,6 +7,7 @@ export function validateRoutine(
   action: string,
   payload: unknown,
 ) {
+  if (typeof cron !== "string" || !cron.trim()) throw new Error("Invalid cron");
   const c = new Cron(cron, { paused: true });
   c.stop();
   if (!["heartbeat", "create_task", "shell"].includes(action))
@@ -24,6 +25,10 @@ export function validateRoutine(
 }
 export function fireRoutine(repo: Repo, r: Routine) {
   try {
+    repo.event(
+      "routine_fire",
+      JSON.stringify({ routine_id: r.id, name: r.name }),
+    );
     const p = JSON.parse(r.payload);
     if (r.action === "heartbeat") tick(repo);
     else if (r.action === "create_task") {
