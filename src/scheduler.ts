@@ -92,6 +92,28 @@ export function daemon(repo: Repo, interval = 60) {
     health(true);
     const healthTimer = setInterval(() => health(), 30000);
     const jobs = new Map<number, { signature: string; job: Cron }>();
+    const sync = () => {
+      const enabled = repo.routines().filter((r) => r.enabled);
+      for (const [id, { job, signature }] of jobs) {
+        const r = enabled.find((x) => x.id === id);
+        if (!r || JSON.stringify(r) !== signature) {
+          job.stop();
+          jobs.delete(id);
+        }
+      }
+      for (const r of enabled) {
+        if (!jobs.has(r.id)) {
+          try {
+            const job = new Cron(r.cron, function() {
+              fireRoutine(repo, r).catch((e) => repo.event("routine_error", String(e)));
+            });
+            jobs.set(r.id, { signature: JSON.stringify(r), job });
+          } catch (e) {
+            repo.event("routine_error", String(e));
+          }
+        }
+      }
+    }
     const heartbeat = () => {
       try {
         awake.check();
@@ -99,29 +121,6 @@ export function daemon(repo: Repo, interval = 60) {
         sync();
       } catch (e) {
         repo.event("daemon_error", String(e));
-      }
-    };
-    const sync = () => {
-      const enabled = repo.routines().filter((r) => r.enabled);
-      for (const [id, { job, signature }] of jobs) {
-        const r = enabled.find((r) => r.id === id);
-        if (!r || JSON.stringify(r) !== signature) {
-          job.stop();
-          jobs.delete(id);
-        }
-      }
-      for (const r of enabled)
-        if (!jobs.has(r.id)) {
-          try {
-            const job = new Cron(r.cron, async () => {
-              const current = repo.routines().find((x) => x.id === r.id);
-              if (current?.enabled) await fireRoutine(repo, current);
-            });
-            jobs.set(r.id, { signature: JSON.stringify(r), job });
-          } catch (e) {
-            repo.event("routine_error", String(e));
-          }
-        }
       }
     };
     const timer = setInterval(heartbeat, interval * 1000);

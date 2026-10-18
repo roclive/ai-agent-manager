@@ -6,7 +6,7 @@ import { Repo } from "./db/index.js";
 import { autopilotStatus, checkReviewer } from "./core/autopilot.js";
 import { review } from "./core/review.js";
 import { merge, prune } from "./core/worktree.js";
-import { collectUsage, FakeOpenUsageProvider } from "./workers/openusage.js";
+import { collectUsage, FakeOpenUsageProvider, JsonOpenUsageProvider } from "./workers/openusage.js";
 
 export const output = (v: unknown) =>
   console.log(typeof v === "string" ? v : JSON.stringify(v, null, 2));

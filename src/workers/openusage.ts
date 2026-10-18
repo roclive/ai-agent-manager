@@ -1,11 +1,10 @@
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { Repo } from "../db/index.js";
 import { UsageSnapshot } from "../db/usage.js";
 
 export interface OpenUsageProvider {
   name: string;
-  fetch(): Promise<UsageSnapshot[]>;
+  fetch(): Promise<Partial<UsageSnapshot>[]>;
 }
 
 export class FakeOpenUsageProvider implements OpenUsageProvider {
@@ -14,7 +13,7 @@ export class FakeOpenUsageProvider implements OpenUsageProvider {
     return [
       {
         provider: "openai",
-        type: "quota",
+        type: "quota" as "cost" | "quota",
         window: "monthly",
         used: 100,
         remaining: 900,
@@ -26,10 +25,10 @@ export class FakeOpenUsageProvider implements OpenUsageProvider {
       },
       {
         provider: "anthropic",
-        type: "cost",
+        type: "cost" as "cost" | "quota",
         window: "monthly",
         used: 50,
-        remaining: "unknown",
+        remaining: "unknown" as number | "unknown",
         reset_at: null,
         source: "fake-api",
         freshness: new Date().toISOString(),
@@ -43,7 +42,7 @@ export class FakeOpenUsageProvider implements OpenUsageProvider {
 export class JsonOpenUsageProvider implements OpenUsageProvider {
   constructor(public name: string, public filePath: string) {}
 
-  async fetch(): Promise<UsageSnapshot[]> {
+  async fetch() {
     try {
       const content = readFileSync(this.filePath, "utf8");
       const data = JSON.parse(content);
@@ -57,10 +56,10 @@ export class JsonOpenUsageProvider implements OpenUsageProvider {
         }
         return {
           provider: String(item.provider),
-          type: item.type === "cost" || item.type === "quota" ? item.type : "quota",
+          type: (item.type === "cost" || item.type === "quota" ? item.type : "quota") as "cost" | "quota",
           window: String(item.window),
-          used: typeof item.used === "number" ? item.used : "unknown",
-          remaining: typeof item.remaining === "number" ? item.remaining : "unknown",
+          used: (typeof item.used === "number" ? item.used : "unknown") as number | "unknown",
+          remaining: (typeof item.remaining === "number" ? item.remaining : "unknown") as number | "unknown",
           reset_at: item.reset_at ? new Date(item.reset_at).toISOString() : null,
           source: String(item.source || "json-file"),
           freshness: item.freshness ? new Date(item.freshness).toISOString() : new Date().toISOString(),
@@ -79,7 +78,7 @@ export class JsonOpenUsageProvider implements OpenUsageProvider {
 export async function collectUsage(repo: Repo, provider: OpenUsageProvider) {
   const snapshots = await provider.fetch();
   for (const s of snapshots) {
-    repo.addUsageSnapshot(s);
+    repo.addUsageSnapshot(s as any);
   }
   return snapshots;
 }
