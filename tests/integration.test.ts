@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import { resolve } from "node:path";
 import { fixture, waitExit } from "./helpers.js";
-import { dispatch } from "../src/core/dispatch.js";
+import { dispatch, resolutionBusy } from "../src/core/dispatch.js";
 import { finalize } from "../src/core/finalize.js";
 import { tick } from "../src/core/tick.js";
 import { review } from "../src/core/review.js";
@@ -16,6 +16,53 @@ import { ensureWorktree, merge, prune } from "../src/core/worktree.js";
 import { git } from "../src/core/process.js";
 let f: ReturnType<typeof fixture>;
 afterEach(() => f?.cleanup());
+it("waits for project review before dispatching resolutions without blocking another project", () => {
+  f = fixture("sleep 30");
+  const original = f.task({ status: "done" });
+  const reviewTask = f.task({ status: "in_review" });
+  const resolution = f.task({ resolves_task_id: original.id, priority: "P0" });
+  f.repo.addProject({ key: "OTHER", name: "Other", repo_path: f.path });
+  const other = f.repo.addTask({
+    project: "OTHER",
+    title: "Parallel",
+    status: "ready",
+  });
+  expect(resolutionBusy(f.repo, resolution)).toBe(true);
+  expect(() => dispatch(f.repo, resolution.identifier, true)).toThrow(
+    "serialize",
+  );
+  tick(f.repo);
+  expect(f.repo.task(resolution.id).status).toBe("ready");
+  expect(f.repo.task(other.id).status).toBe("in_progress");
+  f.repo.updateTask(reviewTask.id, { status: "done" });
+  dispatch(f.repo, resolution.identifier);
+  const following = f.task();
+  expect(resolutionBusy(f.repo, following)).toBe(true);
+});
+it.each([false, true])(
+  "requires resolution ancestry before review (merged=%s)",
+  async (merged) => {
+    f = fixture();
+    const original = f.task({ status: "done" });
+    const originalPath = ensureWorktree(f.repo, original);
+    writeFileSync(resolve(originalPath, "original.txt"), "feature");
+    git(originalPath, ["add", "."]);
+    git(originalPath, ["commit", "-m", "original feature"]);
+    const resolution = f.task({ resolves_task_id: original.id });
+    const path = ensureWorktree(f.repo, resolution);
+    if (merged) git(path, ["merge", "--no-edit", `aam/${original.identifier}`]);
+    const id = dispatch(f.repo, resolution.identifier);
+    await waitExit(f.repo, id);
+    finalize(f.repo, f.repo.runs(resolution.id)[0]!);
+    expect(f.repo.task(resolution.id).status).toBe(
+      merged ? "in_review" : "ready",
+    );
+    if (!merged)
+      expect(f.repo.task(resolution.id).feedback).toContain(
+        "copying files is insufficient",
+      );
+  },
+);
 it("dispatches, reaps, commits, tests, reviews, merges and prunes without changing main checkout", async () => {
   f = fixture();
   f.repo.db

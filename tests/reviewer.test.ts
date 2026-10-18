@@ -105,6 +105,23 @@ it("accepts fenced JSON and prose in verdicts and plans", () => {
     ),
   ).toEqual(tasks);
 });
+it("persists explicit local execution modes without changing defaults", () => {
+  setup();
+  expect(f.repo.getSetting("codex_worker_sandbox")).toBe("workspace-write");
+  expect(f.repo.getSetting("codex_reviewer_sandbox")).toBe("read-only");
+  for (const key of ["codex_worker_sandbox", "codex_reviewer_sandbox"]) {
+    expect(() => f.repo.setSetting(key, "invalid")).toThrow("Invalid sandbox");
+    f.repo.setSetting(key, "danger-full-access");
+  }
+  expect(reviewerCommand(f.repo, f.path, f.root).args).toContain(
+    "danger-full-access",
+  );
+  const reopened = new Repo(f.repo.home);
+  expect(reopened.getSetting("codex_worker_sandbox")).toBe(
+    "danger-full-access",
+  );
+  reopened.close();
+});
 it("checks Codex last.md, gates jobs and invalidates health on provider switch", async () => {
   setup();
   f.repo.updateProject("T", { auto_review: 1 });

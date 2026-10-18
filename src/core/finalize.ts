@@ -156,6 +156,20 @@ export function finalize(repo: Repo, run: Run, terminal?: "timeout" | "lost") {
             ...(body ? ["-m", body] : []),
           ]);
       }
+      if (t.resolves_task_id) {
+        const original = repo.task(t.resolves_task_id);
+        if (
+          !original.branch ||
+          runner(
+            "git",
+            ["merge-base", "--is-ancestor", original.branch, "HEAD"],
+            t.worktree_path,
+          ).status !== 0
+        )
+          throw new Error(
+            `Resolution must contain a committed merge of ${original.identifier}; copying files is insufficient`,
+          );
+      }
     } catch (e) {
       commitError = String(e);
     }

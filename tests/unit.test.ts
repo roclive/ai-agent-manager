@@ -145,6 +145,9 @@ it("builds safe adapter commands and full prompt", () => {
     c.worktree,
     c.promptFile,
   ]);
+  expect(codex.command({ ...c, sandbox: "danger-full-access" }).args).toContain(
+    "danger-full-access",
+  );
   const t = f.task({
     feedback: "fix tests",
     description: "Build it",
@@ -162,6 +165,15 @@ it("builds safe adapter commands and full prompt", () => {
     "outside",
   ])
     expect(p).toContain(s);
+  const resolution = prompt(
+    { ...f.repo.projects()[0]!, integration_branch: "aam/integration" },
+    { ...t, resolves_task_id: t.id },
+    t,
+  );
+  expect(resolution).toContain("First merge aam/integration");
+  expect(resolution).toContain("then merge aam/T-1");
+  expect(resolution).toContain("git add and git commit are REQUIRED");
+  expect(resolution).not.toContain("Do not run git add or git commit");
 });
 it("locks concurrent ticks, releases on errors and recovers stale pids", () => {
   f = fixture();

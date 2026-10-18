@@ -5,7 +5,7 @@ import { Repo } from "../db/index.js";
 import { alive, killGroup, type Runner, runner } from "./process.js";
 import { withLock } from "./lock.js";
 import { finalize, read } from "./finalize.js";
-import { dispatch, dependenciesDone } from "./dispatch.js";
+import { dispatch, dependenciesDone, resolutionBusy } from "./dispatch.js";
 import { collectAutopilot, promoteIdle, startAutopilot } from "./autopilot.js";
 import { exportViews } from "../views/index.js";
 export function tick(repo: Repo, _reviewRunner: Runner = runner) {
@@ -40,7 +40,7 @@ export function tick(repo: Repo, _reviewRunner: Runner = runner) {
           Number(repo.getSetting("max_parallel"))
         )
           break;
-        if (!dependenciesDone(repo, t)) continue;
+        if (!dependenciesDone(repo, t) || resolutionBusy(repo, t)) continue;
         try {
           dispatch(repo, t.identifier);
         } catch (e) {

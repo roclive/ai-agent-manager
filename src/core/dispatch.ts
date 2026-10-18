@@ -18,6 +18,19 @@ export function dependenciesDone(repo: Repo, t: Task) {
     }
   });
 }
+// A resolution must observe a stable project tip until it has been reviewed.
+// Other projects can continue using the remaining worker slots.
+export function resolutionBusy(repo: Repo, t: Task) {
+  return repo
+    .tasks()
+    .some(
+      (other) =>
+        other.id !== t.id &&
+        other.project_id === t.project_id &&
+        ["in_progress", "in_review"].includes(other.status) &&
+        Boolean(t.resolves_task_id || other.resolves_task_id),
+    );
+}
 export function dispatch(repo: Repo, id: string, force = false) {
   const t = repo.task(id);
   if (repo.runs(t.id).some((r) => r.status === "running"))
@@ -26,6 +39,10 @@ export function dispatch(repo: Repo, id: string, force = false) {
     throw new Error("Task must be ready or backlog");
   if (!force && !dependenciesDone(repo, t))
     throw new Error("Dependencies not done");
+  if (resolutionBusy(repo, t))
+    throw new Error(
+      "Project has active work or review; serialize integration resolutions",
+    );
   if (Date.parse(repo.getSetting("cooldown_until") || "") > Date.now())
     throw new Error("Workers are in cooldown");
   let worktree: string;
@@ -49,8 +66,20 @@ export function dispatch(repo: Repo, id: string, force = false) {
   try {
     mkdirSync(runDir, { recursive: true });
     const promptFile = resolve(runDir, "prompt.md");
-    writeFileSync(promptFile, prompt(repo.project(t.project_id), t));
-    const pid = spawnWorker(t.worker, { worktree, promptFile, runDir });
+    writeFileSync(
+      promptFile,
+      prompt(
+        repo.project(t.project_id),
+        t,
+        t.resolves_task_id ? repo.task(t.resolves_task_id) : undefined,
+      ),
+    );
+    const pid = spawnWorker(t.worker, {
+      worktree,
+      promptFile,
+      runDir,
+      sandbox: repo.getSetting("codex_worker_sandbox"),
+    });
     repo.db
       .prepare(
         "UPDATE runs SET pid=?,log_path=?,last_message_path=? WHERE id=?",

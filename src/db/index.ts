@@ -146,6 +146,8 @@ export class Repo {
       keep_awake_pid: "",
       idle_since: "",
       reviewer: "codex",
+      codex_worker_sandbox: "workspace-write",
+      codex_reviewer_sandbox: "read-only",
       reviewer_ok: "",
       reviewer_checked_at: "",
       reviewer_error: "",
@@ -191,6 +193,11 @@ export class Repo {
       throw new Error("Expected integer from 1 to 5");
     if (key === "keep_awake" && !["0", "1"].includes(value))
       throw new Error("Expected 0 or 1");
+    if (
+      ["codex_worker_sandbox", "codex_reviewer_sandbox"].includes(key) &&
+      !["read-only", "workspace-write", "danger-full-access"].includes(value)
+    )
+      throw new Error("Invalid sandbox mode");
     if (
       ["max_parallel", "worker_timeout_min"].includes(key) &&
       (!Number.isFinite(Number(value)) ||

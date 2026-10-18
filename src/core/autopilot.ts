@@ -137,7 +137,7 @@ export function reviewerCommand(repo: Repo, cwd: string, dir: string) {
           "exec",
           "--json",
           "-s",
-          "read-only",
+          repo.getSetting("codex_reviewer_sandbox") || "read-only",
           "-C",
           cwd,
           "-c",
@@ -156,7 +156,7 @@ export function reviewerCommand(repo: Repo, cwd: string, dir: string) {
   };
 }
 const contextRule =
-  "\nYou may read files in this repository for context; you must not modify anything.";
+  "\nYou may read files in this repository for context; you must not modify anything in tracked source files or commit changes. You may run the full test suite, creating temporary files and test caches as needed. Never push.";
 const wrapper = `const fs=require('node:fs'), cp=require('node:child_process'); const [cmd,cwd,prompt,out,flags,last]=process.argv.slice(1); const r=cp.spawnSync(cmd, JSON.parse(flags), {cwd,input:fs.readFileSync(prompt),env:process.env,encoding:'utf8',timeout:300000,killSignal:'SIGKILL',maxBuffer:1048576}); let answer=r.stdout||''; if(last){try{answer=fs.readFileSync(last,'utf8')}catch{answer=''}} fs.writeFileSync(out+'.tmp',JSON.stringify({status:r.status,stdout:answer,output:r.stdout||'',stderr:r.stderr||r.error?.message||'',code:r.error?.code})); fs.renameSync(out+'.tmp',out);`;
 function launch(repo: Repo, job: Job, cwd: string, prompt: string) {
   const dir = dirname(resultPath(repo, job.id));
