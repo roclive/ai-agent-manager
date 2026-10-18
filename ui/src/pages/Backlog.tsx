@@ -175,6 +175,13 @@ export function Backlog({ project }: { project: string }) {
                               to={`?task=${t.identifier}`}
                             >
                               {t.title}
+                              {t.status === "done" && t.integrated === 0 && (
+                                <span className="badge">待集成</span>
+                              )}
+                              {!!t.resolves_task_id &&
+                                !["done", "cancelled"].includes(t.status) && (
+                                  <span className="badge">冲突解决中</span>
+                                )}
                             </Link>
                           </td>
                           <td>

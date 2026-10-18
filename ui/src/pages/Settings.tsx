@@ -21,6 +21,7 @@ export function Settings() {
   });
   const projects = useProjects(),
     action = useAction();
+  const [promoting, setPromoting] = useState<Project | null>(null);
   const [editing, setEditing] = useState<Project | null>(null);
   return (
     <>
@@ -155,9 +156,25 @@ export function Settings() {
                       {!!p.autopilot && <span className="badge">自动驾驶</span>}
                     </td>
                     <td>{p.repo_path}</td>
-                    <td>{p.base_branch}</td>
+                    <td>
+                      {p.base_branch}
+                      {p.integration_branch && (
+                        <p>
+                          {p.integration_branch} · 领先{" "}
+                          {p.ahead_of_base ?? "未知"} 个提交
+                        </p>
+                      )}
+                    </td>
                     <td>{p.test_cmd || "—"}</td>
                     <td>
+                      {p.integration_branch && (
+                        <Button
+                          variant="outline"
+                          onClick={() => setPromoting(p)}
+                        >
+                          合并集成分支到 {p.base_branch}
+                        </Button>
+                      )}
                       <Button variant="ghost" onClick={() => setEditing(p)}>
                         编辑
                       </Button>
@@ -169,6 +186,37 @@ export function Settings() {
           </div>
         </Load>
       </section>
+      <Dialog
+        open={!!promoting}
+        onOpenChange={(v) => {
+          if (!v) setPromoting(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>确认合并到 {promoting?.base_branch}</DialogTitle>
+            <DialogDescription>
+              以下提交将进入基础分支，请确认。
+            </DialogDescription>
+          </DialogHeader>
+          <pre>{promoting?.integration_commits || "无新增提交"}</pre>
+          <ActionError error={action.error} />
+          <Button
+            disabled={action.isPending}
+            onClick={() =>
+              action.mutate(
+                {
+                  path: `/projects/${encodeURIComponent(promoting!.key)}/promote`,
+                  body: { confirm: true },
+                },
+                { onSuccess: () => setPromoting(null) },
+              )
+            }
+          >
+            确认合并
+          </Button>
+        </DialogContent>
+      </Dialog>
       {editing && (
         <ProjectEditor project={editing} onClose={() => setEditing(null)} />
       )}

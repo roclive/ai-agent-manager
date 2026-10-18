@@ -1,3 +1,4 @@
+import { integrationStatus, integrate } from "./core/integration.js";
 import { cors } from "hono/cors";
 import { resolve, dirname } from "node:path";
 import { uiRoutes, routineJSON, taskDetail } from "./api/ui.js";
@@ -56,6 +57,7 @@ export function createApp(
     c.json(
       repo.projects().map((p) => ({
         ...p,
+        ...integrationStatus(p),
         counts: Object.fromEntries(
           statuses.map((s) => [
             s,
@@ -128,7 +130,11 @@ export function createApp(
     if (patch.depends_on !== undefined && !Array.isArray(patch.depends_on))
       throw new Error("Dependencies must be an array");
     const before = repo.task(id);
-    const task = repo.updateTask(id, patch);
+    let task = repo.updateTask(id, patch);
+    if (before.status !== "done" && task.status === "done") {
+      integrate(repo, id);
+      task = repo.task(id);
+    }
     repo.event(
       before.status !== task.status ? "move" : "edit",
       `${before.status !== task.status ? `status ${before.status} -> ${task.status} via UI; ` : "Edited via UI: "}${Object.keys(patch).join(", ")}`,

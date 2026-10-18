@@ -1,3 +1,4 @@
+import { promote, setIntegration } from "../core/integration.js";
 import {
   readFileSync,
   realpathSync,
@@ -77,11 +78,19 @@ export function uiRoutes(
     );
     return c.json(project, 201);
   });
+  app.post("/api/projects/:key/promote", async (c) => {
+    const p = await c.req.json();
+    promote(repo, c.req.param("key"), p.confirm === true, p.into);
+    return c.json({ promoted: true });
+  });
   app.patch("/api/projects/:key", async (c) => {
     const p = await c.req.json<Record<string, unknown>>();
-    const next = { ...repo.project(c.req.param("key")), ...p };
+    const { integration, ...patch } = p;
+    const next = { ...repo.project(c.req.param("key")), ...patch };
     validateProject(next);
-    repo.updateProject(c.req.param("key"), p);
+    repo.updateProject(c.req.param("key"), patch);
+    if (integration !== undefined)
+      setIntegration(repo, c.req.param("key"), String(integration));
     repo.event(
       "settings",
       `Updated project ${next.key}: ${Object.keys(p).join(", ")}`,

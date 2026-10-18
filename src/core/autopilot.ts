@@ -1,3 +1,4 @@
+import { integrate } from "./integration.js";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
@@ -265,6 +266,7 @@ export function collectAutopilot(repo: Repo) {
             continue;
           }
           repo.updateTask(t.id, { status: "done", feedback: v.notes });
+          integrate(repo, t.identifier);
           finish(repo, job, "approve", v.notes);
           repo.event("auto_review", `approve: ${v.notes}`, t.id);
         }

@@ -119,6 +119,16 @@ export function Dashboard({ project }: { project: string }) {
           />
         </div>
         <section className="page-section">
+          <h2>待集成</h2>
+          {rows
+            .filter((t) => t.status === "done" && t.integrated === 0)
+            .map((t) => (
+              <p key={t.id}>
+                <Link to={`/board?task=${t.identifier}`}>
+                  {t.identifier} · {t.title}
+                </Link>
+              </p>
+            ))}
           <h2>任务状态</h2>
           <div className="status-bars">
             {statuses.map((s) => {

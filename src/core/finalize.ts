@@ -104,7 +104,12 @@ export function finalize(repo: Repo, run: Run, terminal?: "timeout" | "lost") {
   let commitError = "";
   if (t.worktree_path && existsSync(t.worktree_path)) {
     try {
-      if (git(t.worktree_path, ["status", "--porcelain"])) {
+      const merging =
+        runner("git", ["rev-parse", "--verify", "MERGE_HEAD"], t.worktree_path)
+          .status === 0;
+      if (git(t.worktree_path, ["diff", "--name-only", "--diff-filter=U"]))
+        throw new Error("Unresolved merge conflicts");
+      if (merging || git(t.worktree_path, ["status", "--porcelain"])) {
         const skipped = externalSymlinks(t.worktree_path);
         if (skipped.length) {
           git(t.worktree_path, [
@@ -140,7 +145,10 @@ export function finalize(repo: Repo, run: Run, terminal?: "timeout" | "lost") {
           if (Buffer.byteLength(body + char) > 4096) break;
           body += char;
         }
-        if (git(t.worktree_path, ["diff", "--cached", "--name-only"]))
+        if (
+          merging ||
+          git(t.worktree_path, ["diff", "--cached", "--name-only"])
+        )
           git(t.worktree_path, [
             "commit",
             "-m",

@@ -17,6 +17,7 @@ export interface Project {
   name: string;
   repo_path: string;
   base_branch: string;
+  integration_branch: string;
   test_cmd: string | null;
   setup_cmd: string | null;
   auto_review: number;
@@ -40,6 +41,8 @@ export interface Task {
   worker: string;
   depends_on: string;
   attempts: number;
+  integrated: number;
+  resolves_task_id: number | null;
   lost_count: number;
   max_attempts: number;
   branch: string | null;
@@ -94,6 +97,7 @@ export class Repo {
       name: string;
     }[];
     for (const [name, declaration] of Object.entries({
+      integration_branch: "TEXT NOT NULL DEFAULT ''",
       auto_review: "INTEGER NOT NULL DEFAULT 0",
       autopilot: "INTEGER NOT NULL DEFAULT 0",
       goal: "TEXT NOT NULL DEFAULT ''",
@@ -116,6 +120,12 @@ export class Repo {
       );
       this.db.exec("UPDATE tasks SET sort_order=seq");
     }
+    for (const [name, declaration] of Object.entries({
+      integrated: "INTEGER NOT NULL DEFAULT 1",
+      resolves_task_id: "INTEGER REFERENCES tasks(id)",
+    }))
+      if (!columns.some((c) => c.name === name))
+        this.db.exec(`ALTER TABLE tasks ADD COLUMN ${name} ${declaration}`);
     const runColumns = this.db.pragma("table_info(runs)") as { name: string }[];
     if (!runColumns.some((c) => c.name === "start_sha"))
       this.db.exec("ALTER TABLE runs ADD COLUMN start_sha TEXT");
@@ -336,6 +346,8 @@ export class Repo {
       "worker",
       "depends_on",
       "attempts",
+      "integrated",
+      "resolves_task_id",
       "lost_count",
       "max_attempts",
       "branch",

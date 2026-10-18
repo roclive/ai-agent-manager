@@ -120,6 +120,13 @@ function KanbanCard({ task, run }: { task: Task; run?: Run }) {
         to={`?task=${encodeURIComponent(task.identifier)}`}
       >
         {task.title}
+        {task.status === "done" && task.integrated === 0 && (
+          <span className="badge">待集成</span>
+        )}
+        {!!task.resolves_task_id &&
+          !["done", "cancelled"].includes(task.status) && (
+            <span className="badge">冲突解决中</span>
+          )}
       </Link>
       <div className="card-tags">
         <Badge variant="secondary">{task.worker}</Badge>
