@@ -139,6 +139,7 @@ export class Repo {
       cooldown_until: "",
       last_tick_at: "",
       auto_review_daily_max: "80",
+      auto_review_concurrency: "3",
       planner_daily_max: "10",
       keep_awake: "1",
       keep_awake_pid: "",
@@ -176,6 +177,13 @@ export class Repo {
       (!Number.isInteger(Number(value)) || Number(value) < 0)
     )
       throw new Error("Expected nonnegative integer");
+    if (
+      key === "auto_review_concurrency" &&
+      (!Number.isInteger(Number(value)) ||
+        Number(value) < 1 ||
+        Number(value) > 5)
+    )
+      throw new Error("Expected integer from 1 to 5");
     if (key === "keep_awake" && !["0", "1"].includes(value))
       throw new Error("Expected 0 or 1");
     if (

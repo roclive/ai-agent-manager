@@ -252,3 +252,15 @@ daemon 启动和每 30 分钟异步检查一次，不阻塞 tick。
 `autopilot_paused`，恢复后记录 `autopilot_resumed`。
 若提示未登录，请在运行 daemon 的同一用户环境中执行 Claude 登录，再运行检查。
 测试用 `AAM_FAKE_CLAUDE` 指向本地可执行脚本，无需真实 Claude。
+
+Auto-review fills up to `auto_review_concurrency` slots in each heartbeat (default
+3, configurable from 1–5 in Settings or `aam settings set auto_review_concurrency 3`).
+Oldest waiting reviews run first, with project rank breaking ties. Daily budgets,
+Claude health checks and test requirements still apply. Missing results expire after
+300 seconds; ETIMEDOUT retries become eligible after 20 seconds. Three consecutive
+timeouts pause that task's reviews for 30 minutes without pausing other tasks.
+Retries run on the next heartbeat after their delay; use a shorter daemon interval
+if needed. Passed-test review diffs are capped at 30 KB; all changed names and diff
+stats remain visible, and files larger than 20 KB on either side are listed by name
+and size instead of inlined. Status/dashboard expose `waiting_for_review`; unfilled
+worker capacity with waiting reviews emits `review_bottleneck` at most every 15 minutes.

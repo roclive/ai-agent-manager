@@ -93,7 +93,8 @@ export function Dashboard({ project }: { project: string }) {
                 {status.data.autopilot.claude_error || "等待登录健康检查"}
               </span>
             )}
-            今日审查 {status.data.autopilot.auto_reviews_today} /{" "}
+            等待审查 {status.data.autopilot.waiting_for_review ?? 0} · 今日审查{" "}
+            {status.data.autopilot.auto_reviews_today} /{" "}
             {status.data.autopilot.auto_review_max} · 今日规划{" "}
             {status.data.autopilot.planner_runs_today} /{" "}
             {status.data.autopilot.planner_max} · 已提升{" "}

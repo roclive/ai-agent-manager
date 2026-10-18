@@ -104,6 +104,8 @@ export interface Event {
 export interface Status {
   autopilot?: {
     auto_reviews_today: number;
+    auto_review_concurrency?: number;
+    waiting_for_review?: number;
     auto_review_max: number;
     planner_runs_today: number;
     planner_max: number;

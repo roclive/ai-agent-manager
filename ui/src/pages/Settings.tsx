@@ -89,6 +89,7 @@ export function Settings() {
               </NativeSelect>
             </label>
             {[
+              ["auto_review_concurrency", "自动审查并发数"],
               ["auto_review_daily_max", "每日自动审查上限"],
               ["planner_daily_max", "每日规划上限"],
             ].map(([key, label]) => (
@@ -97,7 +98,8 @@ export function Settings() {
                 <Input
                   name={key}
                   type="number"
-                  min="0"
+                  min={key === "auto_review_concurrency" ? "1" : "0"}
+                  max={key === "auto_review_concurrency" ? "5" : undefined}
                   required
                   defaultValue={q.data![key!]}
                 />

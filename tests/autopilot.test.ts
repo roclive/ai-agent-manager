@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { fixture } from "./helpers.js";
 import { Repo } from "../src/db/index.js";
 import {
+  reviewPrompt,
   autopilotStatus,
   cleanEnv,
   collectAutopilot,
@@ -11,6 +12,7 @@ import {
   startAutopilot,
   validatePlan,
 } from "../src/core/autopilot.js";
+import { git } from "../src/core/process.js";
 import { createApp } from "../src/server.js";
 import { keepAwake } from "../src/core/keep-awake.js";
 let f: ReturnType<typeof fixture>;
@@ -238,7 +240,7 @@ it("runs fake Claude via stdin asynchronously and limits launches", async () => 
   f.task({ status: "in_review", worktree_path: f.path, branch: "main" });
   startAutopilot(f.repo);
   startAutopilot(f.repo);
-  expect(autopilotStatus(f.repo).auto_reviews_today).toBe(1);
+  expect(autopilotStatus(f.repo).auto_reviews_today).toBe(2);
   for (let i = 0; i < 100 && f.repo.task(t.id).status === "in_review"; i++) {
     await new Promise((r) => setTimeout(r, 20));
     collectAutopilot(f.repo);
@@ -321,4 +323,160 @@ it("gives Claude the minimal env incl. USER/LOGNAME (keychain login fails withou
   expect(Object.keys(env).sort()).toEqual(["HOME", "LOGNAME", "PATH", "USER"]);
   expect(env.USER).not.toBe("");
   expect(env.LOGNAME).not.toBe("");
+});
+
+it("fills concurrent review slots in order, excludes pending tasks and obeys budget/health", async () => {
+  f = fixture();
+  f.repo.updateProject("T", { auto_review: 1 });
+  const tasks = Array.from({ length: 5 }, (_, i) =>
+    f.task({
+      title: String(i),
+      status: "in_review",
+      worktree_path: f.path,
+      branch: "main",
+    }),
+  );
+  tasks.forEach((t, i) =>
+    f.repo.db
+      .prepare("UPDATE tasks SET updated_at=? WHERE id=?")
+      .run(new Date(Date.now() - (5 - i) * 1000).toISOString(), t.id),
+  );
+  expect(f.repo.getSetting("auto_review_concurrency")).toBe("3");
+  for (const v of ["0", "6", "1.5"])
+    expect(() => f.repo.setSetting("auto_review_concurrency", v)).toThrow();
+  startAutopilot(f.repo);
+  expect(autopilotStatus(f.repo).auto_reviews_today).toBe(0);
+  f.repo.setSetting("claude_ok", "1");
+  startAutopilot(f.repo);
+  startAutopilot(f.repo);
+  const rows = f.repo.db
+    .prepare("SELECT task_id FROM autopilot_jobs ORDER BY id")
+    .all();
+  expect(rows).toEqual(tasks.slice(0, 3).map((t) => ({ task_id: t.id })));
+  f.repo.setSetting("auto_review_concurrency", "5");
+  f.repo.setSetting("auto_review_daily_max", "4");
+  startAutopilot(f.repo);
+  expect(autopilotStatus(f.repo)).toMatchObject({
+    auto_reviews_today: 4,
+    waiting_for_review: 5,
+    auto_review_concurrency: 5,
+  });
+  // Let detached fake launchers finish before removing their temporary directory.
+  await new Promise((r) => setTimeout(r, 300));
+});
+
+it("expires missing results, retries after 20 seconds and pauses only a task after three timeouts", () => {
+  f = fixture();
+  f.repo.setSetting("claude_ok", "1");
+  f.repo.updateProject("T", { auto_review: 1 });
+  const t = f.task({ status: "in_review" });
+  const insert = () =>
+    f.repo.db
+      .prepare(
+        "INSERT INTO autopilot_jobs(kind,project_id,task_id,started_at) VALUES ('review',1,?,?)",
+      )
+      .run(t.id, new Date(Date.now() - 301000).toISOString());
+  insert();
+  collectAutopilot(f.repo);
+  expect(
+    f.repo.db.prepare("SELECT status,notes FROM autopilot_jobs").get(),
+  ).toMatchObject({
+    status: "timeout",
+    notes: expect.stringContaining("ETIMEDOUT"),
+  });
+  startAutopilot(f.repo);
+  expect(autopilotStatus(f.repo).auto_reviews_today).toBe(1);
+  f.repo.db
+    .prepare("UPDATE autopilot_jobs SET finished_at=?")
+    .run(new Date(Date.now() - 21000).toISOString());
+  startAutopilot(f.repo); // Eligible, but no worktree: prompt error, no real Claude.
+  expect(autopilotStatus(f.repo).auto_reviews_today).toBe(2);
+  f.repo.db.prepare("DELETE FROM autopilot_jobs WHERE status='error'").run();
+  insert();
+  collectAutopilot(f.repo);
+  insert();
+  collectAutopilot(f.repo);
+  expect(
+    (f.repo.events(20) as { kind: string; message: string }[]).some(
+      (e) => e.kind === "review_error" && e.message.includes("30 minutes"),
+    ),
+  ).toBe(true);
+  f.repo.db
+    .prepare("UPDATE autopilot_jobs SET finished_at=?")
+    .run(new Date(Date.now() - 61000).toISOString());
+  startAutopilot(f.repo);
+  expect(autopilotStatus(f.repo).auto_reviews_today).toBe(3);
+  const other = f.task({ status: "in_review" });
+  startAutopilot(f.repo);
+  expect(
+    f.repo.db
+      .prepare("SELECT task_id FROM autopilot_jobs ORDER BY id DESC LIMIT 1")
+      .get(),
+  ).toEqual({ task_id: other.id });
+  f.repo.db
+    .prepare("UPDATE autopilot_jobs SET finished_at=? WHERE task_id=?")
+    .run(new Date(Date.now() - 1801000).toISOString(), t.id);
+  startAutopilot(f.repo);
+  expect(
+    f.repo.db
+      .prepare("SELECT task_id FROM autopilot_jobs ORDER BY id DESC LIMIT 1")
+      .get(),
+  ).toEqual({ task_id: t.id });
+});
+
+it("reports review bottlenecks only when promotion leaves capacity, throttled for 15 minutes", () => {
+  f = fixture();
+  const review = f.task({ status: "in_review" });
+  f.repo.updateProject("T", { autopilot: 1 });
+  f.task({ status: "backlog", depends_on: [review.identifier] });
+  promoteIdle(f.repo);
+  promoteIdle(f.repo);
+  const events = () =>
+    (f.repo.events(20) as { kind: string; message: string }[]).filter(
+      (e) => e.kind === "review_bottleneck",
+    );
+  expect(events()).toHaveLength(1);
+  expect(JSON.parse(events()[0]!.message)).toMatchObject({
+    free_slots: 2,
+    waiting_for_review: 1,
+    promoted: 0,
+  });
+  f.repo.db
+    .prepare("UPDATE events SET ts=? WHERE kind='review_bottleneck'")
+    .run(new Date(Date.now() - 901000).toISOString());
+  promoteIdle(f.repo);
+  expect(events()).toHaveLength(2);
+  f.task({ status: "backlog" });
+  f.task({ status: "backlog" });
+  f.repo.db
+    .prepare("UPDATE events SET ts=? WHERE kind='review_bottleneck'")
+    .run(new Date(Date.now() - 901000).toISOString());
+  expect(promoteIdle(f.repo)).toBe(2);
+  expect(events()).toHaveLength(2);
+});
+
+it("lists every changed file and omits large file contents on both sides of the diff", () => {
+  f = fixture();
+  writeFileSync(
+    resolve(f.path, "large.json"),
+    "SENSITIVE_LARGE_DATA".repeat(2000),
+  );
+  git(f.path, ["add", "."]);
+  git(f.path, ["commit", "-m", "base data"]);
+  git(f.path, ["checkout", "-b", "review"]);
+  writeFileSync(resolve(f.path, "large.json"), "small replacement");
+  writeFileSync(resolve(f.path, "small.txt"), "review this change");
+  git(f.path, ["add", "."]);
+  git(f.path, ["commit", "-m", "changes"]);
+  const t = f.task({
+    status: "in_review",
+    branch: "review",
+    worktree_path: f.path,
+  });
+  const prompt = reviewPrompt(f.repo, t.id);
+  expect(prompt).toContain('"large.json": 40000 bytes (diff omitted)');
+  expect(prompt).toContain('"small.txt"');
+  expect(prompt).toContain("+review this change");
+  expect(prompt).not.toContain("SENSITIVE_LARGE_DATA");
+  expect(prompt).not.toContain("+small replacement");
 });
