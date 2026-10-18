@@ -2,6 +2,7 @@ import { afterEach, expect, it } from "vitest";
 import { dispatch } from "../src/core/dispatch.js";
 import { finalize } from "../src/core/finalize.js";
 import { tick } from "../src/core/tick.js";
+import { llmArgs, providerLlmArgs, readBackend } from "../src/core/llm.js";
 import {
   activeReservation,
   freezeProvider,
@@ -10,6 +11,8 @@ import {
 } from "../src/core/providers.js";
 import { parseUsage } from "../src/workers/openusage.js";
 import { fixture, waitExit } from "./helpers.js";
+import { readFileSync } from "node:fs";
+import { dirname } from "node:path";
 
 let f: ReturnType<typeof fixture>;
 afterEach(() => f?.cleanup());
@@ -159,6 +162,35 @@ it("reserves before spawn so concurrent dispatch moves to a provider with availa
   expect(activeReservation(f.repo, "free")).toBe(1);
 });
 
+it("routes a policy-selected Ollama provider even while the legacy backend is primary", () => {
+  f = fixture("sleep 30");
+  f.repo.setSetting(
+    "provider_policy",
+    policy([
+      provider("ollama", {
+        worker: "codex",
+        class: "local",
+        max_complexity: "high",
+      }),
+    ]),
+  );
+  f.repo.setSetting("ollama_fallback_enabled", "0");
+  f.repo.setSetting("llm_backend", "primary");
+  const task = f.task();
+  const runId = dispatch(f.repo, task.identifier);
+  const run = f.repo.runs().find((candidate) => candidate.id === runId)!;
+  const runDir = dirname(run.log_path);
+
+  expect(llmArgs(f.repo)).toEqual([]);
+  expect(llmArgs(f.repo, "ollama")).toContain('model_provider="aam-fallback"');
+  expect(providerLlmArgs(f.repo, "ollama")).toEqual(llmArgs(f.repo, "ollama"));
+  expect(readBackend(runDir)).toBe("ollama");
+  expect(
+    JSON.parse(readFileSync(`${runDir}/backend.json`, "utf8")),
+  ).toMatchObject({ backend: "ollama", provider: "ollama" });
+  expect(run).toMatchObject({ worker: "codex", provider: "ollama" });
+});
+
 it("scopes 429 cooldown to one provider and safely retries in the same worktree without consuming attempts", async () => {
   f = fixture('echo "Error: 429 quota exceeded"; exit 1');
   f.repo.setSetting(
@@ -189,6 +221,49 @@ it("scopes 429 cooldown to one provider and safely retries in the same worktree 
     provider: "premium",
   });
   expect(f.repo.task(task.id).worktree_path).toBe(after.worktree_path);
+});
+
+it("does not invoke legacy global fallback for a configured provider 429", async () => {
+  f = fixture('echo "Error: 429 quota exceeded"; exit 1');
+  f.repo.setSetting("ollama_fallback_enabled", "1");
+  f.repo.setSetting("llm_backend", "primary");
+  f.repo.setSetting("reviewer_ok", "1");
+  f.repo.setSetting("reviewer_checked_at", "preserved");
+  f.repo.setSetting(
+    "provider_policy",
+    policy([
+      provider("free"),
+      provider("ollama", {
+        worker: "codex",
+        class: "local",
+        max_complexity: "high",
+      }),
+    ]),
+  );
+  const task = f.task();
+  const runId = dispatch(f.repo, task.identifier);
+  await waitExit(f.repo, runId);
+  finalize(
+    f.repo,
+    f.repo.runs().find((run) => run.id === runId)!,
+  );
+
+  expect(f.repo.getSetting("llm_backend")).toBe("primary");
+  expect(f.repo.getSetting("reviewer_ok")).toBe("1");
+  expect(f.repo.getSetting("reviewer_checked_at")).toBe("preserved");
+  expect(providerCooldown(f.repo, "free")).not.toBeNull();
+  expect(providerCooldown(f.repo, "ollama")).toBeNull();
+  expect(
+    f.repo
+      .events(50)
+      .some(
+        (event: unknown) =>
+          typeof event === "object" &&
+          event !== null &&
+          "kind" in event &&
+          event.kind === "llm_fallback",
+      ),
+  ).toBe(false);
 });
 
 it("recovers an expired provider breaker and reports all-provider failure without blocking the task", () => {

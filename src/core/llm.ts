@@ -9,8 +9,11 @@ export function llmBackend(repo: Repo): "primary" | "ollama" {
     : "primary";
 }
 
-export function llmArgs(repo: Repo): string[] {
-  return llmBackend(repo) === "ollama"
+export function llmArgs(
+  repo: Repo,
+  backend: "primary" | "ollama" = llmBackend(repo),
+): string[] {
+  return backend === "ollama"
     ? [
         "-m",
         repo.getSetting("ollama_model")!,
@@ -28,15 +31,19 @@ export function llmArgs(repo: Repo): string[] {
     : [];
 }
 
+export function providerLlmArgs(repo: Repo, provider: string): string[] {
+  return provider === "ollama" ? llmArgs(repo, "ollama") : [];
+}
+
 export function recordBackend(repo: Repo, dir: string, provider?: string) {
+  const backend = provider === "ollama" ? "ollama" : llmBackend(repo);
   writeFileSync(
     resolve(dir, "backend.json"),
     JSON.stringify({
-      backend: llmBackend(repo),
-      provider:
-        provider || (llmBackend(repo) === "ollama" ? "ollama" : "codex"),
+      backend,
+      provider: provider || (backend === "ollama" ? "ollama" : "codex"),
       model:
-        llmBackend(repo) === "ollama"
+        backend === "ollama"
           ? repo.getSetting("ollama_model")
           : "configured default",
     }),

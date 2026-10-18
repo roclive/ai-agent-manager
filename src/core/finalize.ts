@@ -93,11 +93,11 @@ export function finalize(repo: Repo, run: Run, terminal?: "timeout" | "lost") {
       releaseProvider(repo, run.id);
       const provider = run.provider || run.worker;
       freezeProvider(repo, provider, "Worker quota exhausted");
-      if (quotaFallback(repo, readBackend(dir), "Worker quota exhausted"))
-        return;
       // Preserve the old single-provider signal for existing installations.
       // Configured multi-provider routing relies only on the scoped breaker.
       if (!providerPolicyConfigured(repo.getSetting("provider_policy"))) {
+        if (quotaFallback(repo, readBackend(dir), "Worker quota exhausted"))
+          return;
         repo.setSetting(
           "cooldown_until",
           new Date(Date.now() + 30 * 60000).toISOString(),

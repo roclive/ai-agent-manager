@@ -12,7 +12,7 @@ import {
 } from "./providers.js";
 import { providerPolicyConfigured } from "./provider-policy.js";
 
-import { llmArgs, recordBackend } from "./llm.js";
+import { providerLlmArgs, recordBackend } from "./llm.js";
 export function dependenciesDone(repo: Repo, t: Task) {
   return (JSON.parse(t.depends_on) as string[]).every((id) => {
     try {
@@ -131,7 +131,10 @@ export function dispatch(repo: Repo, id: string, force = false) {
       promptFile,
       runDir,
       sandbox: repo.getSetting("codex_worker_sandbox"),
-      modelArgs: selected.id === "ollama" ? llmArgs(repo) : [],
+      // A policy-selected Ollama route is authoritative. It must not depend on
+      // the legacy global fallback backend, or the Codex adapter would silently
+      // use its default premium provider while accounting the run to Ollama.
+      modelArgs: providerLlmArgs(repo, selected.id),
       provider: selected.id,
     });
     repo.db
