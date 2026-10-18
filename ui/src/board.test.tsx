@@ -189,7 +189,7 @@ it("renders the shell and board with a fake API, including filtering and detail"
   expect(screen.queryByText("任务 2")).not.toBeInTheDocument();
   fireEvent.click(screen.getByText("任务 1"));
   await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
-  expect(await screen.findByText("说明")).toBeInTheDocument();
+  expect(await screen.findByLabelText("描述")).toHaveValue("说明");
   view.unmount();
   client.clear();
 });

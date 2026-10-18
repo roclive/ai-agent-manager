@@ -68,6 +68,8 @@ export interface Run {
     "running" | "succeeded" | "failed" | "timeout" | "lost" | "rate_limited";
   started_at: string;
   ended_at: string | null;
+  exit_code?: number | null;
+  test_exit_code?: number | null;
   elapsed_s?: number;
   summary: string | null;
 }
@@ -105,4 +107,20 @@ export type NewTask = {
   role: Role;
   worker: Worker;
   status: TaskStatus;
+};
+export interface TaskDetail extends Task {
+  branch: string | null;
+  worktree_path: string | null;
+  lost_count: number;
+  events: Event[];
+  diff_stat: string | null;
+  last_message: string | null;
+}
+export const runStatusLabels: Record<Run["status"], string> = {
+  running: "运行中",
+  succeeded: "成功",
+  failed: "失败",
+  timeout: "超时",
+  lost: "丢失",
+  rate_limited: "触发限流",
 };

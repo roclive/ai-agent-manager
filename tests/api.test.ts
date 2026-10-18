@@ -68,7 +68,103 @@ it("serves task, routine, event and settings operations with validation", async 
   ).toBe(400);
   expect((await req("events?limit=-1")).status).toBe(400);
   expect((await req("runs/999/log")).status).toBe(404);
-  expect(await (await req("events")).json()).toEqual([]);
+  expect(await (await req("events")).json()).toHaveLength(6);
   f.repo.updateTask(task.identifier, { status: "backlog" });
   expect(await (await req("tick", "POST")).json()).toEqual({ ran: true });
+});
+it("records events for successful HTTP edits and skips rejected mutations", async () => {
+  f = fixture();
+  const app = createApp(f.repo);
+  const req = (path: string, method: string, body?: unknown) =>
+    app.request(`/api/${path}`, {
+      method,
+      headers: { "X-AAM": "1", "Content-Type": "application/json" },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  await req("tasks", "POST", { project: "T", title: "Event task" });
+  const task = f.repo.tasks()[0];
+  expect(f.repo.events(1, task.id)[0]).toMatchObject({
+    kind: "create",
+    message: expect.stringContaining("title"),
+  });
+  await req(`tasks/${task.id}`, "PATCH", { title: "Edited" });
+  expect(f.repo.events(1, task.id)[0]).toMatchObject({
+    kind: "edit",
+    message: expect.stringContaining("title"),
+  });
+  await req(`tasks/${task.id}`, "PATCH", { status: "ready", priority: "P0" });
+  expect(f.repo.events(1, task.id)[0]).toMatchObject({
+    kind: "move",
+    message: expect.stringContaining("status backlog -> ready via UI"),
+  });
+  const before = f.repo.events().length;
+  expect(
+    (await req(`tasks/${task.id}`, "PATCH", { status: "bad" })).status,
+  ).toBe(400);
+  expect(f.repo.events()).toHaveLength(before);
+  await req("settings", "PUT", { max_parallel: 3 });
+  expect(f.repo.events(1)[0]).toMatchObject({
+    kind: "settings",
+    message: expect.stringContaining("max_parallel"),
+  });
+  await req("projects/T", "PATCH", { name: "Updated" });
+  expect(f.repo.events(1)[0]).toMatchObject({
+    kind: "settings",
+    message: expect.stringContaining("name"),
+  });
+  await req("projects", "POST", {
+    key: "NEW",
+    name: "New project",
+    repo_path: f.path,
+  });
+  expect(f.repo.events(1)[0]).toMatchObject({
+    kind: "settings",
+    message: expect.stringContaining("repo_path"),
+  });
+  await req("routines", "POST", {
+    name: "event routine",
+    cron: "*/5 * * * *",
+    action: "heartbeat",
+  });
+  expect(f.repo.events(1)[0]).toMatchObject({
+    kind: "routine",
+    message: expect.stringContaining("cron"),
+  });
+  const routine = f.repo.routines()[0];
+  await req(`routines/${routine.id}`, "PATCH", { enabled: false });
+  expect(f.repo.events(1)[0]).toMatchObject({
+    kind: "routine",
+    message: expect.stringContaining("enabled"),
+  });
+  await req(`routines/${routine.id}`, "DELETE");
+  expect(f.repo.events(1)[0]).toMatchObject({
+    kind: "routine",
+    message: expect.stringContaining("Deleted"),
+  });
+});
+it("paginates and filters activity without losing older matching events", async () => {
+  f = fixture();
+  const a = f.task(),
+    b = f.task();
+  f.repo.event("edit", "first", a.id);
+  f.repo.event("move", "second", b.id);
+  f.repo.event("edit", "third", a.id);
+  const app = createApp(f.repo);
+  const events = async (query: string) =>
+    (await app.request(`/api/events?${query}`)).json();
+  const first = await events("limit=2");
+  expect(first.map((e: { message: string }) => e.message)).toEqual([
+    "third",
+    "second",
+  ]);
+  expect(
+    (await events(`limit=2&before=${first[1].id}`)).map(
+      (e: { message: string }) => e.message,
+    ),
+  ).toEqual(["first"]);
+  expect(await events(`kind=edit&task=${a.identifier}&project=T`)).toHaveLength(
+    2,
+  );
+  expect(await events("project=missing")).toEqual([]);
+  expect((await app.request("/api/events?before=bad")).status).toBe(400);
 });

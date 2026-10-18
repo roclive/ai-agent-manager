@@ -69,7 +69,12 @@ export function uiRoutes(
   app.post("/api/projects", async (c) => {
     const p = await c.req.json();
     validateProject(p);
-    return c.json(repo.addProject(p), 201);
+    const project = repo.addProject(p);
+    repo.event(
+      "settings",
+      `Created project ${project.key}: ${Object.keys(p).join(", ")}`,
+    );
+    return c.json(project, 201);
   });
   app.patch("/api/projects/:key", async (c) => {
     const p = await c.req.json<Record<string, unknown>>();
@@ -100,6 +105,10 @@ export function uiRoutes(
         next.setup_cmd,
         next.id,
       );
+    repo.event(
+      "settings",
+      `Updated project ${next.key}: ${Object.keys(p).join(", ")}`,
+    );
     return c.json(repo.project(next.id));
   });
   app.post("/api/tasks/:id/review", async (c) => {
@@ -257,6 +266,7 @@ export function uiRoutes(
   app.delete("/api/routines/:id", (c) => {
     const r = routine(c.req.param("id"));
     repo.db.prepare("DELETE FROM routines WHERE id=?").run(r.id);
+    repo.event("routine", `Deleted ${r.name}: name`);
     return c.json({ deleted: true });
   });
   app.post("/api/routines/:id/run", (c) => {

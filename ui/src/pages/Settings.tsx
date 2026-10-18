@@ -1,0 +1,208 @@
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { request } from "../lib/api";
+import { useProjects } from "../lib/queries";
+import type { Project } from "../lib/types";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { NativeSelect } from "../components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "../components/ui/dialog";
+import { Load, useAction, ActionError } from "../components/PageSupport";
+export function Settings() {
+  const q = useQuery({
+    queryKey: ["settings"],
+    queryFn: () => request<Record<string, string>>("/settings"),
+  });
+  const projects = useProjects(),
+    action = useAction();
+  const [editing, setEditing] = useState<Project | null>(null);
+  return (
+    <>
+      <div className="page-heading">
+        <div>
+          <h1>设置</h1>
+          <p>执行器、审查与项目配置。</p>
+        </div>
+      </div>
+      <ActionError error={action.error} />
+      <Load pending={q.isPending} error={q.error}>
+        {q.data && (
+          <form
+            key={JSON.stringify(q.data)}
+            className="task-form settings-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const f = new FormData(e.currentTarget);
+              action.mutate({
+                path: "/settings",
+                method: "PUT",
+                body: Object.fromEntries(f),
+              });
+            }}
+          >
+            <label>
+              最大并行数
+              <Input
+                required
+                name="max_parallel"
+                type="number"
+                min="1"
+                max="6"
+                defaultValue={q.data.max_parallel}
+              />
+            </label>
+            <label>
+              执行器超时（分钟）
+              <Input
+                required
+                name="worker_timeout_min"
+                type="number"
+                min="1"
+                defaultValue={q.data.worker_timeout_min}
+              />
+            </label>
+            <label>
+              默认执行器
+              <NativeSelect
+                name="default_worker"
+                defaultValue={q.data.default_worker}
+              >
+                <option>codex</option>
+                <option>opencode</option>
+              </NativeSelect>
+            </label>
+            <label>
+              审查模式
+              <NativeSelect
+                name="review_mode"
+                defaultValue={q.data.review_mode}
+              >
+                <option value="manual">人工审查</option>
+                <option value="claude">Claude 自动审查</option>
+              </NativeSelect>
+            </label>
+            <p>冷却截止时间：{q.data.cooldown_until || "无冷却"}</p>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!q.data.cooldown_until || action.isPending}
+              onClick={() =>
+                action.mutate({
+                  path: "/settings",
+                  method: "PUT",
+                  body: { cooldown_until: "" },
+                })
+              }
+            >
+              清除冷却
+            </Button>
+            <Button disabled={action.isPending}>保存设置</Button>
+            {action.isSuccess && <p role="status">设置已保存</p>}
+          </form>
+        )}
+      </Load>
+      <section className="page-section">
+        <h2>项目</h2>
+        <Load pending={projects.isPending} error={projects.error}>
+          {!projects.data?.length && <p>暂无项目</p>}
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>项目</th>
+                  <th>仓库路径</th>
+                  <th>基础分支</th>
+                  <th>测试命令</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {projects.data?.map((p) => (
+                  <tr key={p.id}>
+                    <td>{p.key}</td>
+                    <td>{p.repo_path}</td>
+                    <td>{p.base_branch}</td>
+                    <td>{p.test_cmd || "—"}</td>
+                    <td>
+                      <Button variant="ghost" onClick={() => setEditing(p)}>
+                        编辑
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Load>
+      </section>
+      {editing && (
+        <ProjectEditor project={editing} onClose={() => setEditing(null)} />
+      )}
+    </>
+  );
+}
+function ProjectEditor({
+  project,
+  onClose,
+}: {
+  project: Project;
+  onClose: () => void;
+}) {
+  const action = useAction();
+  return (
+    <Dialog
+      open
+      onOpenChange={(v) => {
+        if (!v && !action.isPending) onClose();
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>编辑项目 {project.key}</DialogTitle>
+          <DialogDescription>配置仓库与测试命令。</DialogDescription>
+        </DialogHeader>
+        <form
+          className="task-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            action.mutate(
+              {
+                path: `/projects/${encodeURIComponent(project.key)}`,
+                method: "PATCH",
+                body: Object.fromEntries(new FormData(e.currentTarget)),
+              },
+              { onSuccess: onClose },
+            );
+          }}
+        >
+          {(
+            [
+              "name",
+              "repo_path",
+              "base_branch",
+              "test_cmd",
+              "setup_cmd",
+            ] as const
+          ).map((k, i) => (
+            <label key={k}>
+              {["名称", "仓库路径", "基础分支", "测试命令", "初始化命令"][i]}
+              <Input
+                name={k}
+                required={i < 3}
+                defaultValue={project[k] ?? ""}
+              />
+            </label>
+          ))}
+          <ActionError error={action.error} />
+          <Button disabled={action.isPending}>保存项目</Button>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}

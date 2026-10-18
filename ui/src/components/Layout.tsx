@@ -1,11 +1,29 @@
 // Adapted from paperclipai/paperclip (MIT)
-import { useState } from "react";
-import { Routes, Route } from "react-router-dom";
+import { Suspense, lazy, useEffect, useState } from "react";
+import { Routes, Route, useNavigate } from "react-router-dom";
 import { useProjects, useStatus } from "../lib/queries";
 import { Sidebar } from "./Sidebar";
 import { BreadcrumbBar } from "./BreadcrumbBar";
-import { EmptyState } from "./EmptyState";
-import { BoardPage } from "../pages-board";
+const Dashboard = lazy(() =>
+  import("../pages/Dashboard").then((m) => ({ default: m.Dashboard })),
+);
+const Backlog = lazy(() =>
+  import("../pages/Backlog").then((m) => ({ default: m.Backlog })),
+);
+const Routines = lazy(() =>
+  import("../pages/Routines").then((m) => ({ default: m.Routines })),
+);
+const ActivityPage = lazy(() =>
+  import("../pages/Activity").then((m) => ({ default: m.ActivityPage })),
+);
+const Settings = lazy(() =>
+  import("../pages/Settings").then((m) => ({ default: m.Settings })),
+);
+import { NewTaskDialog } from "./NewTaskDialog";
+import { useEventStream } from "../lib/queries";
+const BoardPage = lazy(() =>
+  import("../pages-board").then((m) => ({ default: m.BoardPage })),
+);
 import {
   Sheet,
   SheetContent,
@@ -18,6 +36,40 @@ export function Layout() {
     [menu, setMenu] = useState(false);
   const projects = useProjects(),
     status = useStatus();
+  useEventStream();
+  const navigate = useNavigate();
+  const [creating, setCreating] = useState(false);
+  useEffect(() => {
+    let prefix = "";
+    let prefixAt = 0;
+    const key = (e: KeyboardEvent) => {
+      if (
+        e.ctrlKey ||
+        e.metaKey ||
+        e.altKey ||
+        (e.target as HTMLElement).closest(
+          'input,textarea,select,[contenteditable="true"],[role="dialog"]',
+        )
+      )
+        return;
+      if (e.key === "c") {
+        e.preventDefault();
+        setCreating(true);
+      }
+      if (e.key === "/") {
+        e.preventDefault();
+        document
+          .querySelector<HTMLInputElement>('input[aria-label="搜索任务"]')
+          ?.focus();
+      }
+      if (prefix === "g" && e.key === "b" && Date.now() - prefixAt < 1000)
+        navigate("/board");
+      prefix = e.key;
+      prefixAt = Date.now();
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [navigate]);
   const sidebar = (
     <Sidebar
       projects={projects.data ?? []}
@@ -42,21 +94,34 @@ export function Layout() {
           {sidebar}
         </SheetContent>
       </Sheet>
+      {creating && (
+        <NewTaskDialog
+          status="backlog"
+          projects={projects.data ?? []}
+          project={project}
+          onClose={() => setCreating(false)}
+        />
+      )}
       <div className="workspace">
         <BreadcrumbBar
           project={projects.data?.find((p) => p.key === project)?.name ?? ""}
           onMenu={() => setMenu(true)}
         />
         <main id="main-content">
-          <Routes>
-            <Route path="/board" element={<BoardPage project={project} />} />
-            {["/", "/backlog", "/routines", "/activity", "/settings"].map(
-              (path) => (
-                <Route key={path} path={path} element={<EmptyState />} />
-              ),
-            )}
-            <Route path="*" element={<p>页面未找到</p>} />
-          </Routes>
+          <Suspense fallback={<p role="status">正在加载页面…</p>}>
+            <Routes>
+              <Route path="/board" element={<BoardPage project={project} />} />
+              <Route path="/" element={<Dashboard project={project} />} />
+              <Route path="/backlog" element={<Backlog project={project} />} />
+              <Route path="/routines" element={<Routines />} />
+              <Route
+                path="/activity"
+                element={<ActivityPage project={project} />}
+              />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="*" element={<p>页面未找到</p>} />
+            </Routes>
+          </Suspense>
         </main>
       </div>
     </div>

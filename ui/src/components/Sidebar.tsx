@@ -117,6 +117,18 @@ export function Sidebar({
               {new Date(status.cooldown_until).toLocaleTimeString("zh-CN")}
             </p>
           )}
+        {status?.daemon.last_tick_at && (
+          <p>
+            上次心跳{" "}
+            {Math.max(
+              0,
+              Math.floor(
+                (Date.now() - Date.parse(status.daemon.last_tick_at)) / 60000,
+              ),
+            )}{" "}
+            分钟前
+          </p>
+        )}
         <ThemeToggle />
         <span className="local-label">本地工作空间 · aam</span>
       </footer>

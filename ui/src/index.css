@@ -681,3 +681,187 @@ main {
   color: var(--muted-foreground);
   font-size: 11px;
 }
+/* Adapted from paperclipai/paperclip (MIT): dense lists and inspector sections */
+.page-section {
+  padding: 24px 0;
+  border-top: 1px solid var(--border);
+}
+.page-section h2,
+.routine-row h2 {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+.page-section p,
+.routine-row p {
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+.metric-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 18px 0;
+  border-bottom: 1px solid var(--border);
+}
+.event-row {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.event-row time {
+  color: var(--muted-foreground);
+  margin-right: 12px;
+  font-size: 12px;
+}
+.event-row > span {
+  margin-left: 16px;
+}
+.status-bars {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px 32px;
+}
+.status-bars > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+.status-bars progress {
+  width: 80px;
+  height: 6px;
+  accent-color: var(--primary);
+}
+.cooldown-banner,
+.confirm-panel {
+  padding: 16px;
+  margin: 12px 0;
+  background: var(--muted);
+  border-left: 3px solid var(--primary);
+  font-size: 13px;
+}
+.table-scroll {
+  overflow-x: auto;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  text-align: left;
+}
+th {
+  color: var(--muted-foreground);
+  font-weight: 500;
+  white-space: nowrap;
+}
+th,
+td {
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--border);
+}
+td a:hover {
+  text-decoration: underline;
+}
+.list-group {
+  margin-top: 20px;
+}
+summary {
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 12px 0;
+}
+.routine-row {
+  padding: 20px 0;
+  border-top: 1px solid var(--border);
+}
+.routine-main {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  justify-content: space-between;
+}
+.metadata {
+  margin: 24px 0;
+  font-size: 13px;
+}
+.metadata > div {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr);
+  gap: 12px;
+  padding: 8px 0;
+}
+.metadata dt {
+  color: var(--muted-foreground);
+}
+.metadata dd {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.log-viewer {
+  max-height: 60vh;
+  overflow: auto;
+  background: var(--muted);
+  padding: 16px;
+  font: 12px/1.7 monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.settings-form {
+  max-width: 520px;
+}
+.empty-message {
+  padding: 64px 0;
+  text-align: center;
+  color: var(--muted-foreground);
+}
+.task-form select[multiple] {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  min-height: 100px;
+}
+@media (max-width: 768px) {
+  .metric-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .routine-main {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+.keyboard-drag-hint {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  padding: 6px 10px;
+  width: 230px;
+  z-index: 20;
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  visibility: hidden;
+}
+.drag-handle {
+  position: relative;
+}
+.drag-handle:focus-visible .keyboard-drag-hint {
+  visibility: visible;
+}
+.task-form h1,
+.task-form h2 {
+  font-weight: 600;
+  margin: 12px 0;
+}
+.task-form ul {
+  list-style: disc;
+  padding-left: 20px;
+}
+.task-form pre {
+  overflow: auto;
+  background: var(--muted);
+  padding: 12px;
+}
