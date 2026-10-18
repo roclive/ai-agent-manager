@@ -1,5 +1,11 @@
 # Implementation choices
 
+## AAM-18 provider-aware scheduling (2026-10-19)
+
+- Provider routing is opt-in through the versioned `provider_policy` setting. Existing installations retain their task worker and legacy single-provider cooldown behavior until configured. A provider must be explicitly marked legal and declare its worker, class, roles, maximum complexity, reserve threshold and per-complexity reservation units. Only explicitly declared free/local entries receive preference; unknown quota remains dispatchable with a warning and is never interpreted as free or unlimited.
+- Remaining quota evidence continues to come only from usage snapshots. Configured reservation units and reserve thresholds are compared with the provider's reported remaining units; they are scheduling headroom, not a cost estimate. Selection plus reservation uses an immediate SQLite transaction. Reservations are released on every finalize, spawn failure, rate limit and user cancellation.
+- Runs persist their chosen provider. A provider 429 creates a provider-scoped 30-minute breaker, leaves attempts/feedback and the existing worktree retry semantics intact, and does not interrupt other running work. Expired breakers are ignored. When every legal/capable provider is cooled down or lacks unreserved quota, dispatch defers the ready task rather than blocking it.
+
 ## AAM-17 coding providers (2026-10-19)
 
 - Routed failover entries retain the complete provider record. Ollama and LiteLLM endpoints are injected into each OpenCode child through `OPENCODE_CONFIG_CONTENT` using OpenCode's OpenAI-compatible provider adapter; existing private config is merged and remains process-local. Regression tests use parsed providers as fake adapter inputs and assert both endpoint configurations without starting OpenCode or contacting a model.

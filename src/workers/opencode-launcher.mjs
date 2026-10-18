@@ -10,7 +10,12 @@ import {
 const [worktree, promptFile] = process.argv.slice(2);
 const routingPath = resolve(dirname(promptFile), "../../opencode-routing.json");
 const policy = loadCodingProviders(routingPath);
-const providers = routedProviders(policy);
+const requested = process.argv[4];
+const providers = requested
+  ? routedProviders(policy).filter((provider) => provider.id === requested)
+  : routedProviders(policy);
+if (requested && !providers.length)
+  throw new Error(`Provider ${requested} is not in the configured route`);
 const prompt = readFileSync(promptFile, "utf8");
 const result = await failover(
   providers,

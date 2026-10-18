@@ -5,8 +5,14 @@ import { git } from "./process.js";
 import { ensureWorktree } from "./worktree.js";
 import { prompt, spawnWorker } from "../workers/index.js";
 import { checkQuota, QuotaUnavailableError } from "./usage.js";
+import {
+  providerRules,
+  reserveProvider,
+  releaseProvider,
+  selectProvider,
+} from "./providers.js";
 
-import { llmArgs, llmBackend, recordBackend } from "./llm.js";
+import { llmArgs, recordBackend } from "./llm.js";
 export function dependenciesDone(repo: Repo, t: Task) {
   return (JSON.parse(t.depends_on) as string[]).every((id) => {
     try {
@@ -46,13 +52,23 @@ export function dispatch(repo: Repo, id: string, force = false) {
     throw new Error(
       "Project has active work or review; serialize integration resolutions",
     );
-  if (Date.parse(repo.getSetting("cooldown_until") || "") > Date.now())
+  if (
+    !providerRules(repo).length &&
+    Date.parse(repo.getSetting("cooldown_until") || "") > Date.now()
+  )
     throw new Error("Workers are in cooldown");
 
-  // Quota Check
-  const quota = checkQuota(repo, llmBackend(repo) === "ollama" ? "ollama" : t.worker);
+  let selected;
+  try {
+    selected = selectProvider(repo, t);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    repo.event("quota_deferred", message, t.id);
+    throw new QuotaUnavailableError(message);
+  }
+  const quota = checkQuota(repo, selected.id);
   if (!quota.ok) {
-    const message = quota.warning || `Quota exhausted for ${t.worker}`;
+    const message = quota.warning || `Quota exhausted for ${selected.id}`;
     repo.event("quota_deferred", message, t.id);
     throw new QuotaUnavailableError(message);
   }
@@ -71,17 +87,36 @@ export function dispatch(repo: Repo, id: string, force = false) {
   }
   const startSha = git(worktree, ["rev-parse", "HEAD"]);
   const started = new Date().toISOString();
-  const worker = llmBackend(repo) === "ollama" ? "codex" : t.worker;
-  const result = repo.db
-    .prepare(
-      "INSERT INTO runs(task_id,worker,status,started_at,start_sha,log_path,last_message_path) VALUES (?,?,'running',?,?,'','')",
-    )
-    .run(t.id, worker, started, startSha);
-  const idRun = Number(result.lastInsertRowid);
+  const reserve = repo.db.transaction(() => {
+    // Selection and reservation share the same immediate write transaction, so
+    // concurrent dispatchers cannot both spend the last available capacity.
+    const current = selectProvider(repo, t);
+    const result = repo.db
+      .prepare(
+        "INSERT INTO runs(task_id,worker,provider,status,started_at,start_sha,log_path,last_message_path) VALUES (?,?,?,'running',?,?,'','')",
+      )
+      .run(t.id, current.worker, current.id, started, startSha);
+    const runId = Number(result.lastInsertRowid);
+    reserveProvider(repo, runId, current);
+    selected = current;
+    return runId;
+  });
+  let idRun: number;
+  try {
+    idRun = reserve.immediate();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.startsWith("No provider available")) {
+      repo.event("quota_deferred", message, t.id);
+      throw new QuotaUnavailableError(message);
+    }
+    throw error;
+  }
+  const worker = selected.worker;
   const runDir = resolve(repo.home, "runs", String(idRun));
   try {
     mkdirSync(runDir, { recursive: true });
-    recordBackend(repo, runDir);
+    recordBackend(repo, runDir, selected.id);
     const promptFile = resolve(runDir, "prompt.md");
     writeFileSync(
       promptFile,
@@ -96,7 +131,8 @@ export function dispatch(repo: Repo, id: string, force = false) {
       promptFile,
       runDir,
       sandbox: repo.getSetting("codex_worker_sandbox"),
-      modelArgs: llmArgs(repo),
+      modelArgs: selected.id === "ollama" ? llmArgs(repo) : [],
+      provider: selected.id,
     });
     repo.db
       .prepare(
@@ -111,7 +147,7 @@ export function dispatch(repo: Repo, id: string, force = false) {
     repo.updateTask(t.id, { status: "in_progress" });
     repo.event(
       "dispatch",
-      `Started ${worker} run ${idRun} (${llmBackend(repo)})`,
+      `Started ${worker} run ${idRun} via ${selected.id}`,
       t.id,
     );
     return idRun;
@@ -121,6 +157,7 @@ export function dispatch(repo: Repo, id: string, force = false) {
         "UPDATE runs SET status='failed',ended_at=?,summary=? WHERE id=?",
       )
       .run(new Date().toISOString(), String(e), idRun);
+    releaseProvider(repo, idRun);
     throw e;
   }
 }

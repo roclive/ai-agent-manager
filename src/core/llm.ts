@@ -21,18 +21,20 @@ export function llmArgs(repo: Repo): string[] {
         "-c",
         `model_providers.aam-fallback.base_url=${JSON.stringify(repo.getSetting("ollama_base_url"))}`,
         "-c",
-        'model_providers.aam-fallback.requires_openai_auth=false',
+        "model_providers.aam-fallback.requires_openai_auth=false",
         "-c",
         'model_reasoning_effort="high"',
       ]
     : [];
 }
 
-export function recordBackend(repo: Repo, dir: string) {
+export function recordBackend(repo: Repo, dir: string, provider?: string) {
   writeFileSync(
     resolve(dir, "backend.json"),
     JSON.stringify({
       backend: llmBackend(repo),
+      provider:
+        provider || (llmBackend(repo) === "ollama" ? "ollama" : "codex"),
       model:
         llmBackend(repo) === "ollama"
           ? repo.getSetting("ollama_model")

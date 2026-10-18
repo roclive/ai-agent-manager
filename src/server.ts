@@ -137,6 +137,7 @@ export function createApp(
       "sort_order",
       "depends_on",
       "role",
+      "complexity",
       "max_attempts",
     ];
     if (Object.keys(input).some((k) => !allowed.includes(k)))

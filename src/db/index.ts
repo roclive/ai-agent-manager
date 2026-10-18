@@ -40,6 +40,7 @@ export interface Task {
   status: string;
   priority: string;
   role: string;
+  complexity: "low" | "medium" | "high";
   worker: string;
   depends_on: string;
   attempts: number;
@@ -59,6 +60,7 @@ export interface Run {
   id: number;
   task_id: number;
   worker: string;
+  provider: string | null;
   pid: number | null;
   status: string;
   start_sha: string | null;
@@ -91,12 +93,14 @@ export class Repo {
     this.db.pragma("busy_timeout = 5000");
     this.db
       .exec(`CREATE TABLE IF NOT EXISTS projects(id INTEGER PRIMARY KEY,key TEXT UNIQUE NOT NULL,name TEXT NOT NULL,repo_path TEXT NOT NULL,base_branch TEXT NOT NULL DEFAULT 'main',test_cmd TEXT,setup_cmd TEXT,created_at TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS tasks(id INTEGER PRIMARY KEY,project_id INTEGER NOT NULL REFERENCES projects(id),identifier TEXT UNIQUE NOT NULL,seq INTEGER NOT NULL,title TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'backlog',priority TEXT NOT NULL DEFAULT 'P1',role TEXT NOT NULL DEFAULT 'any',worker TEXT NOT NULL DEFAULT 'codex',depends_on TEXT NOT NULL DEFAULT '[]',attempts INTEGER NOT NULL DEFAULT 0,max_attempts INTEGER NOT NULL DEFAULT 3,branch TEXT,worktree_path TEXT,feedback TEXT NOT NULL DEFAULT '',blocker TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS runs(id INTEGER PRIMARY KEY,task_id INTEGER NOT NULL REFERENCES tasks(id),worker TEXT NOT NULL,pid INTEGER,status TEXT NOT NULL,started_at TEXT NOT NULL,ended_at TEXT,exit_code INTEGER,test_exit_code INTEGER,log_path TEXT NOT NULL,last_message_path TEXT NOT NULL,summary TEXT);
+    CREATE TABLE IF NOT EXISTS tasks(id INTEGER PRIMARY KEY,project_id INTEGER NOT NULL REFERENCES projects(id),identifier TEXT UNIQUE NOT NULL,seq INTEGER NOT NULL,title TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'backlog',priority TEXT NOT NULL DEFAULT 'P1',role TEXT NOT NULL DEFAULT 'any',complexity TEXT NOT NULL DEFAULT 'medium',worker TEXT NOT NULL DEFAULT 'codex',depends_on TEXT NOT NULL DEFAULT '[]',attempts INTEGER NOT NULL DEFAULT 0,max_attempts INTEGER NOT NULL DEFAULT 3,branch TEXT,worktree_path TEXT,feedback TEXT NOT NULL DEFAULT '',blocker TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS runs(id INTEGER PRIMARY KEY,task_id INTEGER NOT NULL REFERENCES tasks(id),worker TEXT NOT NULL,provider TEXT,pid INTEGER,status TEXT NOT NULL,started_at TEXT NOT NULL,ended_at TEXT,exit_code INTEGER,test_exit_code INTEGER,log_path TEXT NOT NULL,last_message_path TEXT NOT NULL,summary TEXT);
     CREATE TABLE IF NOT EXISTS routines(id INTEGER PRIMARY KEY,name TEXT UNIQUE NOT NULL,cron TEXT NOT NULL,action TEXT NOT NULL,payload TEXT NOT NULL DEFAULT '{}',enabled INTEGER NOT NULL DEFAULT 1,last_run_at TEXT);
     CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY,ts TEXT NOT NULL,task_id INTEGER REFERENCES tasks(id),kind TEXT NOT NULL,message TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS usage_snapshots(id INTEGER PRIMARY KEY,provider TEXT NOT NULL,type TEXT NOT NULL,window TEXT NOT NULL,used TEXT,remaining TEXT,reset_at TEXT,source TEXT,freshness TEXT,raw_data TEXT,created_at TEXT NOT NULL);`);
+    CREATE TABLE IF NOT EXISTS usage_snapshots(id INTEGER PRIMARY KEY,provider TEXT NOT NULL,type TEXT NOT NULL,window TEXT NOT NULL,used TEXT,remaining TEXT,reset_at TEXT,source TEXT,freshness TEXT,raw_data TEXT,created_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS provider_breakers(provider TEXT PRIMARY KEY,cooldown_until TEXT NOT NULL,reason TEXT NOT NULL,updated_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS provider_reservations(run_id INTEGER PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE,provider TEXT NOT NULL,amount REAL NOT NULL,created_at TEXT NOT NULL);`);
     const projectColumns = this.db.pragma("table_info(projects)") as {
       name: string;
     }[];
@@ -118,6 +122,10 @@ export class Repo {
       this.db.exec(
         "ALTER TABLE tasks ADD COLUMN lost_count INTEGER NOT NULL DEFAULT 0",
       );
+    if (!columns.some((c) => c.name === "complexity"))
+      this.db.exec(
+        "ALTER TABLE tasks ADD COLUMN complexity TEXT NOT NULL DEFAULT 'medium'",
+      );
     if (!columns.some((c) => c.name === "sort_order")) {
       this.db.exec(
         "ALTER TABLE tasks ADD COLUMN sort_order REAL NOT NULL DEFAULT 0",
@@ -134,6 +142,8 @@ export class Repo {
     const runColumns = this.db.pragma("table_info(runs)") as { name: string }[];
     if (!runColumns.some((c) => c.name === "start_sha"))
       this.db.exec("ALTER TABLE runs ADD COLUMN start_sha TEXT");
+    if (!runColumns.some((c) => c.name === "provider"))
+      this.db.exec("ALTER TABLE runs ADD COLUMN provider TEXT");
     for (const [k, v] of Object.entries({
       max_parallel: "2",
       worker_timeout_min: "45",
@@ -158,6 +168,7 @@ export class Repo {
       reviewer_ok: "",
       reviewer_checked_at: "",
       reviewer_error: "",
+      provider_policy: "",
       claude_ok: "",
       claude_checked_at: "",
       claude_error: "",
@@ -204,6 +215,9 @@ export class Repo {
       throw new Error("Expected 0 or 1");
     if (key === "llm_backend" && !["primary", "ollama"].includes(value))
       throw new Error("Invalid LLM backend");
+    if (key === "provider_policy" && value) {
+      JSON.parse(value);
+    }
     if (
       key === "ollama_model" &&
       (!value.trim() || value.length > 200 || /[\s\x00-\x1f]/.test(value))
@@ -437,6 +451,7 @@ export class Repo {
       "status",
       "priority",
       "role",
+      "complexity",
       "worker",
       "depends_on",
       "attempts",
@@ -467,6 +482,7 @@ export class Repo {
       status: statuses,
       priority: priorities,
       role: ["backend", "frontend", "testing", "any"],
+      complexity: ["low", "medium", "high"],
       worker: ["codex", "opencode"],
     }))
       if (
@@ -558,7 +574,9 @@ export class Repo {
   ) {
     if (typeof name !== "string" || !name.trim())
       throw new Error("Routine name required");
-    if (!["heartbeat", "create_task", "shell", "collect_usage"].includes(action))
+    if (
+      !["heartbeat", "create_task", "shell", "collect_usage"].includes(action)
+    )
       throw new Error("Invalid action");
     this.db
       .prepare(
@@ -574,37 +592,56 @@ export class Repo {
       .run();
   }
   addUsageSnapshot(s: Omit<UsageSnapshot, "id" | "created_at">) {
-    return this.db.prepare(
-      `INSERT INTO usage_snapshots(provider,type,window,used,remaining,reset_at,source,freshness,raw_data,created_at)
+    return this.db
+      .prepare(
+        `INSERT INTO usage_snapshots(provider,type,window,used,remaining,reset_at,source,freshness,raw_data,created_at)
        VALUES (?,?,?,?,?,?,?,?,?,?)`,
-    ).run(
-      s.provider,
-      s.type,
-      s.window,
-      s.used === "unknown" ? null : s.used,
-      s.remaining === "unknown" ? null : s.remaining,
-      s.reset_at,
-      s.source,
-      s.freshness,
-      s.raw_data,
-      new Date().toISOString(),
-    );
+      )
+      .run(
+        s.provider,
+        s.type,
+        s.window,
+        s.used === "unknown" ? null : s.used,
+        s.remaining === "unknown" ? null : s.remaining,
+        s.reset_at,
+        s.source,
+        s.freshness,
+        s.raw_data,
+        new Date().toISOString(),
+      );
   }
   usageSnapshots(provider?: string): UsageSnapshot[] {
-    const rows = this.db.prepare(`SELECT * FROM usage_snapshots WHERE id IN
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM usage_snapshots WHERE id IN
       (SELECT MAX(id) FROM usage_snapshots GROUP BY provider,type,window)
-      ${provider ? "AND provider=?" : ""} ORDER BY provider,type,window`).all(...(provider ? [provider] : []));
-    return rows.map(row => {
+      ${provider ? "AND provider=?" : ""} ORDER BY provider,type,window`,
+      )
+      .all(...(provider ? [provider] : []));
+    return rows.map((row) => {
       const snapshot = row as UsageSnapshot;
-      return {...snapshot, used: snapshot.used == null || !Number.isFinite(Number(snapshot.used)) ? "unknown" : Number(snapshot.used),
-        remaining: snapshot.remaining == null || !Number.isFinite(Number(snapshot.remaining)) ? "unknown" : Number(snapshot.remaining)};
+      return {
+        ...snapshot,
+        used:
+          snapshot.used == null || !Number.isFinite(Number(snapshot.used))
+            ? "unknown"
+            : Number(snapshot.used),
+        remaining:
+          snapshot.remaining == null ||
+          !Number.isFinite(Number(snapshot.remaining))
+            ? "unknown"
+            : Number(snapshot.remaining),
+      };
     });
   }
   latestUsage(provider: string) {
-    return this.usageSnapshots(provider).sort((a,b) => b.id-a.id)[0];
+    return this.usageSnapshots(provider).sort((a, b) => b.id - a.id)[0];
   }
   usageHistory(provider: string, limit = 100) {
-    return this.db.prepare("SELECT * FROM usage_snapshots WHERE provider=? ORDER BY id DESC LIMIT ?")
+    return this.db
+      .prepare(
+        "SELECT * FROM usage_snapshots WHERE provider=? ORDER BY id DESC LIMIT ?",
+      )
       .all(provider, limit) as UsageSnapshot[];
   }
 }

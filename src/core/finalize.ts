@@ -10,6 +10,7 @@ import { dirname, resolve, relative, isAbsolute } from "node:path";
 import { Repo, type Run } from "../db/index.js";
 import { git, runner } from "./process.js";
 import { quotaFallback, readBackend } from "./llm.js";
+import { freezeProvider, providerRules, releaseProvider } from "./providers.js";
 export function read(path: string) {
   try {
     return readFileSync(path, "utf8");
@@ -88,17 +89,24 @@ export function finalize(repo: Repo, run: Run, terminal?: "timeout" | "lost") {
         )
         .run(new Date().toISOString(), exit, workerLog, run.id);
       repo.updateTask(t.id, { status: "ready" });
+      releaseProvider(repo, run.id);
+      const provider = run.provider || run.worker;
+      freezeProvider(repo, provider, "Worker quota exhausted");
       if (quotaFallback(repo, readBackend(dir), "Worker quota exhausted"))
         return;
-      repo.setSetting(
-        "cooldown_until",
-        new Date(Date.now() + 30 * 60000).toISOString(),
-      );
-      repo.event(
-        "cooldown",
-        "Rate limit detected; dispatch paused for 30 minutes",
-        t.id,
-      );
+      // Preserve the old single-provider signal for existing installations.
+      // Configured multi-provider routing relies only on the scoped breaker.
+      if (!providerRules(repo).length) {
+        repo.setSetting(
+          "cooldown_until",
+          new Date(Date.now() + 30 * 60000).toISOString(),
+        );
+        repo.event(
+          "cooldown",
+          "Rate limit detected; dispatch paused for 30 minutes",
+          t.id,
+        );
+      }
     })();
     return;
   }
@@ -220,6 +228,7 @@ export function finalize(repo: Repo, run: Run, terminal?: "timeout" | "lost") {
   const blocked =
     !success && (lost ? lostCount >= 3 : attempts >= t.max_attempts);
   repo.db.transaction(() => {
+    releaseProvider(repo, run.id);
     repo.db
       .prepare(
         "UPDATE runs SET status=?,ended_at=?,exit_code=?,test_exit_code=?,summary=? WHERE id=?",

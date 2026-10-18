@@ -103,6 +103,7 @@ export function cli(repo: Repo) {
     .option("--desc-file <path>")
     .option("--priority <priority>", "priority", "P1")
     .option("--role <role>", "role", "any")
+    .option("--complexity <level>", "low, medium or high", "medium")
     .option("--worker <worker>")
     .option("--depends <ids>")
     .option("--ready")

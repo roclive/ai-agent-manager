@@ -19,6 +19,7 @@ import { review } from "../core/review.js";
 import { merge } from "../core/worktree.js";
 import { autopilotStatus } from "../core/autopilot.js";
 import { fireRoutine } from "../scheduler.js";
+import { releaseProvider } from "../core/providers.js";
 export const routineJSON = (r: Routine) => {
   const cron = new Cron(r.cron, { paused: true });
   try {
@@ -127,6 +128,7 @@ export function uiRoutes(
           "UPDATE runs SET status='failed',ended_at=?,summary='cancelled by user' WHERE id=?",
         )
         .run(new Date().toISOString(), r.id);
+      releaseProvider(repo, r.id);
     }
     repo.updateTask(t.id, { status: "blocked", blocker: "cancelled" });
     repo.event("cancel", "cancelled by user", t.id);

@@ -8,6 +8,7 @@ export interface Context {
   runDir: string;
   sandbox?: string;
   modelArgs?: string[];
+  provider?: string;
 }
 export interface Command {
   cmd: string;
@@ -50,6 +51,7 @@ export const opencode: Adapter = {
       fileURLToPath(new URL("./opencode-launcher.mjs", import.meta.url)),
       c.worktree,
       c.promptFile,
+      ...(c.provider ? [c.provider] : []),
     ],
   }),
 };
