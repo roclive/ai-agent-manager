@@ -1,5 +1,5 @@
 // Adapted from paperclipai/paperclip (MIT)
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { request } from "../lib/api";
 import { useProjects } from "../lib/queries";
@@ -29,6 +29,7 @@ export function Routines() {
   });
   const action = useAction();
   const [editing, setEditing] = useState<Routine | null | undefined>(),
+    [running, setRunning] = useState<Routine | null>(null),
     [deleting, setDeleting] = useState<Routine | null>(null);
   return (
     <>
@@ -89,9 +90,7 @@ export function Routines() {
                 <Button
                   variant="outline"
                   disabled={action.isPending}
-                  onClick={() =>
-                    action.mutate({ path: `/routines/${r.id}/run` })
-                  }
+                  onClick={() => setRunning(r)}
                 >
                   立即运行
                 </Button>
@@ -116,6 +115,31 @@ export function Routines() {
           onClose={() => setEditing(undefined)}
         />
       )}
+      <Dialog
+        open={!!running}
+        onOpenChange={(v) => {
+          if (!v) setRunning(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>立即运行定时任务</DialogTitle>
+            <DialogDescription>确认运行「{running?.name}」？</DialogDescription>
+          </DialogHeader>
+          <Button
+            disabled={action.isPending}
+            onClick={() =>
+              action.mutate(
+                { path: `/routines/${running!.id}/run` },
+                { onSuccess: () => setRunning(null) },
+              )
+            }
+          >
+            确认运行
+          </Button>
+          <ActionError error={action.error} />
+        </DialogContent>
+      </Dialog>
       <Dialog
         open={!!deleting}
         onOpenChange={(v) => {
@@ -172,6 +196,11 @@ export function RoutineEditor({
 }) {
   const projects = useProjects(),
     action = useAction();
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const errorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (action.error) errorRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [action.error]);
   const initial = routine
     ? typeof routine.payload === "string"
       ? JSON.parse(routine.payload)
@@ -200,7 +229,9 @@ export function RoutineEditor({
       {label}
       {options ? (
         <NativeSelect
-          required
+          aria-label={label}
+          name={key}
+          aria-invalid={!!errors[key]}
           value={fields[key]}
           onChange={(e) => setFields({ ...fields, [key]: e.target.value })}
         >
@@ -217,10 +248,17 @@ export function RoutineEditor({
         />
       ) : (
         <Input
-          required
+          aria-label={label}
+          name={key}
+          aria-invalid={!!errors[key]}
           value={fields[key]}
           onChange={(e) => setFields({ ...fields, [key]: e.target.value })}
         />
+      )}
+      {errors[key] && (
+        <span className="field-error" role="alert">
+          {errors[key]}
+        </span>
       )}
     </label>
   );
@@ -236,10 +274,36 @@ export function RoutineEditor({
           <DialogTitle>{routine ? "编辑" : "新建"}定时任务</DialogTitle>
           <DialogDescription>时间按本机时区执行。</DialogDescription>
         </DialogHeader>
+        {action.error && (
+          <div ref={errorRef} role="alert" className="routine-error">
+            {/cron/i.test(action.error.message)
+              ? cronError
+              : action.error.message}
+          </div>
+        )}
         <form
           className="task-form"
+          noValidate
           onSubmit={(e) => {
             e.preventDefault();
+            const next: Record<string, string> = {};
+            if (!name.trim()) next.name = "请输入名称";
+            if (!cron.trim()) next.cron = "请输入 Cron 表达式";
+            else if (![5, 6].includes(cron.trim().split(/\s+/).length))
+              next.cron = cronError;
+            for (const key of kind === "shell"
+              ? ["cmd", "cwd"]
+              : kind === "create_task"
+                ? ["project", "title"]
+                : [])
+              if (!fields[key]?.trim()) next[key] = "此项为必填";
+            setErrors(next);
+            if (Object.keys(next).length) {
+              e.currentTarget
+                .querySelector<HTMLElement>(`[name="${Object.keys(next)[0]}"]`)
+                ?.focus();
+              return;
+            }
             action.mutate(
               {
                 path: routine ? `/routines/${routine.id}` : "/routines",
@@ -258,10 +322,17 @@ export function RoutineEditor({
           <label>
             名称
             <Input
-              required
+              aria-label="名称"
+              name="name"
+              aria-invalid={!!errors.name}
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
+            {errors.name && (
+              <span role="alert" className="field-error">
+                {errors.name}
+              </span>
+            )}
           </label>
           <label>
             计划预设
@@ -280,10 +351,17 @@ export function RoutineEditor({
           <label>
             Cron 表达式
             <Input
-              required
+              aria-label="Cron 表达式"
+              name="cron"
+              aria-invalid={!!errors.cron}
               value={cron}
               onChange={(e) => setCron(e.target.value)}
             />
+            {errors.cron && (
+              <span role="alert" className="field-error">
+                {errors.cron}
+              </span>
+            )}
           </label>
           <p>{cronDescription(cron)}</p>
           <label>
@@ -316,12 +394,11 @@ export function RoutineEditor({
               {field("worker", "执行器", ["codex", "opencode"])}
             </>
           )}
-          <ActionError error={action.error} />
-          <Button disabled={action.isPending || !name.trim() || !cron.trim()}>
-            保存定时任务
-          </Button>
+          <Button disabled={action.isPending}>保存定时任务</Button>
         </form>
       </DialogContent>
     </Dialog>
   );
 }
+
+const cronError = "Cron 表达式无效，应为 5 或 6 段，例如 */5 * * * *";

@@ -1,3 +1,7 @@
+import { Link } from "react-router-dom";
+import { TaskDrawer } from "../components/TaskDrawer";
+import { useTasks } from "../lib/queries";
+import { eventLabels, eventMessage } from "../lib/events";
 import { useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { request } from "../lib/api";
@@ -7,6 +11,7 @@ import { NativeSelect } from "../components/ui/select";
 import { Button } from "../components/ui/button";
 import { Load } from "../components/PageSupport";
 export function ActivityPage({ project }: { project: string }) {
+  const tasks = useTasks();
   const [kind, setKind] = useState("");
   const [task, setTask] = useState("");
   const q = useInfiniteQuery({
@@ -41,6 +46,7 @@ export function ActivityPage({ project }: { project: string }) {
           <option value="">全部类型</option>
           {[
             ...new Set([
+              ...Object.keys(eventLabels),
               "create",
               "edit",
               "move",
@@ -57,7 +63,9 @@ export function ActivityPage({ project }: { project: string }) {
           ]
             .sort()
             .map((k) => (
-              <option key={k}>{k}</option>
+              <option key={k} value={k}>
+                {eventLabels[k] ?? k}
+              </option>
             ))}
         </NativeSelect>
         <Input
@@ -69,12 +77,38 @@ export function ActivityPage({ project }: { project: string }) {
       </div>
       <Load pending={q.isPending} error={q.error}>
         {!rows?.length && <p className="empty-message">暂无符合条件的活动</p>}
-        {rows?.map((e) => (
-          <article className="event-row" key={e.id}>
-            <time>{new Date(e.ts).toLocaleString("zh-CN")}</time>
-            <span className="event-kind">{e.kind}</span>
-            <p>{e.message}</p>
-          </article>
+        {[
+          ...new Set(
+            rows.map((e) => new Date(e.ts).toLocaleDateString("zh-CN")),
+          ),
+        ].map((day) => (
+          <section key={day}>
+            <h2>{day}</h2>
+            {rows
+              .filter((e) => new Date(e.ts).toLocaleDateString("zh-CN") === day)
+              .map((e) => {
+                const task = tasks.data?.find((t) => t.id === e.task_id);
+                return (
+                  <article className="event-row" key={e.id}>
+                    <time>{new Date(e.ts).toLocaleTimeString("zh-CN")}</time>
+                    <span
+                      className="event-kind"
+                      style={{
+                        background: `hsl(${[...e.kind].reduce((n, c) => n + c.charCodeAt(0), 0) % 360} 60% 50% / .15)`,
+                      }}
+                    >
+                      {eventLabels[e.kind] ?? e.kind}
+                    </span>
+                    {e.task_id && (
+                      <Link to={`?task=${task?.identifier ?? e.task_id}`}>
+                        {task?.identifier ?? e.task_id}
+                      </Link>
+                    )}
+                    <p>{eventMessage(e.message)}</p>
+                  </article>
+                );
+              })}
+          </section>
         ))}
         <Button
           variant="outline"
@@ -84,6 +118,7 @@ export function ActivityPage({ project }: { project: string }) {
           加载更多
         </Button>
       </Load>
+      <TaskDrawer />
     </>
   );
 }

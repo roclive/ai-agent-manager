@@ -146,21 +146,23 @@ it("routine editor blocks empty name and exposes server validation", async () =>
       ),
   );
   const c = setup(<RoutineEditor routine={null} onClose={() => {}} />);
-  expect(screen.getByText("保存定时任务")).toBeDisabled();
+  fireEvent.click(screen.getByText("保存定时任务"));
+  expect(await screen.findByRole("alert")).toHaveTextContent("请输入名称");
+  expect(screen.getByLabelText("名称")).toHaveFocus();
   fireEvent.change(screen.getByLabelText("名称"), {
     target: { value: "Nightly" },
   });
   fireEvent.change(screen.getByLabelText("Cron 表达式"), {
-    target: { value: "invalid" },
+    target: { value: "99 * * * *" },
   });
   fireEvent.click(screen.getByText("保存定时任务"));
-  expect(await screen.findByRole("alert")).toHaveTextContent("Invalid cron");
+  expect(await screen.findByRole("alert")).toHaveTextContent("Cron 表达式无效");
   expect(fetcher).toHaveBeenCalledWith(
     "/api/routines",
     expect.objectContaining({
       body: JSON.stringify({
         name: "Nightly",
-        cron: "invalid",
+        cron: "99 * * * *",
         action: "heartbeat",
         payload: {},
       }),
@@ -237,4 +239,209 @@ it("bulk move waits for all requests and reports partial failures", async () => 
   vi.stubGlobal("fetch", fetcher);
   await expect(bulkMove([1, 2], "ready")).rejects.toThrow("1 个任务移动失败");
   expect(fetcher).toHaveBeenCalledTimes(2);
+});
+
+it.each(["shell", "create_task"])(
+  "routine validates required %s fields inline",
+  async (kind) => {
+    mock();
+    const c = setup(<RoutineEditor routine={null} onClose={() => {}} />);
+    fireEvent.change(screen.getByLabelText("名称"), {
+      target: { value: "Test" },
+    });
+    fireEvent.change(screen.getByLabelText("动作"), {
+      target: { value: kind },
+    });
+    fireEvent.click(screen.getByText("保存定时任务"));
+    expect(await screen.findAllByRole("alert")).not.toHaveLength(0);
+    expect(
+      screen.getByLabelText(kind === "shell" ? "命令" : "项目"),
+    ).toHaveFocus();
+    c.clear();
+  },
+);
+it("routine rejects malformed cron before submitting", async () => {
+  const fetcher = mock();
+  const c = setup(<RoutineEditor routine={null} onClose={() => {}} />);
+  fireEvent.change(screen.getByLabelText("名称"), {
+    target: { value: "Test" },
+  });
+  fireEvent.change(screen.getByLabelText("Cron 表达式"), {
+    target: { value: "* *" },
+  });
+  fireEvent.click(screen.getByText("保存定时任务"));
+  expect(await screen.findByRole("alert")).toHaveTextContent("5 或 6 段");
+  expect(screen.getByLabelText("Cron 表达式")).toHaveFocus();
+  expect(fetcher.mock.calls.some(([, init]) => init?.method === "POST")).toBe(
+    false,
+  );
+  c.clear();
+});
+
+it("backlog preserves full labels and a sticky task column with project chips", async () => {
+  mock();
+  const c = setup(<Backlog project="" />, "/backlog");
+  expect(await screen.findByLabelText("T-1 worker")).toHaveDisplayValue(
+    "Codex 执行器",
+  );
+  expect(screen.getByLabelText("T-1 priority")).toHaveDisplayValue("P1 高");
+  expect(
+    screen.getByText("T", { selector: ".project-chip" }),
+  ).toBeInTheDocument();
+  expect(screen.getByRole("table")).toHaveClass("backlog-table");
+  c.clear();
+});
+
+it("activity groups days, translates events and links task identifiers", async () => {
+  const { ActivityPage } = await import("./pages/Activity");
+  const { eventMessage } = await import("./lib/events");
+  expect(eventMessage('{"routine_id":1,"name":"heartbeat"}')).toBe(
+    "「heartbeat」",
+  );
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async (url: string) =>
+        new Response(
+          JSON.stringify(
+            url === "/api/tasks"
+              ? [task]
+              : [
+                  {
+                    id: 1,
+                    ts: "2026-01-01T12:00:00Z",
+                    task_id: 1,
+                    kind: "dispatch",
+                    message: '{"name":"heartbeat"}',
+                  },
+                ],
+          ),
+        ),
+    ),
+  );
+  const c = setup(<ActivityPage project="" />, "/activity");
+  expect(await screen.findByText("「heartbeat」")).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "T-1" })).toHaveAttribute(
+    "href",
+    "/activity?task=T-1",
+  );
+  expect(screen.getByRole("heading", { name: "2026/1/1" })).toBeInTheDocument();
+  expect(screen.getByText("派工", { selector: "span" })).toHaveClass(
+    "event-kind",
+  );
+  c.clear();
+});
+
+it.each(["批准", "驳回"])(
+  "dashboard confirms %s with a note",
+  async (label) => {
+    const { Dashboard } = await import("./pages/Dashboard");
+    const fetcher = vi.fn(
+      async (url: string, init?: RequestInit) =>
+        new Response(
+          JSON.stringify(
+            init?.method
+              ? task
+              : url === "/api/tasks"
+                ? [task]
+                : url === "/api/projects"
+                  ? [{ id: 1, key: "T" }]
+                  : url === "/api/status"
+                    ? { daemon: { running: false } }
+                    : [],
+          ),
+        ),
+    );
+    vi.stubGlobal("fetch", fetcher);
+    const c = setup(<Dashboard project="" />, "/");
+    fireEvent.click(await screen.findByRole("button", { name: label }));
+    expect(fetcher.mock.calls.some(([, init]) => init?.method === "POST")).toBe(
+      false,
+    );
+    fireEvent.change(screen.getByLabelText("审查备注"), {
+      target: { value: "Checked" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "确认提交" }));
+    await waitFor(() =>
+      expect(fetcher).toHaveBeenCalledWith(
+        "/api/tasks/1/review",
+        expect.objectContaining({
+          body: JSON.stringify({
+            verdict: label === "批准" ? "approve" : "reject",
+            note: "Checked",
+          }),
+        }),
+      ),
+    );
+    c.clear();
+  },
+);
+
+it("routine immediate run requires confirmation", async () => {
+  const { Routines } = await import("./pages/Routines");
+  const fetcher = vi.fn(
+    async (_url: string, init?: RequestInit) =>
+      new Response(
+        JSON.stringify(
+          init?.method
+            ? {}
+            : [
+                {
+                  id: 1,
+                  name: "heartbeat",
+                  action: "heartbeat",
+                  cron: "*/5 * * * *",
+                  enabled: true,
+                },
+              ],
+        ),
+      ),
+  );
+  vi.stubGlobal("fetch", fetcher);
+  const c = setup(<Routines />, "/routines");
+  fireEvent.click(await screen.findByRole("button", { name: "立即运行" }));
+  expect(fetcher.mock.calls.some(([, init]) => init?.method === "POST")).toBe(
+    false,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "确认运行" }));
+  await waitFor(() =>
+    expect(fetcher).toHaveBeenCalledWith(
+      "/api/routines/1/run",
+      expect.objectContaining({ method: "POST" }),
+    ),
+  );
+  c.clear();
+});
+
+it("restores the selected project across layout mounts", async () => {
+  const { Layout } = await import("./components/Layout");
+  localStorage.setItem("aam.project", "OTHER");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async (url: string) =>
+        new Response(
+          JSON.stringify(
+            url === "/api/projects"
+              ? [
+                  { id: 1, key: "T", name: "Test" },
+                  { id: 2, key: "OTHER", name: "Other project" },
+                ]
+              : url === "/api/status"
+                ? { daemon: { running: false } }
+                : [],
+          ),
+        ),
+    ),
+  );
+  const c = setup(<Layout />, "/backlog");
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "切换项目" })).toHaveTextContent(
+      "Other project",
+    ),
+  );
+  expect(localStorage.getItem("aam.project")).toBe("OTHER");
+  c.clear();
+  cleanup();
+  localStorage.clear();
 });

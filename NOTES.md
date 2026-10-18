@@ -27,3 +27,8 @@
 - Activity uses an event-ID cursor and server-side project/task/kind filters. Project filters include events associated with that project's tasks; workspace settings/routine events remain in the all-projects feed.
 - Bulk task moves are independent requests: successful changes remain if another task is rejected, and an error reports the failed count. Task status protections remain enforced by the API.
 - Task descriptions render through react-markdown without raw HTML. Task/run statuses retain their original values in history; task status and role controls use Chinese labels.
+
+## AAM-7 UI / launchd
+- Backlog keeps the task ID and title together in one sticky column; other columns scroll horizontally. Project chips use a deterministic key colour.
+- Cron input checks only for five or six whitespace-separated fields; the scheduler remains authoritative for syntax and ranges.
+- launchd status keeps the existing top-level daemon fields for compatibility and adds a services array with daemon/UI state, PID and last exit code. The injectable user-home path isolates plist/log paths in tests.

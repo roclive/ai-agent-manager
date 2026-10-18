@@ -1,4 +1,14 @@
 // Adapted from paperclipai/paperclip (MIT)
+import { ProjectChip } from "../components/ProjectChip";
+import { TaskDrawer } from "../components/TaskDrawer";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "../components/ui/dialog";
+import { Textarea } from "../components/ui/textarea";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -24,6 +34,10 @@ export function Cooldown({ until }: { until: string | null | undefined }) {
   ) : null;
 }
 export function Dashboard({ project }: { project: string }) {
+  const [review, setReview] = useState<{ id: number; verdict: string } | null>(
+    null,
+  );
+  const [note, setNote] = useState("");
   const tasks = useTasks(),
     runs = useRuns(),
     status = useStatus(),
@@ -131,16 +145,19 @@ export function Dashboard({ project }: { project: string }) {
                 <Link to={`/board?task=${t.identifier}`}>
                   {t.identifier} · {t.title}
                 </Link>
+                <ProjectChip
+                  projectKey={
+                    projects.data?.find((p) => p.id === t.project_id)?.key ?? ""
+                  }
+                />
                 <div className="filters">
                   <Button
                     disabled={action.isPending}
                     size="sm"
-                    onClick={() =>
-                      action.mutate({
-                        path: `/tasks/${t.id}/review`,
-                        body: { verdict: "approve", note: "" },
-                      })
-                    }
+                    onClick={() => {
+                      setNote("");
+                      setReview({ id: t.id, verdict: "approve" });
+                    }}
                   >
                     批准
                   </Button>
@@ -148,12 +165,10 @@ export function Dashboard({ project }: { project: string }) {
                     disabled={action.isPending}
                     size="sm"
                     variant="outline"
-                    onClick={() =>
-                      action.mutate({
-                        path: `/tasks/${t.id}/review`,
-                        body: { verdict: "reject", note: "" },
-                      })
-                    }
+                    onClick={() => {
+                      setNote("");
+                      setReview({ id: t.id, verdict: "reject" });
+                    }}
                   >
                     驳回
                   </Button>
@@ -190,6 +205,41 @@ export function Dashboard({ project }: { project: string }) {
           </Load>
         </section>
       </Load>
+      <TaskDrawer />
+      <Dialog
+        open={!!review}
+        onOpenChange={(v) => {
+          if (!v) setReview(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              确认{review?.verdict === "approve" ? "批准" : "驳回"}
+            </DialogTitle>
+            <DialogDescription>请确认审查结果，可填写备注。</DialogDescription>
+          </DialogHeader>
+          <label>
+            审查备注
+            <Textarea value={note} onChange={(e) => setNote(e.target.value)} />
+          </label>
+          <Button
+            disabled={action.isPending}
+            onClick={() =>
+              action.mutate(
+                {
+                  path: `/tasks/${review!.id}/review`,
+                  body: { verdict: review!.verdict, note },
+                },
+                { onSuccess: () => setReview(null) },
+              )
+            }
+          >
+            确认提交
+          </Button>
+          <ActionError error={action.error} />
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

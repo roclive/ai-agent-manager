@@ -124,3 +124,14 @@ export const runStatusLabels: Record<Run["status"], string> = {
   lost: "丢失",
   rate_limited: "触发限流",
 };
+
+export const priorityLabels: Record<string, string> = {
+  P0: "P0 紧急",
+  P1: "P1 高",
+  P2: "P2 中",
+  P3: "P3 低",
+};
+export const workerLabels: Record<string, string> = {
+  codex: "Codex 执行器",
+  opencode: "OpenCode 执行器",
+};
