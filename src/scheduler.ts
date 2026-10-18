@@ -4,7 +4,7 @@ import { Cron } from "croner";
 import { Repo, type Routine } from "./db/index.js";
 import { tick } from "./core/tick.js";
 import { runner } from "./core/process.js";
-import { collectUsage, JsonOpenUsageProvider, FakeOpenUsageProvider, type OpenUsageProvider } from "./workers/openusage.js";
+import { collectUsage, JsonOpenUsageProvider, FakeOpenUsageProvider, CliOpenUsageProvider, type OpenUsageProvider } from "./workers/openusage.js";
 
 export function validateRoutine(
   cron: string,
@@ -26,8 +26,12 @@ export function validateRoutine(
     (typeof p.cmd !== "string" || typeof p.cwd !== "string")
   )
     throw new Error("shell requires cmd and cwd");
-  if (action === "collect_usage" && !p.provider)
-    throw new Error("collect_usage requires provider");
+  if (action === "collect_usage") {
+    if (typeof p.provider !== "string" || !p.provider) throw new Error("collect_usage requires provider");
+    if (p.exec !== undefined && (typeof p.exec !== "string" || !Array.isArray(p.args) || !p.args.every(a => typeof a === "string")))
+      throw new Error("collect_usage exec requires string executable and argv array");
+    if (p.exec && p.json) throw new Error("Choose exec or json");
+  }
 }
 
 export async function fireRoutine(repo: Repo, r: Routine) {
@@ -46,6 +50,11 @@ export async function fireRoutine(repo: Repo, r: Routine) {
       let provider: OpenUsageProvider;
       if (providerName === "fake") {
         provider = new FakeOpenUsageProvider();
+      } else if (providerName === "openusage" && !p.json && !p.exec) {
+        provider = new CliOpenUsageProvider(providerName, "openusage", ["export", "--output", "-", "--format", "json", "--source", "daemon"], repo.home);
+      } else if (p.exec) {
+        validateRoutine(r.cron, r.action, p);
+        provider = new CliOpenUsageProvider(providerName, p.exec, p.args, repo.home);
       } else if (p.json) {
         provider = new JsonOpenUsageProvider(providerName, String(p.json));
       } else {

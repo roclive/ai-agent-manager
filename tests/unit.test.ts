@@ -12,8 +12,10 @@ import { parseVerdict, claudeReview } from "../src/core/review.js";
 import { withLock } from "../src/core/lock.js";
 import { plist, nodePath, daemonLogPath } from "../src/launchd.js";
 import { fireRoutine, validateRoutine } from "../src/scheduler.js";
+
 let f: ReturnType<typeof fixture>;
 afterEach(() => f?.cleanup());
+
 describe("repository", () => {
   it("persists defaults, projects, tasks, events and routines", () => {
     f = fixture();
@@ -43,7 +45,8 @@ describe("repository", () => {
     const other = new Repo(r.home);
     expect(other.task(t.identifier).description).toBe("hello");
     other.close();
-  
+  });
+
   it("returns events in descending order by id", () => {
     f = fixture();
     const r = f.repo;
@@ -51,25 +54,9 @@ describe("repository", () => {
     r.event("e2", "msg2");
     r.event("e3", "msg3");
     const events = r.events();
-    expect((events[0] as any).message).toBe("msg3");
-    expect((events[1] as any).message).toBe("msg2");
-    expect((events[2] as any).message).toBe("msg1");
+    expect(events.slice(0, 3)).toMatchObject([{message: "msg3"}, {message: "msg2"}, {message: "msg1"}]);
   });
 
-  
-  it("returns events in descending order by id", () => {
-    f = fixture();
-    const r = f.repo;
-    r.event("e1", "msg1");
-    r.event("e2", "msg2");
-    r.event("e3", "msg3");
-    const events = r.events();
-    expect((events[0] as any).message).toBe("msg3");
-    expect((events[1] as any).message).toBe("msg2");
-    expect((events[2] as any).message).toBe("msg1");
-  });
-
-  });
   it("rejects invalid mutations atomically", () => {
     f = fixture();
     expect(() => f.task({ priority: "P8" })).toThrow();
@@ -82,6 +69,7 @@ describe("repository", () => {
       f.repo.updateTask(t.id, { depends_on: [t.identifier] }),
     ).toThrow();
   });
+
   it("orders priority then sequence and checks every dependency", () => {
     f = fixture();
     const first = f.task({ priority: "P2" });
@@ -98,13 +86,13 @@ describe("repository", () => {
     expect(() =>
       f.repo.updateTask(second.id, { depends_on: ["missing"] }),
     ).toThrow("Task not found");
-    // Old databases can contain missing dependencies; dispatch still handles these safely.
     f.repo.db
       .prepare("UPDATE tasks SET depends_on=? WHERE id=?")
       .run('["missing"]', second.id);
     expect(dependenciesDone(f.repo, f.repo.task(second.id))).toBe(false);
   });
 });
+
 it("renders status groups, feedback, last 20 done and recent 50 events", () => {
   f = fixture();
   f.task({ title: "A title", feedback: "first\nsecond", status: "blocked" });
@@ -116,6 +104,7 @@ it("renders status groups, feedback, last 20 done and recent 50 events", () => {
   expect(b.match(/attempts/g)).toHaveLength(21);
   expect(progress(f.repo).match(/\[test\]/g)).toHaveLength(50);
 });
+
 it("detects rate limit text", () => {
   for (const s of ["USAGE LIMIT", "rate limit", "429", "quota exceeded"])
     expect(rateLimited(`Error: ${s}`, 1)).toBe(true);
@@ -139,6 +128,7 @@ it("detects rate limit text", () => {
   ])
     expect(rateLimited(text, 1)).toBe(false);
 });
+
 it("builds safe adapter commands and full prompt", () => {
   f = fixture();
   const c = { worktree: "/tmp/w t", runDir: "/tmp/r", promptFile: "/tmp/p" };
@@ -201,6 +191,7 @@ it("builds safe adapter commands and full prompt", () => {
   expect(resolution).toContain("git add and git commit are REQUIRED");
   expect(resolution).not.toContain("Do not run git add or git commit");
 });
+
 it("locks concurrent ticks, releases on errors and recovers stale pids", () => {
   f = fixture();
   const path = resolve(f.repo.home, "tick.lock");
@@ -215,6 +206,7 @@ it("locks concurrent ticks, releases on errors and recovers stale pids", () => {
   ).toThrow();
   expect(withLock(f.repo, () => 42)).toBe(42);
 });
+
 it("parses nested Claude JSON and leaves invalid reviews pending", () => {
   expect(
     parseVerdict(
@@ -257,6 +249,7 @@ it("parses nested Claude JSON and leaves invalid reviews pending", () => {
   });
   expect(f.repo.task(t.id).status).toBe("done");
 });
+
 it("runs create_task and shell routines and generates launchd plist", () => {
   f = fixture();
   validateRoutine("*/5 * * * *", "create_task", {
@@ -277,7 +270,6 @@ it("runs create_task and shell routines and generates launchd plist", () => {
   });
   fireRoutine(f.repo, f.repo.routines()[1]);
   expect(JSON.stringify(f.repo.events())).toContain("routine-output");
-  // Generate only; never install or load the live launchd job.
   const xml = plist(f.repo);
   const escape = (value: string) =>
     value
@@ -303,6 +295,7 @@ it("runs create_task and shell routines and generates launchd plist", () => {
   expect(xml).toContain("KeepAlive");
   expect(xml).toContain(f.repo.home);
 });
+
 it("keeps identifiers monotonic when the API reorders sequence values", () => {
   f = fixture();
   const t = f.task();
@@ -429,7 +422,7 @@ it("installs, reports and removes both launchd services using an isolated home a
   launchd(f.repo, "uninstall", false, run, userHome);
   expect(calls.filter((a) => a[0] === "unload")).toHaveLength(2);
   expect(
-    existsSync(resolve(userHome, "Library/LaunchAgents/com.aam.ui.plist")),
+    existsSync(resolve(userHome, `Library/LaunchAgents/com.aam.ui.plist`)),
   ).toBe(false);
 });
 

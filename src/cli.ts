@@ -6,7 +6,7 @@ import { Repo } from "./db/index.js";
 import { autopilotStatus, checkReviewer } from "./core/autopilot.js";
 import { review } from "./core/review.js";
 import { merge, prune } from "./core/worktree.js";
-import { collectUsage, FakeOpenUsageProvider, JsonOpenUsageProvider } from "./workers/openusage.js";
+import { collectUsage, FakeOpenUsageProvider, JsonOpenUsageProvider, CliOpenUsageProvider } from "./workers/openusage.js";
 
 export const output = (v: unknown) =>
   console.log(typeof v === "string" ? v : JSON.stringify(v, null, 2));
@@ -211,10 +211,15 @@ export function cli(repo: Repo) {
   const usage = app.command("usage");
   usage
     .command("collect")
-    .option("--provider <name>", "provider to collect", "fake")
+    .option("--provider <name>", "provider to collect", "openusage")
     .option("--json <path>", "JSON file for provider")
+    .option("--exec <path>", "Configured read-only exporter executable")
+    .option("--args-json <json>", "Exporter argv as a JSON string array", "[]")
     .action(async (o) => {
-      const provider = o.provider === "fake" ? new FakeOpenUsageProvider() : (o.json ? new JsonOpenUsageProvider(o.provider, o.json) : null);
+      const args: unknown = JSON.parse(o.argsJson);
+      if (!Array.isArray(args) || !args.every(a => typeof a === "string")) throw Error("args-json must be a string array");
+      if (o.exec && o.json) throw Error("Choose exec or json");
+      const provider = o.exec ? new CliOpenUsageProvider(o.provider, o.exec, args, repo.home) : o.provider === "openusage" && !o.json ? new CliOpenUsageProvider("openusage", "openusage", ["export", "--output", "-", "--format", "json", "--source", "daemon"], repo.home) : o.provider === "fake" ? new FakeOpenUsageProvider() : (o.json ? new JsonOpenUsageProvider(o.provider, o.json) : null);
       if (!provider) throw new Error(`Unknown provider: ${o.provider}`);
       output(await collectUsage(repo, provider));
     });
@@ -223,7 +228,7 @@ export function cli(repo: Repo) {
     .option("--provider <name>")
     .action((o) => {
       const p = o.provider;
-      output(p ? repo.latestUsage(p) : repo.projects().map(pr => ({ provider: pr.key, usage: repo.latestUsage(pr.key) })));
+      output(p ? repo.latestUsage(p) : repo.usageSnapshots());
     });
 
   return app;

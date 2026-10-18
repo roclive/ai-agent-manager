@@ -553,16 +553,21 @@ export class Repo {
       new Date().toISOString(),
     );
   }
+  usageSnapshots(provider?: string): UsageSnapshot[] {
+    const rows = this.db.prepare(`SELECT * FROM usage_snapshots WHERE id IN
+      (SELECT MAX(id) FROM usage_snapshots GROUP BY provider,type,window)
+      ${provider ? "AND provider=?" : ""} ORDER BY provider,type,window`).all(...(provider ? [provider] : []));
+    return rows.map(row => {
+      const snapshot = row as UsageSnapshot;
+      return {...snapshot, used: snapshot.used == null || !Number.isFinite(Number(snapshot.used)) ? "unknown" : Number(snapshot.used),
+        remaining: snapshot.remaining == null || !Number.isFinite(Number(snapshot.remaining)) ? "unknown" : Number(snapshot.remaining)};
+    });
+  }
   latestUsage(provider: string) {
-    return (
-      this.db.prepare(
-        "SELECT * FROM usage_snapshots WHERE provider=? ORDER BY id DESC LIMIT 1",
-      ).get(provider) as UsageSnapshot | undefined
-    );
+    return this.usageSnapshots(provider).sort((a,b) => b.id-a.id)[0];
   }
   usageHistory(provider: string, limit = 100) {
-    return this.db.prepare(
-      "SELECT * FROM usage_snapshots WHERE provider=? ORDER BY created_at DESC LIMIT ?",
-    ).all(provider, limit) as UsageSnapshot[];
+    return this.db.prepare("SELECT * FROM usage_snapshots WHERE provider=? ORDER BY id DESC LIMIT ?")
+      .all(provider, limit) as UsageSnapshot[];
   }
 }

@@ -1,3 +1,4 @@
+import { usageState, checkQuota } from "./core/usage.js";
 import { dependencyWaiting } from "./core/dispatch.js";
 import { integrationStatus, integrate } from "./core/integration.js";
 import { cors } from "hono/cors";
@@ -265,6 +266,11 @@ export function createApp(
         .all(...values, limit),
     );
   });
+  app.get("/api/usage", (c) => c.json({
+    schema_version: 1,
+    snapshots: repo.usageSnapshots(c.req.query("provider")).map(snapshot => ({...snapshot,
+      state: usageState(snapshot), warning: checkQuota(repo, snapshot.provider).warning ?? null})),
+  }));
   app.get("/api/settings", (c) => c.json(repo.settings()));
   app.put("/api/settings", async (c) => {
     const p = await c.req.json<Record<string, unknown>>();
