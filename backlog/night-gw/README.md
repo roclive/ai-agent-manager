@@ -8,3 +8,5 @@
 - GW-6: [网关断网与额度耗尽演练及接入说明](06-task.md)
 
 - GW-7: [Saluki llama.cpp 实际部署](07-saluki-deploy.md)，依赖GW-1，GW-2等待此项完成。
+
+- GW-8: [夜间任务完成后测试 Gemma4 E4B MLX](08-gemma-after-night.md)。Saluki保持暂停；GW-2已恢复依赖GW-1以继续网关开发。

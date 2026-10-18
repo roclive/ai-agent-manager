@@ -10,3 +10,6 @@ openusage=/opt/homebrew/bin/openusage，支持 export --output <path> --format j
 ## 用户追加：Ollama 优先
 
 用户追加确认 Ollama 发布包 https://ollama.com/sparksammy/Underdog-Saluki-27B-1.0 ，优先尝试 ollama pull sparksammy/Underdog-Saluki-27B-1.0。网页显示latest为8.3GB、标称256K，发布者sparksammy并非原作者ConwayResearch，不假定其量化与原7.89GB文件完全相同。下载前核对manifest元数据，下载后ollama show检查架构/参数量/量化/template/license，验证中文JSON与tool calling。实测num_ctx=2048、并发1，不使用256K默认上下文。若量化、模板或当前Ollama架构支持不匹配，优先从ConwayResearch下载准确IQ2-mix GGUF并尝试Ollama导入，仍不兼容才使用llama.cpp。避免同时下载/常驻两份权重；已有缓存先复用。其余内存/延迟/JSON/工具调用与LiteLLM接入验收不变。此条覆盖先前llama.cpp优先的要求。
+
+
+用户最新指示：Saluki使电脑过慢，已停止测试并卸载内存。禁止自动加载Saluki或aam-saluki、禁止启用本地回退，须用户再次明确授权才恢复。今晚先使用已验证的免费云端编码后端，所有本地生图/模型任务必须避开重新加载Saluki。
