@@ -1,6 +1,8 @@
 import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
+import { UsageSnapshot } from "./usage.js";
+
 export const statuses = [
   "backlog",
   "ready",
@@ -93,7 +95,8 @@ export class Repo {
     CREATE TABLE IF NOT EXISTS runs(id INTEGER PRIMARY KEY,task_id INTEGER NOT NULL REFERENCES tasks(id),worker TEXT NOT NULL,pid INTEGER,status TEXT NOT NULL,started_at TEXT NOT NULL,ended_at TEXT,exit_code INTEGER,test_exit_code INTEGER,log_path TEXT NOT NULL,last_message_path TEXT NOT NULL,summary TEXT);
     CREATE TABLE IF NOT EXISTS routines(id INTEGER PRIMARY KEY,name TEXT UNIQUE NOT NULL,cron TEXT NOT NULL,action TEXT NOT NULL,payload TEXT NOT NULL DEFAULT '{}',enabled INTEGER NOT NULL DEFAULT 1,last_run_at TEXT);
     CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY,ts TEXT NOT NULL,task_id INTEGER REFERENCES tasks(id),kind TEXT NOT NULL,message TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);`);
+    CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS usage_snapshots(id INTEGER PRIMARY KEY,provider TEXT NOT NULL,type TEXT NOT NULL,window TEXT NOT NULL,used TEXT,remaining TEXT,reset_at TEXT,source TEXT,freshness TEXT,raw_data TEXT,created_at TEXT NOT NULL);`);
     const projectColumns = this.db.pragma("table_info(projects)") as {
       name: string;
     }[];
@@ -486,7 +489,7 @@ export class Repo {
   events(limit = 50, taskId?: number) {
     return this.db
       .prepare(
-        `SELECT * FROM events ${taskId === undefined ? "" : "WHERE task_id=?"} ORDER BY id DESC LIMIT ?`,
+        `SELECT * FROM events ${taskId === undefined ? "" : "WHERE task_id=?"} ORDER by id DESC LIMIT ?`,
       )
       .all(...(taskId === undefined ? [limit] : [taskId, limit]));
   }
@@ -532,5 +535,34 @@ export class Repo {
         "INSERT OR IGNORE INTO routines(name,cron,action) VALUES ('heartbeat','*/5 * * * *','heartbeat')",
       )
       .run();
+  }
+  addUsageSnapshot(s: Omit<UsageSnapshot, "id" | "created_at">) {
+    return this.db.prepare(
+      `INSERT INTO usage_snapshots(provider,type,window,used,remaining,reset_at,source,freshness,raw_data,created_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      s.provider,
+      s.type,
+      s.window,
+      s.used === "unknown" ? null : s.used,
+      s.remaining === "unknown" ? null : s.remaining,
+      s.reset_at,
+      s.source,
+      s.freshness,
+      s.raw_data,
+      new Date().toISOString(),
+    );
+  }
+  latestUsage(provider: string) {
+    return (
+      this.db.prepare(
+        "SELECT * FROM usage_snapshots WHERE provider=? ORDER BY created_at DESC LIMIT 1",
+      ).get(provider) as UsageSnapshot | undefined
+    );
+  }
+  usageHistory(provider: string, limit = 100) {
+    return this.db.prepare(
+      "SELECT * FROM usage_snapshots WHERE provider=? ORDER BY created_at DESC LIMIT ?",
+    ).all(provider, limit) as UsageSnapshot[];
   }
 }

@@ -6,6 +6,8 @@ import { Repo } from "./db/index.js";
 import { autopilotStatus, checkReviewer } from "./core/autopilot.js";
 import { review } from "./core/review.js";
 import { merge, prune } from "./core/worktree.js";
+import { collectUsage, FakeOpenUsageProvider } from "./workers/openusage.js";
+
 export const output = (v: unknown) =>
   console.log(typeof v === "string" ? v : JSON.stringify(v, null, 2));
 export function cli(repo: Repo) {
@@ -205,6 +207,24 @@ export function cli(repo: Repo) {
     .command("worktree")
     .command("prune <id>")
     .action((id) => prune(repo, id));
+
+  const usage = app.command("usage");
+  usage
+    .command("collect")
+    .option("--provider <name>", "provider to collect", "fake")
+    .action(async (o) => {
+      const provider = o.provider === "fake" ? new FakeOpenUsageProvider() : null;
+      if (!provider) throw new Error(`Unknown provider: ${o.provider}`);
+      output(await collectUsage(repo, provider));
+    });
+  usage
+    .command("list")
+    .option("--provider <name>")
+    .action((o) => {
+      const p = o.provider;
+      output(p ? repo.latestUsage(p) : repo.projects().map(pr => ({ provider: pr.key, usage: repo.latestUsage(pr.key) })));
+    });
+
   return app;
 }
 async function main() {
@@ -277,6 +297,7 @@ async function register(app: Command, repo: Repo) {
 import { pathToFileURL } from "node:url";
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
   main().catch((e) => {
-    console.error(e.message);
+    const err = e instanceof Error ? e : new Error(String(e));
+    console.error(err.message);
     process.exitCode = 1;
   });
