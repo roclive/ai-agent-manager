@@ -22,6 +22,7 @@ export function parseVerdict(
 ): { verdict: string; notes: string } | null {
   try {
     const outer = JSON.parse(text);
+    if (outer.is_error === true) return null;
     if (typeof outer.result === "string") text = outer.result;
   } catch {
     /* may include prose */

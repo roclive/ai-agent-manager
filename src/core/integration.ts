@@ -1,6 +1,7 @@
 import { mkdtempSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { Repo, type Project } from "../db/index.js";
+import { withLock } from "./lock.js";
 import { git, runner } from "./process.js";
 
 export function setIntegration(repo: Repo, key: string, mode: string) {
@@ -18,7 +19,26 @@ export function setIntegration(repo: Repo, key: string, mode: string) {
   repo.db
     .prepare("UPDATE projects SET integration_branch=? WHERE id=?")
     .run(mode === "on" ? "aam/integration" : "", p.id);
-  repo.event("integration", `${key}: ${mode}`);
+  const summary = { integrated: 0, pending: 0, skipped: 0 };
+  if (mode === "on" && !p.integration_branch) {
+    const tasks = repo
+      .tasks({ project: key, status: "done" })
+      .filter((t) => t.branch)
+      .sort((a, b) => a.updated_at.localeCompare(b.updated_at) || a.id - b.id);
+    for (const t of tasks)
+      repo.updateTask(t.id, { integrated: 0, integration_attempts: 0 });
+    for (const t of tasks) {
+      if (openResolution(repo, t.id)) {
+        summary.skipped++;
+        continue;
+      }
+      integrate(repo, t.identifier);
+      if (repo.task(t.id).integrated) summary.integrated++;
+      else summary.pending++;
+    }
+  }
+  repo.event("integration", `${key}: ${mode}; ${JSON.stringify(summary)}`);
+  return summary;
 }
 function temporary(
   repo: Repo,
@@ -54,55 +74,128 @@ export function integrationStatus(p: Project) {
     };
   }
 }
+export function openResolution(repo: Repo, id: number, exclude?: number) {
+  return repo
+    .tasks()
+    .some(
+      (t) =>
+        t.id !== exclude &&
+        t.resolves_task_id === id &&
+        !["done", "cancelled"].includes(t.status),
+    );
+}
+export function reconcileIntegration(repo: Repo) {
+  for (const t of repo
+    .tasks({ status: "done" })
+    .sort(
+      (a, b) => Number(!!b.resolves_task_id) - Number(!!a.resolves_task_id),
+    ))
+    if (
+      t.branch &&
+      !t.integrated &&
+      !(
+        !t.resolves_task_id &&
+        repo
+          .tasks()
+          .some(
+            (r) =>
+              r.resolves_task_id === t.id &&
+              r.status === "done" &&
+              !r.integrated,
+          )
+      ) &&
+      t.integration_attempts < 5 &&
+      repo.project(t.project_id).integration_branch &&
+      !openResolution(repo, t.resolves_task_id || t.id)
+    )
+      integrate(repo, t.identifier);
+}
 export function integrate(repo: Repo, id: string) {
+  const task = repo.task(id);
+  if (
+    !repo.project(task.project_id).integration_branch ||
+    task.integration_attempts >= 5
+  )
+    return;
+  repo.updateTask(task.id, { integrated: 0 });
+  const result = withLock(
+    repo,
+    () => {
+      integrateLocked(repo, id);
+      return true;
+    },
+    "integration",
+  );
+  if (!result) integrationFailure(repo, task.id, "Integration lock busy");
+}
+function integrationFailure(repo: Repo, id: number, error: string) {
+  const attempts = repo.task(id).integration_attempts + 1;
+  repo.updateTask(id, { integration_attempts: attempts });
+  repo.event(
+    attempts === 5 ? "integration_blocked" : "integration_error",
+    error,
+    id,
+  );
+}
+function integrateLocked(repo: Repo, id: string) {
   const t = repo.task(id),
     p = repo.project(t.project_id);
   if (!p.integration_branch) return;
   const original = t.resolves_task_id ? repo.task(t.resolves_task_id) : t;
-  repo.updateTask(t.id, { integrated: 0 });
+  if (openResolution(repo, original.id, t.id) || t.integration_attempts >= 5)
+    return;
   try {
     if (!t.branch) throw new Error("No task branch");
-    temporary(repo, p, p.integration_branch, (path) => {
-      const result = runner("git", ["merge", "--no-edit", t.branch!], path);
-      if (result.status === 0) return;
-      const files = git(path, ["diff", "--name-only", "--diff-filter=U"]);
-      if (!files) throw new Error(result.stderr || result.stdout);
-      const hunks = git(path, ["diff", "--cc"]).slice(0, 24000);
-      const count = repo
-        .tasks()
-        .filter((x) => x.resolves_task_id === original.id).length;
-      if (count >= 2) {
-        repo.updateTask(original.id, {
-          status: "blocked",
-          blocker: "Integration conflict: maximum 2 resolution tasks exhausted",
-        });
-        repo.event(
-          "integration_blocked",
-          "Maximum 2 conflict-resolution tasks exhausted",
-          original.id,
-        );
-      } else {
-        const task = repo.addTask({
-          project: p.key,
-          title: `Resolve merge conflict: ${original.identifier} into integration`,
-          priority: "P0",
-          role: "any",
-          worker: original.worker,
-          status: "ready",
-          integrated: 0,
-          resolves_task_id: original.id,
-          description: `${original.title}\n\nConflicting files:\n${files}\n\n${hunks}\n\nIn this worktree (branched from the current integration tip) run git merge aam/${original.identifier}, resolve every conflict keeping BOTH sides' intent (registries/imports: union; docs: keep both sections), run the project tests, leave the merge COMMITTED.\nPrevious resolution branch, if useful: ${t.branch}`,
-        });
-        repo.event(
-          "integration_conflict",
-          `Created ${task.identifier}; files: ${files}`,
-          original.id,
-        );
-      }
-      throw new Error("Merge conflict recorded");
-    });
-    repo.updateTask(t.id, { integrated: 1 });
-    repo.updateTask(original.id, { integrated: 1 });
+    const ancestor = runner(
+      "git",
+      ["merge-base", "--is-ancestor", t.branch, p.integration_branch],
+      p.repo_path,
+    );
+    if (ancestor.status !== 0 && ancestor.status !== 1)
+      throw new Error(ancestor.stderr || "Ancestor check failed");
+    if (ancestor.status !== 0)
+      temporary(repo, p, p.integration_branch, (path) => {
+        const result = runner("git", ["merge", "--no-edit", t.branch!], path);
+        if (result.status === 0) return;
+        const files = git(path, ["diff", "--name-only", "--diff-filter=U"]);
+        if (!files) throw new Error(result.stderr || result.stdout);
+        const hunks = git(path, ["diff", "--cc"]).slice(0, 24000);
+        const count = repo
+          .tasks()
+          .filter((x) => x.resolves_task_id === original.id).length;
+        if (count >= 2) {
+          repo.updateTask(original.id, {
+            status: "blocked",
+            blocker:
+              "Integration conflict: maximum 2 resolution tasks exhausted",
+          });
+          repo.event(
+            "integration_blocked",
+            "Maximum 2 conflict-resolution tasks exhausted",
+            original.id,
+          );
+        } else {
+          const task = repo.addTask({
+            project: p.key,
+            title: `Resolve merge conflict: ${original.identifier} into integration`,
+            priority: "P0",
+            role: "any",
+            worker: original.worker,
+            status: "ready",
+            integrated: 0,
+            resolves_task_id: original.id,
+            description: `${original.title}\n\nConflicting files:\n${files}\n\n${hunks}\n\nIn this worktree (branched from the current integration tip) run git merge aam/${original.identifier}, resolve every conflict keeping BOTH sides' intent (registries/imports: union; docs: keep both sections), run the project tests, leave the merge COMMITTED.\nPrevious resolution branch, if useful: ${t.branch}`,
+          });
+          repo.event(
+            "integration_conflict",
+            `Created ${task.identifier}; files: ${files}`,
+            original.id,
+          );
+        }
+        throw new Error("Merge conflict recorded");
+      });
+    repo.updateTask(t.id, { integrated: 1, integration_attempts: 0 });
+    repo.updateTask(original.id, { integrated: 1, integration_attempts: 0 });
     repo.event(
       "integrate",
       `Integrated ${t.identifier} into ${p.integration_branch}`,
@@ -112,7 +205,7 @@ export function integrate(repo: Repo, id: string) {
     if (!(
       error instanceof Error && error.message === "Merge conflict recorded"
     ))
-      repo.event("integration_error", String(error), original.id);
+      integrationFailure(repo, t.id, String(error));
   }
 }
 export function promote(
@@ -147,5 +240,8 @@ export function promote(
   };
   if (checkout) merge(checkout);
   else temporary(repo, p, target, merge);
-  repo.event("promote", `Promoted ${p.integration_branch} into ${target}`);
+  repo.event(
+    "integration_promote",
+    `Promoted ${p.integration_branch} into ${target}`,
+  );
 }

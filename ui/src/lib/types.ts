@@ -31,6 +31,7 @@ export interface Task {
   project_id: number;
   identifier: string;
   integrated?: number;
+  dependency_waiting?: string;
   resolves_task_id?: number | null;
   seq: number;
   sort_order?: number;
@@ -109,6 +110,9 @@ export interface Status {
     promotions_today: number;
     idle_since?: string;
     caffeinate: boolean;
+    claude_ok?: boolean;
+    claude_checked_at?: string | null;
+    claude_error?: string;
   };
   now: string;
   daemon: { running: boolean; pid?: number; last_tick_at: string | null };

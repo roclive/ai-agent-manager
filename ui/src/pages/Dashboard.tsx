@@ -82,6 +82,17 @@ export function Dashboard({ project }: { project: string }) {
         <section className="page-section">
           <h2>夜间自动驾驶</h2>
           <p>
+            {status.data.autopilot.claude_ok === false && (
+              <span
+                style={{
+                  color: "var(--destructive, #dc2626)",
+                  display: "block",
+                }}
+              >
+                Claude 不可用，自动驾驶已暂停：
+                {status.data.autopilot.claude_error || "等待登录健康检查"}
+              </span>
+            )}
             今日审查 {status.data.autopilot.auto_reviews_today} /{" "}
             {status.data.autopilot.auto_review_max} · 今日规划{" "}
             {status.data.autopilot.planner_runs_today} /{" "}

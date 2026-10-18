@@ -92,6 +92,7 @@ function KanbanCard({ task, run }: { task: Task; run?: Run }) {
         opacity: isDragging ? 0.35 : 1,
       }}
       className="task-card"
+      title={task.dependency_waiting || undefined}
     >
       <div className="card-meta">
         <ProjectChip

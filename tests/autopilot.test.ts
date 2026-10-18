@@ -42,6 +42,7 @@ const planned = () => ({
 });
 it("migrates project opt-ins idempotently and validates updates/budgets", () => {
   f = fixture();
+  f.repo.setSetting("claude_ok", "1");
   expect(f.repo.project("T")).toMatchObject({
     auto_review: 0,
     autopilot: 0,
@@ -58,6 +59,7 @@ it("migrates project opt-ins idempotently and validates updates/budgets", () => 
 });
 it("never reviews or promotes non-opted-in projects even with legacy global mode", () => {
   f = fixture();
+  f.repo.setSetting("claude_ok", "1");
   f.repo.setSetting("review_mode", "claude");
   const t = f.task({ status: "in_review" });
   f.task({ status: "backlog" });
@@ -72,6 +74,7 @@ it.each(["approve", "reject"])(
   "applies async %s and blocks after two consecutive rejects",
   (verdict) => {
     f = fixture();
+    f.repo.setSetting("claude_ok", "1");
     f.repo.updateProject("T", { auto_review: 1 });
     const t = f.task({ status: "in_review" });
     pending("review", t.id, { verdict, notes: "review notes" });
@@ -93,6 +96,7 @@ it.each(["approve", "reject"])(
 );
 it("rejects failed/missing tests without calling Claude and respects review budget", () => {
   f = fixture();
+  f.repo.setSetting("claude_ok", "1");
   f.repo.updateProject("T", { auto_review: 1, test_cmd: "exit 1" });
   const t = f.task({ status: "in_review" });
   startAutopilot(f.repo);
@@ -113,6 +117,7 @@ it("rejects failed/missing tests without calling Claude and respects review budg
 });
 it("leaves malformed reviews pending after one retry", () => {
   f = fixture();
+  f.repo.setSetting("claude_ok", "1");
   f.repo.updateProject("T", { auto_review: 1 });
   const t = f.task({ status: "in_review" });
   pending("review", t.id, { wrong: true });
@@ -134,6 +139,7 @@ it("leaves malformed reviews pending after one retry", () => {
 });
 it("promotes by rank, rotates projects, caps at free slots and respects dependencies", () => {
   f = fixture();
+  f.repo.setSetting("claude_ok", "1");
   f.repo.updateProject("T", { autopilot: 1, autopilot_rank: 10 });
   f.repo.addProject({ key: "U", name: "U", repo_path: f.path });
   f.repo.updateProject("U", { autopilot: 1, autopilot_rank: 10 });
@@ -172,6 +178,7 @@ it("validates planner JSON, sizes, types and dependency cycles", () => {
 });
 it("creates planner tasks atomically with shared context and translated dependencies", () => {
   f = fixture();
+  f.repo.setSetting("claude_ok", "1");
   writeFileSync(resolve(f.path, "context.md"), "Shared rules");
   f.repo.updateProject("T", {
     autopilot: 1,
@@ -188,6 +195,7 @@ it("creates planner tasks atomically with shared context and translated dependen
 });
 it("backs off failed plans, enforces planner budget and reports status", async () => {
   f = fixture();
+  f.repo.setSetting("claude_ok", "1");
   f.repo.updateProject("T", { autopilot: 1, goal: "Test" });
   pending("plan", null, { tasks: [] });
   collectAutopilot(f.repo);
@@ -213,6 +221,7 @@ it("backs off failed plans, enforces planner budget and reports status", async (
 });
 it("runs fake Claude via stdin asynchronously and limits launches", async () => {
   f = fixture();
+  f.repo.setSetting("claude_ok", "1");
   f.repo.updateProject("T", { auto_review: 1 });
   const fake = resolve(f.root, "claude.sh");
   writeFileSync(
@@ -238,6 +247,7 @@ it("runs fake Claude via stdin asynchronously and limits launches", async () => 
 });
 it("starts caffeinate once, restarts after death and stops when disabled", () => {
   f = fixture();
+  f.repo.setSetting("claude_ok", "1");
   const kill = vi.fn(),
     spawn = vi.fn(() => ({ pid: 123, on: vi.fn(), kill }));
   let living = true;
@@ -265,6 +275,7 @@ it("starts caffeinate once, restarts after death and stops when disabled", () =>
 
 it("patches opt-in fields through API without enabling other projects", async () => {
   f = fixture();
+  f.repo.setSetting("claude_ok", "1");
   f.repo.addProject({ key: "U", name: "Other", repo_path: f.path });
   const app = createApp(f.repo);
   const send = (body: unknown) =>
@@ -297,6 +308,7 @@ it("patches opt-in fields through API without enabling other projects", async ()
 
 it("cancels pending planning results after opting out", () => {
   f = fixture();
+  f.repo.setSetting("claude_ok", "1");
   f.repo.updateProject("T", { autopilot: 1, goal: "Tests" });
   pending("plan", null, planned());
   f.repo.updateProject("T", { autopilot: 0 });

@@ -71,6 +71,9 @@ export function autopilotStatus(repo: Repo) {
       }[]
     ).filter((e) => today(e.ts)).length,
     idle_since: repo.getSetting("idle_since") || undefined,
+    claude_ok: repo.getSetting("claude_ok") === "1",
+    claude_checked_at: repo.getSetting("claude_checked_at") || null,
+    claude_error: repo.getSetting("claude_error") || "",
     caffeinate: alive(Number(repo.getSetting("keep_awake_pid")) || null),
   };
 }
@@ -89,7 +92,25 @@ function limitedEvent(
 const resultPath = (repo: Repo, id: number) =>
   resolve(repo.home, "autopilot", String(id), "result.json");
 // Constant wrapper code; all prompts travel through files and stdin. Survives one-shot CLI exit.
-const wrapper = `const fs=require('node:fs'), cp=require('node:child_process'); const [cmd,cwd,prompt,out]=process.argv.slice(1); const r=cp.spawnSync(cmd, ['-p','--output-format','json','--permission-mode','plan','--disable-slash-commands','--no-session-persistence','--tools','','--strict-mcp-config','--mcp-config','{"mcpServers":{}}','--setting-sources','','--settings','{"disableAllHooks":true}'], {cwd,input:fs.readFileSync(prompt),env:{PATH:process.env.PATH,HOME:process.env.HOME,USER:process.env.USER,LOGNAME:process.env.LOGNAME},encoding:'utf8',timeout:240000,maxBuffer:1048576}); fs.writeFileSync(out+'.tmp',JSON.stringify({status:r.status,stdout:r.stdout||'',stderr:r.stderr||r.error?.message||''})); fs.renameSync(out+'.tmp',out);`;
+export const claudeArgs: string[] = [
+  "-p",
+  "--output-format",
+  "json",
+  "--permission-mode",
+  "plan",
+  "--disable-slash-commands",
+  "--no-session-persistence",
+  "--tools",
+  "",
+  "--strict-mcp-config",
+  "--mcp-config",
+  '{"mcpServers":{}}',
+  "--setting-sources",
+  "",
+  "--settings",
+  '{"disableAllHooks":true}',
+];
+const wrapper = `const fs=require('node:fs'), cp=require('node:child_process'); const [cmd,cwd,prompt,out,flags]=process.argv.slice(1); const r=cp.spawnSync(cmd, JSON.parse(flags), {cwd,input:fs.readFileSync(prompt),env:{PATH:process.env.PATH,HOME:process.env.HOME,USER:process.env.USER,LOGNAME:process.env.LOGNAME},encoding:'utf8',timeout:240000,maxBuffer:1048576}); fs.writeFileSync(out+'.tmp',JSON.stringify({status:r.status,stdout:r.stdout||'',stderr:r.stderr||r.error?.message||''})); fs.renameSync(out+'.tmp',out);`;
 function launch(repo: Repo, job: Job, cwd: string, prompt: string) {
   const dir = dirname(resultPath(repo, job.id));
   mkdirSync(dir, { recursive: true });
@@ -104,6 +125,7 @@ function launch(repo: Repo, job: Job, cwd: string, prompt: string) {
       cwd,
       file,
       resultPath(repo, job.id),
+      JSON.stringify(claudeArgs),
     ],
     { detached: true, stdio: "ignore", env: cleanEnv() },
   );
@@ -171,6 +193,7 @@ export type PlannedTask = {
 };
 function unwrap(text: string): unknown {
   const o = JSON.parse(text);
+  if (o?.is_error === true) throw new Error(String(o.result || "Claude error"));
   return typeof o?.result === "string" ? JSON.parse(o.result) : o;
 }
 export function validatePlan(text: string): PlannedTask[] {
@@ -251,6 +274,14 @@ export function collectAutopilot(repo: Repo) {
         ? JSON.parse(text)
         : { status: -1, stderr: "Reviewer timed out" };
       if (r.status !== 0) throw new Error(r.stderr || "Claude failed");
+      let outer;
+      try {
+        outer = JSON.parse(r.stdout);
+      } catch {
+        /* review parser handles prose */
+      }
+      if (outer?.is_error === true)
+        throw new Error(String(outer.result || "Claude error"));
       if (job.kind === "review") {
         const v = parseVerdict(r.stdout);
         if (!v) {
@@ -367,6 +398,16 @@ export function promoteIdle(repo: Repo) {
   return count;
 }
 export function startAutopilot(repo: Repo) {
+  if (repo.getSetting("claude_ok") !== "1") {
+    if (repo.projects().some((p) => p.auto_review || p.autopilot))
+      limitedEvent(
+        repo,
+        "autopilot_paused",
+        repo.getSetting("claude_error") || "Claude health unchecked",
+        30,
+      );
+    return;
+  }
   const rows = jobs(repo),
     status = autopilotStatus(repo);
   // A single global reviewer launch per minute, including malformed-output retries.
@@ -447,4 +488,58 @@ export function startAutopilot(repo: Repo) {
       30,
     );
   } else repo.setSetting("idle_since", "");
+}
+
+export function checkClaude(
+  repo: Repo,
+): Promise<{ ok: boolean; result: string }> {
+  return new Promise((resolveCheck) => {
+    let stdout = "",
+      stderr = "",
+      settled = false;
+    const child = spawn(process.env.AAM_FAKE_CLAUDE || "claude", claudeArgs, {
+      cwd: repo.home,
+      env: cleanEnv(),
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    const finish = (code: number | null, error = "") => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      let ok = false,
+        result = error || stderr || stdout;
+      try {
+        const outer = JSON.parse(stdout);
+        result = String(outer.result ?? stdout);
+        ok =
+          code === 0 &&
+          outer.is_error !== true &&
+          typeof outer.result === "string";
+      } catch {
+        /* invalid output is unhealthy */
+      }
+      const previous = repo.getSetting("claude_ok");
+      repo.setSetting("claude_ok", ok ? "1" : "0");
+      repo.setSetting("claude_checked_at", new Date().toISOString());
+      repo.setSetting("claude_error", ok ? "" : result.slice(0, 200));
+      if (ok && previous === "0")
+        repo.event("autopilot_resumed", "Claude login recovered");
+      if (!ok) limitedEvent(repo, "autopilot_paused", result.slice(0, 200), 30);
+      resolveCheck({ ok, result: result.slice(0, 200) });
+    };
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      finish(null, "Claude health check timed out");
+    }, 60000);
+    child.stdout.on("data", (data) => {
+      stdout = (stdout + data).slice(-65536);
+    });
+    child.stderr.on("data", (data) => {
+      stderr = (stderr + data).slice(-65536);
+    });
+    child.on("error", (error) => finish(null, error.message));
+    child.on("close", (code) => finish(code));
+    child.stdin.on("error", () => {});
+    child.stdin.end("Reply with ok.");
+  });
 }

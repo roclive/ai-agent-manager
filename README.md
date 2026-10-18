@@ -230,3 +230,25 @@ aam settings set keep_awake 0
 只有显式执行 `aam project promote KEY --yes [--into main]`，或调用
 `POST /api/projects/KEY/promote` 并提交 `{"confirm":true}`，才合并到配置的基础分支。
 设置页可预览提交并确认合并。基础分支工作区存在未提交修改时拒绝操作；推广冲突会中止合并。
+
+开启集成时，会按完成时间依次回填已有分支的完成任务，并输出已集成、待集成、跳过数量。
+已是集成分支祖先的提交直接标记成功；存在未完成冲突解决任务的任务会跳过。
+依赖任务必须完成且已集成，后续任务才会被派发；看板卡片提示等待原因。
+
+每次 tick 会重试未集成的完成任务，使用带失效 PID 检测的
+`<home>/integration.lock` 串行合并，避免 CLI 审批与 daemon 同时操作。
+非冲突失败累计 5 次后记录 `integration_blocked` 并停止自动重试，需人工检查 Git 状态和错误事件；
+修复后可在数据库将该任务的 `integration_attempts` 重置为 0，以恢复重试。
+冲突继续走 P0 解决任务流程。
+
+### Claude 登录健康检查
+
+运行 `aam autopilot check`，使用自动驾驶相同的参数和最小环境调用 Claude，
+输出 ok/error 和结果前 200 字符，失败时退出码为 1。
+daemon 启动和每 30 分钟异步检查一次，不阻塞 tick。
+即使退出码为 0，JSON 中 `is_error:true` 仍算失败（例如未登录）。
+检查失败或尚未检查时，不启动新审查和规划，也不消耗对应每日预算。
+状态 API 和仪表盘显示检查时间、错误及暂停提示；失败记录限频的
+`autopilot_paused`，恢复后记录 `autopilot_resumed`。
+若提示未登录，请在运行 daemon 的同一用户环境中执行 Claude 登录，再运行检查。
+测试用 `AAM_FAKE_CLAUDE` 指向本地可执行脚本，无需真实 Claude。

@@ -26,6 +26,13 @@ export function fixture(script = "printf changed > changed.txt\nexit 0") {
     mode: 0o755,
   });
   process.env.AAM_FAKE_WORKER = fake;
+  const fakeClaude = resolve(root, "claude.sh");
+  writeFileSync(
+    fakeClaude,
+    `#!/bin/sh\ncat >/dev/null\nprintf '{"result":"ok","is_error":false}'\n`,
+    { mode: 0o755 },
+  );
+  process.env.AAM_FAKE_CLAUDE = fakeClaude;
   return {
     root,
     path,
@@ -44,6 +51,7 @@ export function fixture(script = "printf changed > changed.txt\nexit 0") {
       repo.close();
       rmSync(root, { recursive: true, force: true });
       delete process.env.AAM_FAKE_WORKER;
+      delete process.env.AAM_FAKE_CLAUDE;
     },
   };
 }

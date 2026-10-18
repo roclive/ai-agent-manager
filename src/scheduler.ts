@@ -1,3 +1,4 @@
+import { checkClaude } from "./core/autopilot.js";
 import { keepAwake } from "./core/keep-awake.js";
 import { Cron } from "croner";
 import { Repo, type Routine } from "./db/index.js";
@@ -55,6 +56,24 @@ export function daemon(repo: Repo, interval = 60) {
     throw new Error("Interval must be positive");
   return new Promise<void>((resolve) => {
     const awake = keepAwake(repo);
+    let checking: Promise<unknown> | undefined;
+    let stopped = false;
+    // Healthy: re-check every 30 min. Unhealthy: every 2 min, so one transient failure cannot pause the autopilot for half an hour.
+    const healthDue = () => {
+      const at = Date.parse(repo.getSetting("claude_checked_at") || "") || 0;
+      const gap = repo.getSetting("claude_ok") === "1" ? 30 * 60000 : 2 * 60000;
+      return Date.now() - at >= gap;
+    };
+    const health = (force = false) => {
+      if (checking || stopped || (!force && !healthDue())) return;
+      checking = checkClaude(repo)
+        .catch((e) => repo.event("daemon_error", String(e)))
+        .finally(() => {
+          checking = undefined;
+        });
+    };
+    health(true);
+    const healthTimer = setInterval(() => health(), 30000);
     const jobs = new Map<number, { signature: string; job: Cron }>();
     const heartbeat = () => {
       try {
@@ -88,12 +107,15 @@ export function daemon(repo: Repo, interval = 60) {
         }
     };
     const timer = setInterval(heartbeat, interval * 1000);
-    const stop = () => {
+    const stop = async () => {
+      stopped = true;
+      clearInterval(healthTimer);
       clearInterval(timer);
       awake.stop();
       for (const { job } of jobs.values()) job.stop();
       process.off("SIGINT", stop);
       process.off("SIGTERM", stop);
+      await checking;
       resolve();
     };
     process.on("SIGINT", stop);

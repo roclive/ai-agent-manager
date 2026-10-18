@@ -3,7 +3,7 @@ import { Command } from "commander";
 import { readFileSync } from "node:fs";
 import { tail } from "./core/logs.js";
 import { Repo } from "./db/index.js";
-import { autopilotStatus } from "./core/autopilot.js";
+import { autopilotStatus, checkClaude } from "./core/autopilot.js";
 import { review } from "./core/review.js";
 import { merge, prune } from "./core/worktree.js";
 export const output = (v: unknown) =>
@@ -71,13 +71,17 @@ export function cli(repo: Repo) {
           o.goalFile !== undefined ? readFileSync(o.goalFile, "utf8") : o.goal;
       if (o.rank !== undefined) patch.autopilot_rank = Number(o.rank);
       if (o.contextFile !== undefined) patch.context_file = o.contextFile;
-      if (o.integration !== undefined) setIntegration(repo, key, o.integration);
+      if (o.integration !== undefined)
+        output(setIntegration(repo, key, o.integration));
       output(repo.updateProject(key, patch));
     });
-  app
-    .command("autopilot")
-    .command("status")
-    .action(() => output(autopilotStatus(repo)));
+  const autopilot = app.command("autopilot");
+  autopilot.command("check").action(async () => {
+    const health = await checkClaude(repo);
+    console.log(`${health.ok ? "ok" : "error"}: ${health.result}`);
+    if (!health.ok) process.exitCode = 1;
+  });
+  autopilot.command("status").action(() => output(autopilotStatus(repo)));
   const task = app.command("task");
   task
     .command("add")

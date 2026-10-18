@@ -7,7 +7,12 @@ import { prompt, spawnWorker } from "../workers/index.js";
 export function dependenciesDone(repo: Repo, t: Task) {
   return (JSON.parse(t.depends_on) as string[]).every((id) => {
     try {
-      return repo.task(id).status === "done";
+      const dep = repo.task(id);
+      return (
+        dep.status === "done" &&
+        (!repo.project(dep.project_id).integration_branch ||
+          dep.integrated === 1)
+      );
     } catch {
       return false;
     }
@@ -67,4 +72,20 @@ export function dispatch(repo: Repo, id: string, force = false) {
       .run(new Date().toISOString(), String(e), idRun);
     throw e;
   }
+}
+
+export function dependencyWaiting(repo: Repo, t: Task): string {
+  return (JSON.parse(t.depends_on) as string[])
+    .flatMap((id) => {
+      try {
+        const dep = repo.task(id);
+        if (dep.status !== "done") return [`等待依赖 ${id} 完成`];
+        if (repo.project(dep.project_id).integration_branch && !dep.integrated)
+          return [`等待依赖 ${id} 集成`];
+      } catch {
+        return [`依赖 ${id} 不存在`];
+      }
+      return [];
+    })
+    .join("；");
 }
