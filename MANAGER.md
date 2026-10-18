@@ -19,6 +19,8 @@
 
 合并任务必须合入最新 `aam/integration` 和原始 `aam/<ID>`，保留双方功能，完成真正 merge commit，验证祖先关系，再跑完整测试。禁止用复制快照代替合并。系统已为此修正 worker 指令，新增 finalize 祖先检查，并在同项目有 active work/review 时延后冲突任务；其他项目仍可并行。
 
+手工修复后送自动审核，必须为当前提交真实执行测试，并把命令、SHA、日志和返回码登记为新的 `manager-validation` run（原失败run保持不变）；只写event或feedback不会替换自动审核读取的最新test_exit_code。禁止直接把旧失败run改为成功，也不能仅写in_review跳过测试证据。
+
 各项目只有 `status=done` 且集成开启时 `integrated=1` 才算解除依赖。审核不能以 worker 退出 0 代替测试证据；硬件未验证要明确记录。
 
 ## 已完成的本轮接手（2026-10-18 日本时间晚间）
@@ -33,6 +35,12 @@
 - STR-2：旧报告“没有代码”来自早期失败 run，最新 run 实际已实现 --hetero-gpu。已修正对 STR-1 的任务依赖，并真正合入加固后的 STR-1（a578227）；20 项原型测试在本机通过。正常 launcher 测试需要未安装的 torch，已退回 ready，要求保留正常测试并增加不依赖 torch/GPU/网络的真实模块注入测试通道。不要为此启动未经授权的外部硬件服务。
 
 ## 下一步优先级
+
+### 2026-10-18 23:42 JST 唤醒记录
+
+- Codex额度32%、普通使用正常；Ollama云端路由保持，不切回primary。发现launchd长期运行的daemon仍保留旧llmArgs（仅根级openai_base_url），对daemon PID86927发SIGTERM使其正常退出后由launchd重启为79478；AAM-16/GW-4既有worker PID45294/45296/74546/74548均继续存在，没有重启。新健康检查实际参数含named aam-fallback provider、danger-full-access、approval_policy=never；首次瞬时超时后自动复查在14:41:57Z返回ok。
+- BGM-3上轮22测试通过，但经理只写event并置in_review，没有登记新run；auto-review按设计读取旧run157失败返回Tests did not pass。这次先取得blocked租约，在tick锁内真实重跑22测试，提交SHA32c55b15，登记独立manager-validation run159及 `.aam/manager-validation/BGM-3/1792334481676/test.log`。保留run157原失败，将仅因证据遗漏消耗的尝试3→2恢复，审核预算不回退，重新送in_review；仍须实质功能审核，未直接批准。
+- 不修改正在工作的AAM-16/GW-4工作区；GW-7人工暂停继续保留。持久唤醒、caffeinate、并发2/审核1、额度兜底开关1和无cooldown均正常。AAM本轮110项离线测试与类型检查通过。
 
 ### 2026-10-18 23:32 JST 唤醒记录
 
