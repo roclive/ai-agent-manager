@@ -14,4 +14,10 @@
 
 - Manager review fixes supersede the original spec: aam commits worker changes from last.md (summary line capped at 72 characters, body at 4096 UTF-8 bytes); workers leave changes uncommitted. Dependency merges precede setup, skip missing/contained branches, and abort conflicts; only newly created branches/worktrees are removed on conflict. Preparation errors block dispatch without consuming worker attempts. Rate-limit detection requires a failed/unknown exit and an error-bearing log line.
 
-- Status daemon liveness uses tick.lock and a live PID; between ticks an idle daemon without a lock reports false. Routine firing history uses routine_fire events keyed by stable routine ID (older name-only events are not backfilled). SSE starts from event ID 0 unless Last-Event-ID is supplied.
+- Status daemon liveness: a live `tick.lock` PID, or a heartbeat (`last_tick_at`) within the last 180 s (`last_tick_age_s` is returned). Routine firing history uses routine_fire events keyed by stable routine ID (older name-only events are not backfilled). SSE starts from the latest event ID unless `Last-Event-ID` (resume) or `?replay=K` (last K events) is supplied.
+
+## AAM-5 UI
+- Paperclip components are copied into ui/src and adapted locally; there are no runtime vendor imports.
+- Legacy server rejects fractional `sort` values (it stores them in positive-integer seq). Midpoint reordering uses the AAM-4 contract; legacy fallback rounds to a positive integer so status moves still work. Adjacent legacy positions may tie until AAM-4 adds REAL sort_order. Task identifiers are never edited.
+- Missing legacy status/runs endpoints show unavailable daemon state / no running indicators; SSE failures fall back to polling.
+- Project colour is taken from the API when supplied, with a neutral fallback because AAM-4 does not specify a colour field.
