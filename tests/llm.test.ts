@@ -86,6 +86,19 @@ it("uses the same backend for workers and Claude-configured reviews, with settin
   f.repo.setSetting("ollama_fallback_enabled", "0");
   expect(llmArgs(f.repo)).toEqual([]);
 });
+it("records an explicit primary provider independently of the legacy Ollama setting", () => {
+  setup();
+  f.repo.setSetting("llm_backend", "ollama");
+  const dir = resolve(f.root, "explicit-primary");
+  mkdirSync(dir);
+  recordBackend(f.repo, dir, "codex");
+  expect(
+    JSON.parse(readFileSync(resolve(dir, "backend.json"), "utf8")),
+  ).toMatchObject({
+    backend: "primary",
+    provider: "codex",
+  });
+});
 it.each(["review", "plan"])(
   "switches rate-limited %s jobs and leaves tasks for retry",
   (kind) => {

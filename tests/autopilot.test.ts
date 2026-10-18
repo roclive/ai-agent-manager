@@ -15,10 +15,12 @@ import {
 import { git } from "../src/core/process.js";
 import { createApp } from "../src/server.js";
 import { keepAwake } from "../src/core/keep-awake.js";
+import { activeReservation, providerCooldown } from "../src/core/providers.js";
 let f: ReturnType<typeof fixture>;
 afterEach(() => {
   f?.cleanup();
   delete process.env.AAM_FAKE_CLAUDE;
+  delete process.env.AAM_FAKE_CODEX;
 });
 function pending(kind: string, task: number | null, result: unknown) {
   const r = f.repo.db
@@ -256,6 +258,72 @@ it("runs fake Claude via stdin asynchronously and limits launches", async () => 
     collectAutopilot(f.repo);
   }
   expect(f.repo.task(t.id).status).toBe("done");
+});
+
+it("reserves advanced-judgment capacity and scopes its 429 breaker to the selected provider", () => {
+  f = fixture();
+  f.repo.setSetting("claude_ok", "1");
+  f.repo.setSetting(
+    "provider_policy",
+    JSON.stringify({
+      version: 1,
+      providers: [
+        {
+          id: "claude",
+          worker: "claude",
+          class: "premium",
+          legal: true,
+          roles: ["any"],
+          max_complexity: "high",
+          reserve_remaining: 0,
+          reservation: { low: 1, medium: 1, high: 1 },
+        },
+        {
+          id: "codex",
+          worker: "codex",
+          class: "premium",
+          legal: true,
+          roles: ["any"],
+          max_complexity: "high",
+          reserve_remaining: 0,
+          reservation: { low: 1, medium: 1, high: 1 },
+        },
+      ],
+    }),
+  );
+  f.repo.setSetting(
+    "cooldown_until",
+    new Date(Date.now() + 60_000).toISOString(),
+  );
+  f.repo.updateProject("T", { auto_review: 1 });
+  const task = f.task({
+    status: "in_review",
+    worktree_path: f.path,
+    branch: "main",
+  });
+  const fake = resolve(f.root, "slow-reviewer.sh");
+  writeFileSync(fake, "#!/bin/sh\ncat >/dev/null\nsleep 2\n", { mode: 0o755 });
+  process.env.AAM_FAKE_CLAUDE = fake;
+  startAutopilot(f.repo);
+  const job = f.repo.db
+    .prepare("SELECT * FROM autopilot_jobs WHERE task_id=?")
+    .get(task.id) as {
+    id: number;
+    provider: string;
+    reservation_amount: number;
+  };
+  expect(job).toMatchObject({ provider: "claude", reservation_amount: 1 });
+  expect(activeReservation(f.repo, "claude")).toBe(1);
+  const dir = resolve(f.repo.home, "autopilot", String(job.id));
+  writeFileSync(
+    resolve(dir, "result.json"),
+    JSON.stringify({ status: 1, stderr: "Error: 429 rate limit exceeded" }),
+  );
+  collectAutopilot(f.repo);
+  expect(activeReservation(f.repo, "claude")).toBe(0);
+  expect(providerCooldown(f.repo, "claude")).not.toBeNull();
+  expect(providerCooldown(f.repo, "codex")).toBeNull();
+  expect(f.repo.getSetting("cooldown_until")).not.toBe("");
 });
 it("starts caffeinate once, restarts after death and stops when disabled", () => {
   f = fixture();

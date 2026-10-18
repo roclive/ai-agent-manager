@@ -15,6 +15,7 @@ export type {
 export interface ProviderSelection extends ProviderRule {
   amount: number;
 }
+type ProviderWork = Pick<Task, "role" | "complexity" | "worker">;
 
 const levels: Complexity[] = ["low", "medium", "high"];
 
@@ -61,13 +62,15 @@ export function freezeProvider(
 export function activeReservation(repo: Repo, provider: string) {
   const row = repo.db
     .prepare(
-      "SELECT COALESCE(SUM(amount),0) total FROM provider_reservations WHERE provider=?",
+      `SELECT
+        COALESCE((SELECT SUM(amount) FROM provider_reservations WHERE provider=?),0) +
+        COALESCE((SELECT SUM(reservation_amount) FROM autopilot_jobs WHERE provider=? AND status='pending'),0) total`,
     )
-    .get(provider) as { total: number };
+    .get(provider, provider) as { total: number };
   return Number(row.total);
 }
 
-function capable(rule: ProviderRule, task: Task) {
+function capable(rule: ProviderRule, task: ProviderWork) {
   return (
     rule.legal &&
     (rule.roles.includes("any") ||
@@ -77,6 +80,14 @@ function capable(rule: ProviderRule, task: Task) {
 }
 
 export function selectProvider(repo: Repo, task: Task): ProviderSelection {
+  return selectProviderFor(repo, task, ["codex", "opencode"]);
+}
+
+export function selectProviderFor(
+  repo: Repo,
+  task: ProviderWork,
+  requiredWorkers?: ProviderRule["worker"][],
+): ProviderSelection {
   const configured = providerRules(repo);
   if (!configured.length) {
     const id =
@@ -105,6 +116,10 @@ export function selectProvider(repo: Repo, task: Task): ProviderSelection {
       return rank(a.rule) - rank(b.rule) || a.index - b.index;
     });
   for (const { rule } of ordered) {
+    if (requiredWorkers && !requiredWorkers.includes(rule.worker)) {
+      failures.push(`${rule.id}: worker mismatch`);
+      continue;
+    }
     if (!capable(rule, task)) {
       failures.push(`${rule.id}: capability/legal mismatch`);
       continue;

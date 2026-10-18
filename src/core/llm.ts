@@ -36,7 +36,11 @@ export function providerLlmArgs(repo: Repo, provider: string): string[] {
 }
 
 export function recordBackend(repo: Repo, dir: string, provider?: string) {
-  const backend = provider === "ollama" ? "ollama" : llmBackend(repo);
+  const backend = provider
+    ? provider === "ollama"
+      ? "ollama"
+      : "primary"
+    : llmBackend(repo);
   writeFileSync(
     resolve(dir, "backend.json"),
     JSON.stringify({

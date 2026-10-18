@@ -118,6 +118,17 @@ export class Repo {
     this.db.exec(
       `CREATE TABLE IF NOT EXISTS autopilot_jobs(id INTEGER PRIMARY KEY, kind TEXT NOT NULL, project_id INTEGER NOT NULL REFERENCES projects(id), task_id INTEGER REFERENCES tasks(id), started_at TEXT NOT NULL, finished_at TEXT, status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 1, notes TEXT NOT NULL DEFAULT '');`,
     );
+    const autopilotColumns = this.db.pragma("table_info(autopilot_jobs)") as {
+      name: string;
+    }[];
+    for (const [name, declaration] of Object.entries({
+      provider: "TEXT",
+      reservation_amount: "REAL NOT NULL DEFAULT 0",
+    }))
+      if (!autopilotColumns.some((c) => c.name === name))
+        this.db.exec(
+          `ALTER TABLE autopilot_jobs ADD COLUMN ${name} ${declaration}`,
+        );
     const columns = this.db.pragma("table_info(tasks)") as { name: string }[];
     if (!columns.some((c) => c.name === "lost_count"))
       this.db.exec(

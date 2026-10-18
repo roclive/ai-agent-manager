@@ -15,6 +15,12 @@ import { Repo, type Project } from "../db/index.js";
 import { killGroup, alive } from "./process.js";
 import { dependenciesDone } from "./dispatch.js";
 import { reviewCalibration, parseVerdict } from "./review.js";
+import {
+  freezeProvider,
+  selectProviderFor,
+  type ProviderSelection,
+} from "./providers.js";
+import { providerPolicyConfigured } from "./provider-policy.js";
 
 type Job = {
   id: number;
@@ -26,6 +32,8 @@ type Job = {
   status: string;
   attempts: number;
   notes: string;
+  provider: string | null;
+  reservation_amount: number;
 };
 const jobs = (repo: Repo) =>
   repo.db
@@ -135,9 +143,15 @@ export const healthSetting = (repo: Repo, key: string) =>
     ? repo.getSetting(`claude_${key}`)
     : "") ||
   "";
-export function reviewerCommand(repo: Repo, cwd: string, dir: string) {
-  const codex =
-    llmBackend(repo) === "ollama" || repo.getSetting("reviewer") !== "claude";
+export function reviewerCommand(
+  repo: Repo,
+  cwd: string,
+  dir: string,
+  provider?: string,
+) {
+  const codex = provider
+    ? provider !== "claude"
+    : llmBackend(repo) === "ollama" || repo.getSetting("reviewer") !== "claude";
   return {
     cmd: codex
       ? process.env.AAM_FAKE_CODEX || "codex"
@@ -154,7 +168,11 @@ export function reviewerCommand(repo: Repo, cwd: string, dir: string) {
           'approval_policy="never"',
           "-c",
           'model_reasoning_effort="medium"',
-          ...llmArgs(repo),
+          ...(provider === "ollama"
+            ? llmArgs(repo, "ollama")
+            : provider
+              ? []
+              : llmArgs(repo)),
           "--skip-git-repo-check",
           "-o",
           resolve(dir, "last.md"),
@@ -172,10 +190,10 @@ const wrapper = `const fs=require('node:fs'), cp=require('node:child_process'); 
 function launch(repo: Repo, job: Job, cwd: string, prompt: string) {
   const dir = dirname(resultPath(repo, job.id));
   mkdirSync(dir, { recursive: true });
-  recordBackend(repo, dir);
+  recordBackend(repo, dir, job.provider || undefined);
   const file = resolve(dir, "prompt.txt");
   writeFileSync(file, prompt + contextRule, { mode: 0o600 });
-  const command = reviewerCommand(repo, cwd, dir);
+  const command = reviewerCommand(repo, cwd, dir, job.provider || undefined);
   const child = spawn(
     process.execPath,
     [
@@ -196,12 +214,49 @@ function launch(repo: Repo, job: Job, cwd: string, prompt: string) {
   child.unref();
 }
 function reserve(repo: Repo, kind: string, p: Project, taskId: number | null) {
-  const r = repo.db
-    .prepare(
-      "INSERT INTO autopilot_jobs(kind,project_id,task_id,started_at) VALUES (?,?,?,?)",
-    )
-    .run(kind, p.id, taskId, new Date().toISOString());
-  return jobs(repo).find((j) => j.id === Number(r.lastInsertRowid))!;
+  return repo.db
+    .transaction(() => {
+      let selected: ProviderSelection;
+      if (providerPolicyConfigured(repo.getSetting("provider_policy"))) {
+        selected = selectProviderFor(
+          repo,
+          { role: "any", complexity: "high", worker: "codex" },
+          ["codex", "claude"],
+        );
+      } else {
+        const provider =
+          llmBackend(repo) === "ollama"
+            ? "ollama"
+            : repo.getSetting("reviewer") === "claude"
+              ? "claude"
+              : "codex";
+        selected = {
+          id: provider,
+          worker: provider === "claude" ? "claude" : "codex",
+          class: "standard",
+          legal: true,
+          roles: ["any"],
+          max_complexity: "high",
+          reserve_remaining: 0,
+          reservation: { low: 0, medium: 0, high: 0 },
+          amount: 0,
+        };
+      }
+      const r = repo.db
+        .prepare(
+          "INSERT INTO autopilot_jobs(kind,project_id,task_id,started_at,provider,reservation_amount) VALUES (?,?,?,?,?,?)",
+        )
+        .run(
+          kind,
+          p.id,
+          taskId,
+          new Date().toISOString(),
+          selected.id,
+          selected.amount,
+        );
+      return jobs(repo).find((j) => j.id === Number(r.lastInsertRowid))!;
+    })
+    .immediate();
 }
 function finish(repo: Repo, job: Job, status: string, notes = "") {
   repo.db
@@ -405,6 +460,10 @@ export function collectAutopilot(repo: Repo) {
           };
       if (rateLimited([r.stdout, r.output, r.stderr].join("\n"), r.status)) {
         finish(repo, job, "rate_limited");
+        if (job.provider)
+          freezeProvider(repo, job.provider, `${job.kind} quota exhausted`);
+        if (providerPolicyConfigured(repo.getSetting("provider_policy")))
+          continue;
         if (
           quotaFallback(
             repo,
@@ -577,7 +636,11 @@ export function promoteIdle(repo: Repo) {
   return count;
 }
 export function startAutopilot(repo: Repo) {
-  if (Date.parse(repo.getSetting("cooldown_until") || "") > Date.now()) return;
+  if (
+    !providerPolicyConfigured(repo.getSetting("provider_policy")) &&
+    Date.parse(repo.getSetting("cooldown_until") || "") > Date.now()
+  )
+    return;
   if (healthSetting(repo, "ok") !== "1") {
     if (repo.projects().some((p) => p.auto_review || p.autopilot))
       limitedEvent(
@@ -636,7 +699,13 @@ export function startAutopilot(repo: Repo) {
       )
         continue;
     }
-    const job = reserve(repo, "review", p, t.id);
+    let job: Job;
+    try {
+      job = reserve(repo, "review", p, t.id);
+    } catch (error) {
+      limitedEvent(repo, "autopilot_provider_deferred", String(error), 5);
+      continue;
+    }
     used++;
     if (p.test_cmd && repo.runs(t.id)[0]?.test_exit_code !== 0) {
       reject(repo, job, "Tests did not pass");
@@ -665,7 +734,13 @@ export function startAutopilot(repo: Repo) {
           (prev.status === "error" ? 30 : 20) * 60000
       )
         continue;
-      const job = reserve(repo, "plan", p, null);
+      let job: Job;
+      try {
+        job = reserve(repo, "plan", p, null);
+      } catch (error) {
+        limitedEvent(repo, "autopilot_provider_deferred", String(error), 5);
+        break;
+      }
       try {
         launch(repo, job, p.repo_path, plannerPrompt(repo, p));
       } catch (e) {
@@ -702,10 +777,19 @@ export function checkReviewer(
     mkdirSync(dir, { recursive: true });
     const selectedReviewer = repo.getSetting("reviewer");
     const selectedBackend = llmBackend(repo);
+    const project = repo.projects()[0];
+    let healthJob: Job | undefined;
+    try {
+      if (project) healthJob = reserve(repo, "health", project, null);
+    } catch (error) {
+      resolveCheck({ ok: false, result: String(error) });
+      return;
+    }
     const command = reviewerCommand(
       repo,
-      repo.projects()[0]?.repo_path || repo.home,
+      project?.repo_path || repo.home,
       dir,
+      healthJob?.provider || undefined,
     );
     const child = spawn(command.cmd, command.args, {
       cwd: command.cwd,
@@ -717,6 +801,12 @@ export function checkReviewer(
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      if (healthJob)
+        repo.db
+          .prepare(
+            "UPDATE autopilot_jobs SET status='finished',notes=?,finished_at=? WHERE id=?",
+          )
+          .run(error || stderr, new Date().toISOString(), healthJob.id);
       let ok = false,
         result = error || stderr || stdout;
       try {
@@ -745,6 +835,16 @@ export function checkReviewer(
         return;
       }
       if (rateLimited([stdout, stderr, result].join("\n"), code)) {
+        if (healthJob?.provider)
+          freezeProvider(
+            repo,
+            healthJob.provider,
+            "health check quota exhausted",
+          );
+        if (providerPolicyConfigured(repo.getSetting("provider_policy"))) {
+          resolveCheck({ ok: false, result: result.slice(0, 200) });
+          return;
+        }
         if (
           quotaFallback(
             repo,

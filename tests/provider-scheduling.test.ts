@@ -83,6 +83,22 @@ it("validates the complete provider policy before persisting it", () => {
   }
 });
 
+it("rejects Codex aliases that would execute the default authenticated provider", () => {
+  f = fixture();
+  expect(() =>
+    f.repo.setSetting(
+      "provider_policy",
+      policy([provider("pretend-local", { worker: "codex", class: "local" })]),
+    ),
+  ).toThrow('codex provider id must be "codex" or "ollama"');
+  expect(() =>
+    f.repo.setSetting(
+      "provider_policy",
+      policy([provider("claude-alias", { worker: "claude" })]),
+    ),
+  ).toThrow('claude provider id must be "claude"');
+});
+
 it("keeps heartbeat services running when a legacy database contains a malformed policy", () => {
   f = fixture();
   f.repo.db
@@ -115,7 +131,7 @@ it("prefers legal free/local capability while unknown quota remains explicit and
     policy([
       provider("illegal", { legal: false }),
       provider("local", { class: "local" }),
-      provider("premium", {
+      provider("codex", {
         class: "premium",
         max_complexity: "high",
         worker: "codex",
@@ -129,7 +145,7 @@ it("prefers legal free/local capability while unknown quota remains explicit and
   });
   const high = f.task({ complexity: "high" });
   expect(selectProvider(f.repo, high)).toMatchObject({
-    id: "premium",
+    id: "codex",
     class: "premium",
   });
 });
@@ -140,7 +156,7 @@ it("reserves before spawn so concurrent dispatch moves to a provider with availa
     "provider_policy",
     policy([
       provider("free", { reserve_remaining: 1 }),
-      provider("premium", {
+      provider("codex", {
         class: "premium",
         max_complexity: "high",
         worker: "codex",
@@ -148,7 +164,7 @@ it("reserves before spawn so concurrent dispatch moves to a provider with availa
     ]),
   );
   f.repo.addUsageSnapshot(quota("free", 2));
-  f.repo.addUsageSnapshot(quota("premium", 20));
+  f.repo.addUsageSnapshot(quota("codex", 20));
   const first = f.task({ complexity: "low" });
   const second = f.task({ complexity: "low" });
   const firstRun = dispatch(f.repo, first.identifier);
@@ -157,7 +173,7 @@ it("reserves before spawn so concurrent dispatch moves to a provider with availa
     "free",
   );
   expect(f.repo.runs().find((run) => run.id === secondRun)?.provider).toBe(
-    "premium",
+    "codex",
   );
   expect(activeReservation(f.repo, "free")).toBe(1);
 });
@@ -197,7 +213,7 @@ it("scopes 429 cooldown to one provider and safely retries in the same worktree 
     "provider_policy",
     policy([
       provider("free"),
-      provider("premium", {
+      provider("codex", {
         class: "premium",
         max_complexity: "high",
         worker: "codex",
@@ -214,11 +230,11 @@ it("scopes 429 cooldown to one provider and safely retries in the same worktree 
   const after = f.repo.task(task.id);
   expect(after).toMatchObject({ status: "ready", attempts: 0 });
   expect(providerCooldown(f.repo, "free")).not.toBeNull();
-  expect(providerCooldown(f.repo, "premium")).toBeNull();
+  expect(providerCooldown(f.repo, "codex")).toBeNull();
   expect(f.repo.getSetting("cooldown_until")).toBe("");
   const retry = dispatch(f.repo, task.identifier);
   expect(f.repo.runs().find((run) => run.id === retry)).toMatchObject({
-    provider: "premium",
+    provider: "codex",
   });
   expect(f.repo.task(task.id).worktree_path).toBe(after.worktree_path);
 });

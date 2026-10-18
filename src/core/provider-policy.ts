@@ -3,7 +3,7 @@ export type ProviderClass = "free" | "local" | "premium" | "standard";
 
 export interface ProviderRule {
   id: string;
-  worker: "codex" | "opencode";
+  worker: "codex" | "opencode" | "claude";
   class: ProviderClass;
   legal: boolean;
   roles: Array<"backend" | "frontend" | "testing" | "any">;
@@ -45,8 +45,12 @@ export function parseProviderPolicy(source: string): ProviderRule[] {
     )
       throw new Error(`${at}.id is invalid or duplicated`);
     ids.add(p.id);
-    if (!["codex", "opencode"].includes(String(p.worker)))
+    if (!["codex", "opencode", "claude"].includes(String(p.worker)))
       throw new Error(`${at}.worker is invalid`);
+    if (p.worker === "codex" && !["codex", "ollama"].includes(p.id))
+      throw new Error(`${at}: codex provider id must be "codex" or "ollama"`);
+    if (p.worker === "claude" && p.id !== "claude")
+      throw new Error(`${at}: claude provider id must be "claude"`);
     if (!classes.includes(p.class as ProviderClass))
       throw new Error(`${at}.class is invalid`);
     if (typeof p.legal !== "boolean")
