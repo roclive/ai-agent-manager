@@ -1,10 +1,11 @@
+import { rateLimited } from "./finalize.js";
 import { integrate } from "./integration.js";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { userInfo } from "node:os";
 import { Repo, type Project } from "../db/index.js";
-import { alive } from "./process.js";
+import { killGroup, alive } from "./process.js";
 import { dependenciesDone } from "./dispatch.js";
 import { parseVerdict } from "./review.js";
 
@@ -31,6 +32,7 @@ export const cleanEnv = () => {
     HOME: process.env.HOME || "",
     USER: user,
     LOGNAME: process.env.LOGNAME || user,
+    ...(process.env.CODEX_HOME ? { CODEX_HOME: process.env.CODEX_HOME } : {}),
   };
 };
 const read = (path: string) => {
@@ -59,7 +61,9 @@ function today(ts: string) {
   return new Date(ts).toDateString() === new Date().toDateString();
 }
 export function autopilotStatus(repo: Repo) {
-  const rows = jobs(repo).filter((j) => today(j.started_at));
+  const rows = jobs(repo).filter(
+    (j) => today(j.started_at) && j.status !== "rate_limited",
+  );
   return {
     auto_reviews_today: rows.filter((j) => j.kind === "review").length,
     auto_review_max: Number(repo.getSetting("auto_review_daily_max")),
@@ -73,9 +77,13 @@ export function autopilotStatus(repo: Repo) {
       }[]
     ).filter((e) => today(e.ts)).length,
     idle_since: repo.getSetting("idle_since") || undefined,
-    claude_ok: repo.getSetting("claude_ok") === "1",
-    claude_checked_at: repo.getSetting("claude_checked_at") || null,
-    claude_error: repo.getSetting("claude_error") || "",
+    reviewer: repo.getSetting("reviewer"),
+    reviewer_ok: healthSetting(repo, "ok") === "1",
+    reviewer_checked_at: healthSetting(repo, "checked_at") || null,
+    reviewer_error: healthSetting(repo, "error"),
+    claude_ok: healthSetting(repo, "ok") === "1",
+    claude_checked_at: healthSetting(repo, "checked_at") || null,
+    claude_error: healthSetting(repo, "error") || "",
     caffeinate: alive(Number(repo.getSetting("keep_awake_pid")) || null),
   };
 }
@@ -112,22 +120,61 @@ export const claudeArgs: string[] = [
   "--settings",
   '{"disableAllHooks":true}',
 ];
-const wrapper = `const fs=require('node:fs'), cp=require('node:child_process'); const [cmd,cwd,prompt,out,flags]=process.argv.slice(1); const r=cp.spawnSync(cmd, JSON.parse(flags), {cwd,input:fs.readFileSync(prompt),env:{PATH:process.env.PATH,HOME:process.env.HOME,USER:process.env.USER,LOGNAME:process.env.LOGNAME},encoding:'utf8',timeout:240000,maxBuffer:1048576}); fs.writeFileSync(out+'.tmp',JSON.stringify({status:r.status,stdout:r.stdout||'',stderr:r.stderr||r.error?.message||'',code:r.error?.code})); fs.renameSync(out+'.tmp',out);`;
+export const healthSetting = (repo: Repo, key: string) =>
+  repo.getSetting(`reviewer_${key}`) ||
+  (repo.getSetting("reviewer") === "claude"
+    ? repo.getSetting(`claude_${key}`)
+    : "") ||
+  "";
+export function reviewerCommand(repo: Repo, cwd: string, dir: string) {
+  const codex = repo.getSetting("reviewer") !== "claude";
+  return {
+    cmd: codex
+      ? process.env.AAM_FAKE_CODEX || "codex"
+      : process.env.AAM_FAKE_CLAUDE || "claude",
+    args: codex
+      ? [
+          "exec",
+          "--json",
+          "-s",
+          "read-only",
+          "-C",
+          cwd,
+          "-c",
+          'approval_policy="never"',
+          "-c",
+          'model_reasoning_effort="medium"',
+          "--skip-git-repo-check",
+          "-o",
+          resolve(dir, "last.md"),
+          "-",
+        ]
+      : claudeArgs,
+    cwd,
+    env: cleanEnv(),
+    codex,
+  };
+}
+const contextRule =
+  "\nYou may read files in this repository for context; you must not modify anything.";
+const wrapper = `const fs=require('node:fs'), cp=require('node:child_process'); const [cmd,cwd,prompt,out,flags,last]=process.argv.slice(1); const r=cp.spawnSync(cmd, JSON.parse(flags), {cwd,input:fs.readFileSync(prompt),env:process.env,encoding:'utf8',timeout:300000,killSignal:'SIGKILL',maxBuffer:1048576}); let answer=r.stdout||''; if(last){try{answer=fs.readFileSync(last,'utf8')}catch{answer=''}} fs.writeFileSync(out+'.tmp',JSON.stringify({status:r.status,stdout:answer,output:r.stdout||'',stderr:r.stderr||r.error?.message||'',code:r.error?.code})); fs.renameSync(out+'.tmp',out);`;
 function launch(repo: Repo, job: Job, cwd: string, prompt: string) {
   const dir = dirname(resultPath(repo, job.id));
   mkdirSync(dir, { recursive: true });
   const file = resolve(dir, "prompt.txt");
-  writeFileSync(file, prompt, { mode: 0o600 });
+  writeFileSync(file, prompt + contextRule, { mode: 0o600 });
+  const command = reviewerCommand(repo, cwd, dir);
   const child = spawn(
     process.execPath,
     [
       "-e",
       wrapper,
-      process.env.AAM_FAKE_CLAUDE || "claude",
+      command.cmd,
       cwd,
       file,
       resultPath(repo, job.id),
-      JSON.stringify(claudeArgs),
+      JSON.stringify(command.args),
+      command.codex ? resolve(dir, "last.md") : "",
     ],
     { detached: true, stdio: "ignore", env: cleanEnv() },
   );
@@ -245,9 +292,24 @@ export type PlannedTask = {
   depends_on: number[];
 };
 function unwrap(text: string): unknown {
-  const o = JSON.parse(text);
-  if (o?.is_error === true) throw new Error(String(o.result || "Claude error"));
-  return typeof o?.result === "string" ? JSON.parse(o.result) : o;
+  try {
+    const o = JSON.parse(text);
+    if (o?.is_error === true)
+      throw new Error(String(o.result || "Reviewer error"));
+    return typeof o?.result === "string" ? unwrap(o.result) : o;
+  } catch (error) {
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] !== "{") continue;
+      for (let j = text.length; j > i; j--) {
+        try {
+          return JSON.parse(text.slice(i, j));
+        } catch {
+          /* keep scanning */
+        }
+      }
+    }
+    throw error;
+  }
 }
 export function validatePlan(text: string): PlannedTask[] {
   const o = unwrap(text) as { tasks?: unknown };
@@ -311,7 +373,8 @@ function plannerPrompt(repo: Repo, p: Project) {
 export function collectAutopilot(repo: Repo) {
   for (const job of jobs(repo).filter((j) => j.status === "pending")) {
     const text = read(resultPath(repo, job.id));
-    if (!text && Date.now() - Date.parse(job.started_at) < 300000) continue;
+    // Allow the 300 s child timeout plus wrapper startup/result persistence.
+    if (!text && Date.now() - Date.parse(job.started_at) < 360000) continue;
     const p = repo.project(job.project_id);
     if (
       (job.kind === "review" &&
@@ -330,8 +393,21 @@ export function collectAutopilot(repo: Repo) {
             code: "ETIMEDOUT",
             stderr: "ETIMEDOUT: Reviewer timed out",
           };
+      if (rateLimited([r.stdout, r.output, r.stderr].join("\n"), r.status)) {
+        finish(repo, job, "rate_limited");
+        repo.setSetting(
+          "cooldown_until",
+          new Date(Date.now() + 30 * 60000).toISOString(),
+        );
+        repo.event(
+          "cooldown",
+          "Reviewer usage limit; retry after 30 minutes",
+          job.task_id,
+        );
+        continue;
+      }
       if (r.status !== 0)
-        throw new Error(`${r.code || ""} ${r.stderr || "Claude failed"}`);
+        throw new Error(`${r.code || ""} ${r.stderr || "Reviewer failed"}`);
       let outer;
       try {
         outer = JSON.parse(r.stdout);
@@ -339,12 +415,16 @@ export function collectAutopilot(repo: Repo) {
         /* review parser handles prose */
       }
       if (outer?.is_error === true)
-        throw new Error(String(outer.result || "Claude error"));
+        throw new Error(String(outer.result || "Reviewer error"));
       if (job.kind === "review") {
         const v = parseVerdict(r.stdout);
         if (!v) {
           finish(repo, job, "unparseable");
-          repo.event("review_error", "Unparseable Claude review", job.task_id);
+          repo.event(
+            "review_error",
+            "Unparseable reviewer response",
+            job.task_id,
+          );
           continue;
         }
         if (v.verdict === "reject") reject(repo, job, v.notes);
@@ -479,12 +559,13 @@ export function promoteIdle(repo: Repo) {
   return count;
 }
 export function startAutopilot(repo: Repo) {
-  if (repo.getSetting("claude_ok") !== "1") {
+  if (Date.parse(repo.getSetting("cooldown_until") || "") > Date.now()) return;
+  if (healthSetting(repo, "ok") !== "1") {
     if (repo.projects().some((p) => p.auto_review || p.autopilot))
       limitedEvent(
         repo,
         "autopilot_paused",
-        repo.getSetting("claude_error") || "Claude health unchecked",
+        healthSetting(repo, "error") || "Reviewer health unchecked",
         30,
       );
     return;
@@ -592,16 +673,25 @@ export function startAutopilot(repo: Repo) {
   } else repo.setSetting("idle_since", "");
 }
 
-export function checkClaude(
+export function checkReviewer(
   repo: Repo,
 ): Promise<{ ok: boolean; result: string }> {
   return new Promise((resolveCheck) => {
     let stdout = "",
       stderr = "",
       settled = false;
-    const child = spawn(process.env.AAM_FAKE_CLAUDE || "claude", claudeArgs, {
-      cwd: repo.home,
-      env: cleanEnv(),
+    const dir = resolve(repo.home, "health", String(Date.now()));
+    mkdirSync(dir, { recursive: true });
+    const selectedReviewer = repo.getSetting("reviewer");
+    const command = reviewerCommand(
+      repo,
+      repo.projects()[0]?.repo_path || repo.home,
+      dir,
+    );
+    const child = spawn(command.cmd, command.args, {
+      cwd: command.cwd,
+      env: command.env,
+      detached: true,
       stdio: ["pipe", "pipe", "pipe"],
     });
     const finish = (code: number | null, error = "") => {
@@ -611,28 +701,50 @@ export function checkClaude(
       let ok = false,
         result = error || stderr || stdout;
       try {
-        const outer = JSON.parse(stdout);
-        result = String(outer.result ?? stdout);
-        ok =
-          code === 0 &&
-          outer.is_error !== true &&
-          typeof outer.result === "string";
+        if (command.codex) {
+          result = error || read(resolve(dir, "last.md")) || stderr || stdout;
+          ok = code === 0 && result.trim().toLowerCase() === "ok";
+        } else {
+          const outer = JSON.parse(stdout);
+          result = String(outer.result ?? stdout);
+          ok =
+            code === 0 &&
+            outer.is_error !== true &&
+            typeof outer.result === "string";
+        }
       } catch {
         /* invalid output is unhealthy */
       }
-      const previous = repo.getSetting("claude_ok");
-      repo.setSetting("claude_ok", ok ? "1" : "0");
-      repo.setSetting("claude_checked_at", new Date().toISOString());
-      repo.setSetting("claude_error", ok ? "" : result.slice(0, 200));
+      if (repo.getSetting("reviewer") !== selectedReviewer) {
+        resolveCheck({
+          ok: false,
+          result: "Reviewer changed during health check",
+        });
+        return;
+      }
+      if (rateLimited([stdout, stderr, result].join("\n"), code)) {
+        repo.setSetting(
+          "cooldown_until",
+          new Date(Date.now() + 30 * 60000).toISOString(),
+        );
+        repo.event(
+          "cooldown",
+          "Reviewer health check usage limit; retry after 30 minutes",
+        );
+      }
+      const previous = healthSetting(repo, "ok");
+      repo.setSetting("reviewer_ok", ok ? "1" : "0");
+      repo.setSetting("reviewer_checked_at", new Date().toISOString());
+      repo.setSetting("reviewer_error", ok ? "" : result.slice(0, 200));
       if (ok && previous === "0")
-        repo.event("autopilot_resumed", "Claude login recovered");
+        repo.event("autopilot_resumed", "Reviewer login recovered");
       if (!ok) limitedEvent(repo, "autopilot_paused", result.slice(0, 200), 30);
       resolveCheck({ ok, result: result.slice(0, 200) });
     };
     const timer = setTimeout(() => {
-      child.kill("SIGKILL");
-      finish(null, "Claude health check timed out");
-    }, 60000);
+      killGroup(child.pid || null);
+      finish(null, "Reviewer health check timed out");
+    }, 90000);
     child.stdout.on("data", (data) => {
       stdout = (stdout + data).slice(-65536);
     });
@@ -642,6 +754,9 @@ export function checkClaude(
     child.on("error", (error) => finish(null, error.message));
     child.on("close", (code) => finish(code));
     child.stdin.on("error", () => {});
-    child.stdin.end("Reply with ok.");
+    child.stdin.end("Reply with ok." + contextRule);
   });
 }
+
+// Compatibility export for existing integrations.
+export const checkClaude = checkReviewer;

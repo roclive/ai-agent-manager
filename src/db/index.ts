@@ -138,12 +138,16 @@ export class Repo {
       review_mode: "manual",
       cooldown_until: "",
       last_tick_at: "",
-      auto_review_daily_max: "80",
+      auto_review_daily_max: "120",
       auto_review_concurrency: "3",
       planner_daily_max: "10",
       keep_awake: "1",
       keep_awake_pid: "",
       idle_since: "",
+      reviewer: "codex",
+      reviewer_ok: "",
+      reviewer_checked_at: "",
+      reviewer_error: "",
       claude_ok: "",
       claude_checked_at: "",
       claude_error: "",
@@ -194,6 +198,7 @@ export class Repo {
     )
       throw new Error("Expected positive number");
     if (
+      (key === "reviewer" && !["codex", "claude"].includes(value)) ||
       (key === "default_worker" && !["codex", "opencode"].includes(value)) ||
       (key === "review_mode" && !["manual", "claude"].includes(value)) ||
       (key === "cooldown_until" &&
@@ -201,6 +206,13 @@ export class Repo {
         !Number.isFinite(Date.parse(value)))
     )
       throw new Error("Invalid setting value");
+    if (key === "reviewer" && this.getSetting(key) !== value) {
+      this.db
+        .prepare(
+          "UPDATE settings SET value='' WHERE key LIKE 'reviewer_%' OR key LIKE 'claude_%'",
+        )
+        .run();
+    }
     this.db.prepare("UPDATE settings SET value=? WHERE key=?").run(value, key);
   }
   projects() {

@@ -85,7 +85,17 @@ export function Settings() {
                 defaultValue={q.data.review_mode}
               >
                 <option value="manual">人工审查</option>
-                <option value="claude">Claude 自动审查</option>
+                <option value="claude">自动审查</option>
+              </NativeSelect>
+            </label>
+            <label>
+              审查与规划模型
+              <NativeSelect
+                name="reviewer"
+                defaultValue={q.data.reviewer || "codex"}
+              >
+                <option value="codex">Codex</option>
+                <option value="claude">Claude</option>
               </NativeSelect>
             </label>
             {[

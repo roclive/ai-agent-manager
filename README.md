@@ -99,7 +99,7 @@ aam settings set default_worker opencode
 aam settings set review_mode claude
 ```
 
-Defaults: two parallel workers, a 45-minute worker timeout, Codex, and manual review. Claude review mode invokes `claude -p` synchronously with a two-minute timeout. It parses the JSON verdict from Claude's `result`; an invalid response leaves the task in review and records an event. Manual review is always available.
+默认两个并行 worker、45 分钟执行超时和人工审查。项目启用自动审查后默认使用 Codex，后台运行最长 300 秒；可通过 reviewer 设置选择 Claude。无法解析的输出会保留任务待审并记录事件。始终支持人工审查。
 
 A failed worker or failed project test increments attempts and retries up to `max_attempts` (default three), then blocks the task. Rejection also consumes an attempt. Worker logs indicating a usage/rate/quota limit return the task to `ready` without consuming an attempt and pause dispatch for 30 minutes. The next prompt includes feedback. Worktrees and branches are reused on retry; setup runs once per new worktree.
 
@@ -124,7 +124,7 @@ Claude Code should read `BACKLOG.md` and `PROGRESS.md`, create focused tasks wit
 
 On each manager wake-up, run `aam tick`, inspect `aam task show ID`, the branch diff, and the run's test log. Approve finished work, or reject with specific actionable feedback. For blocked tasks, revise the scope or worker and move back to `ready` when appropriate. Choose non-base integration branches explicitly. The existing `CLAUDE.md`, when present, provides the manager's local operating instructions.
 
-For unattended review, choose `review_mode=claude`; otherwise the daemon waits for the manager to review successful work.
+无人值守审查需启用项目的 `auto_review`；`reviewer` 选择 Codex（默认）或 Claude。未启用的项目继续等待人工审查。
 
 ## Local HTTP API
 
@@ -198,10 +198,10 @@ aam daemon --interval 60
 
 `--goal` 可直接设置目标（与 `--goal-file` 互斥）；共享上下文文件路径相对项目仓库，每次规划时读取并前置到新任务描述。优先级数值越小越先补充任务，同优先级项目轮流获得空位。依赖未完成的任务不会提升，受阻任务不影响其余工作。空队列且目标非空时生成 3–5 个小任务；成功规划至少间隔 20 分钟，失败后退避 30 分钟。
 
-自动审查只处理明确启用的项目，不会合并或推送。测试失败直接拒绝；连续两次自动拒绝会阻塞任务。无法解析的审查输出重试一次；后台 Claude 作业最长 240 秒，由后续 heartbeat 回收。审查每分钟最多启动一次。每日预算按本机日期计算，默认审查 80 次、规划 10 次，可在设置页面或 CLI 调整：
+自动审查只处理明确启用的项目，不会合并或推送。测试失败直接拒绝；连续两次自动拒绝会阻塞任务。无法解析的审查输出重试一次；后台 reviewer 作业最长 300 秒，由后续 heartbeat 回收。审查按设置的并发数启动。每日预算按本机日期计算，默认审查 120 次、规划 10 次，可在设置页面或 CLI 调整：
 
 ```sh
-aam settings set auto_review_daily_max 80
+aam settings set auto_review_daily_max 120
 aam settings set planner_daily_max 10
 aam settings set keep_awake 1
 ```
@@ -241,26 +241,44 @@ aam settings set keep_awake 0
 修复后可在数据库将该任务的 `integration_attempts` 重置为 0，以恢复重试。
 冲突继续走 P0 解决任务流程。
 
-### Claude 登录健康检查
+### Reviewer 登录健康检查
 
-运行 `aam autopilot check`，使用自动驾驶相同的参数和最小环境调用 Claude，
+运行 `aam autopilot check`，使用自动驾驶相同的参数和最小环境调用所选 reviewer，
 输出 ok/error 和结果前 200 字符，失败时退出码为 1。
-daemon 启动和每 30 分钟异步检查一次，不阻塞 tick。
-即使退出码为 0，JSON 中 `is_error:true` 仍算失败（例如未登录）。
+daemon 启动时异步检查，健康时每 30 分钟、失败时每 2 分钟重查，不阻塞 tick；检查超时为 90 秒。
+Codex 从 `last.md` 读取 `ok`；Claude JSON 中 `is_error:true` 即使退出码为 0 仍算失败。
 检查失败或尚未检查时，不启动新审查和规划，也不消耗对应每日预算。
 状态 API 和仪表盘显示检查时间、错误及暂停提示；失败记录限频的
 `autopilot_paused`，恢复后记录 `autopilot_resumed`。
-若提示未登录，请在运行 daemon 的同一用户环境中执行 Claude 登录，再运行检查。
-测试用 `AAM_FAKE_CLAUDE` 指向本地可执行脚本，无需真实 Claude。
+若提示未登录，请在运行 daemon 的同一用户环境中执行所选 CLI 的登录，再运行检查。
+测试用 `AAM_FAKE_CODEX` / `AAM_FAKE_CLAUDE` 指向本地可执行脚本，无需真实模型调用。
 
 Auto-review fills up to `auto_review_concurrency` slots in each heartbeat (default
 3, configurable from 1–5 in Settings or `aam settings set auto_review_concurrency 3`).
 Oldest waiting reviews run first, with project rank breaking ties. Daily budgets,
-Claude health checks and test requirements still apply. Missing results expire after
-300 seconds; ETIMEDOUT retries become eligible after 20 seconds. Three consecutive
+Reviewer health checks and test requirements still apply. Missing results expire after
+360 seconds (300-second execution timeout plus wrapper grace); ETIMEDOUT retries become eligible after 20 seconds. Three consecutive
 timeouts pause that task's reviews for 30 minutes without pausing other tasks.
 Retries run on the next heartbeat after their delay; use a shorter daemon interval
 if needed. Passed-test review diffs are capped at 30 KB; all changed names and diff
 stats remain visible, and files larger than 20 KB on either side are listed by name
 and size instead of inlined. Status/dashboard expose `waiting_for_review`; unfilled
 worker capacity with waiting reviews emits `review_bottleneck` at most every 15 minutes.
+
+### 自动驾驶审查模型
+
+自动审查、规划和健康检查默认使用 `codex exec`，以只读模式读取仓库。
+可通过设置页的「审查与规划模型」切换，或运行：
+
+```sh
+aam settings set reviewer codex
+# 可选：使用 Claude
+aam settings set reviewer claude
+aam autopilot check
+aam autopilot status
+```
+
+切换模型后需重新通过健康检查。Codex 使用当前用户的登录信息（支持
+`CODEX_HOME`），与编码 worker 共享额度；触发额度限制后冷却 30 分钟再重试。
+新安装默认每日自动审查上限为 120，规划上限为 10；已有配置保持原值。
+健康失败时暂停 LLM 作业，每 2 分钟重查；健康时每 30 分钟重查。

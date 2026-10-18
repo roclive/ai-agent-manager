@@ -459,6 +459,7 @@ it("project editor submits numeric opt-ins and project goal", async () => {
                   worker_timeout_min: "45",
                   default_worker: "codex",
                   review_mode: "manual",
+                  auto_review_concurrency: "3",
                   auto_review_daily_max: "80",
                   planner_daily_max: "10",
                   keep_awake: "1",
@@ -481,6 +482,23 @@ it("project editor submits numeric opt-ins and project goal", async () => {
   );
   vi.stubGlobal("fetch", fetcher);
   setup(<Settings />, "/settings");
+  expect(await screen.findByLabelText("审查与规划模型")).toHaveValue("codex");
+  fireEvent.change(screen.getByLabelText("审查与规划模型"), {
+    target: { value: "claude" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "保存设置" }));
+  await waitFor(() =>
+    expect(fetcher.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(
+      true,
+    ),
+  );
+  expect(
+    JSON.parse(
+      String(
+        fetcher.mock.calls.find(([, init]) => init?.method === "PUT")![1]?.body,
+      ),
+    ),
+  ).toMatchObject({ reviewer: "claude" });
   fireEvent.click(await screen.findByRole("button", { name: "编辑" }));
   fireEvent.click(screen.getByLabelText("自动审查"));
   fireEvent.click(screen.getByLabelText("自动驾驶"));

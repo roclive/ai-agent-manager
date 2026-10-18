@@ -3,7 +3,7 @@ import { Command } from "commander";
 import { readFileSync } from "node:fs";
 import { tail } from "./core/logs.js";
 import { Repo } from "./db/index.js";
-import { autopilotStatus, checkClaude } from "./core/autopilot.js";
+import { autopilotStatus, checkReviewer } from "./core/autopilot.js";
 import { review } from "./core/review.js";
 import { merge, prune } from "./core/worktree.js";
 export const output = (v: unknown) =>
@@ -77,7 +77,7 @@ export function cli(repo: Repo) {
     });
   const autopilot = app.command("autopilot");
   autopilot.command("check").action(async () => {
-    const health = await checkClaude(repo);
+    const health = await checkReviewer(repo);
     console.log(`${health.ok ? "ok" : "error"}: ${health.result}`);
     if (!health.ok) process.exitCode = 1;
   });

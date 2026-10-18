@@ -375,7 +375,7 @@ it("expires missing results, retries after 20 seconds and pauses only a task aft
       .prepare(
         "INSERT INTO autopilot_jobs(kind,project_id,task_id,started_at) VALUES ('review',1,?,?)",
       )
-      .run(t.id, new Date(Date.now() - 301000).toISOString());
+      .run(t.id, new Date(Date.now() - 361000).toISOString());
   insert();
   collectAutopilot(f.repo);
   expect(

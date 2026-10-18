@@ -112,6 +112,10 @@ export interface Status {
     promotions_today: number;
     idle_since?: string;
     caffeinate: boolean;
+    reviewer?: "codex" | "claude";
+    reviewer_ok?: boolean;
+    reviewer_checked_at?: string | null;
+    reviewer_error?: string;
     claude_ok?: boolean;
     claude_checked_at?: string | null;
     claude_error?: string;
