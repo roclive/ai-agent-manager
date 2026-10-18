@@ -4,6 +4,8 @@ import { Repo, type Task } from "../db/index.js";
 import { git } from "./process.js";
 import { ensureWorktree } from "./worktree.js";
 import { prompt, spawnWorker } from "../workers/index.js";
+import { checkQuota } from "./usage.js";
+
 export function dependenciesDone(repo: Repo, t: Task) {
   return (JSON.parse(t.depends_on) as string[]).every((id) => {
     try {
@@ -45,6 +47,19 @@ export function dispatch(repo: Repo, id: string, force = false) {
     );
   if (Date.parse(repo.getSetting("cooldown_until") || "") > Date.now())
     throw new Error("Workers are in cooldown");
+
+  // Quota Check
+  const quota = checkQuota(repo, t.worker);
+  if (!quota.ok) {
+    const message = quota.warning || `Quota exhausted for ${t.worker}`;
+    repo.updateTask(t.id, { status: "blocked", blocker: message });
+    repo.event("quota_blocked", message, t.id);
+    throw new Error(message);
+  }
+  if (quota.warning) {
+    repo.event("quota_warning", quota.warning, t.id);
+  }
+
   let worktree: string;
   try {
     worktree = ensureWorktree(repo, t);

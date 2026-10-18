@@ -4,6 +4,8 @@ import { Cron } from "croner";
 import { Repo, type Routine } from "./db/index.js";
 import { tick } from "./core/tick.js";
 import { runner } from "./core/process.js";
+import { collectUsage, JsonOpenUsageProvider, FakeOpenUsageProvider } from "./workers/openusage.js";
+
 export function validateRoutine(
   cron: string,
   action: string,
@@ -12,7 +14,7 @@ export function validateRoutine(
   if (typeof cron !== "string" || !cron.trim()) throw new Error("Invalid cron");
   const c = new Cron(cron, { paused: true });
   c.stop();
-  if (!["heartbeat", "create_task", "shell"].includes(action))
+  if (!["heartbeat", "create_task", "shell", "collect_usage"].includes(action))
     throw new Error("Invalid routine action");
   if (!payload || typeof payload !== "object" || Array.isArray(payload))
     throw new Error("Payload must be an object");
@@ -24,8 +26,11 @@ export function validateRoutine(
     (typeof p.cmd !== "string" || typeof p.cwd !== "string")
   )
     throw new Error("shell requires cmd and cwd");
+  if (action === "collect_usage" && !p.provider)
+    throw new Error("collect_usage requires provider");
 }
-export function fireRoutine(repo: Repo, r: Routine) {
+
+export async function fireRoutine(repo: Repo, r: Routine) {
   try {
     repo.event(
       "routine_fire",
@@ -36,6 +41,18 @@ export function fireRoutine(repo: Repo, r: Routine) {
     else if (r.action === "create_task") {
       const t = repo.addTask(p);
       repo.event("routine", `${r.name} created ${t.identifier}`, t.id);
+    } else if (r.action === "collect_usage") {
+      const providerName = String(p.provider);
+      let provider: any;
+      if (providerName === "fake") {
+        provider = new FakeOpenUsageProvider();
+      } else if (p.json) {
+        provider = new JsonOpenUsageProvider(providerName, String(p.json));
+      } else {
+        throw new Error(`Unsupported provider: ${providerName}`);
+      }
+      const snapshots = await collectUsage(repo, provider);
+      repo.event("routine", `${r.name} collected ${snapshots.length} snapshots`);
     } else {
       const result = runner("sh", ["-c", p.cmd], p.cwd, undefined, 120000);
       repo.event(
@@ -51,6 +68,7 @@ export function fireRoutine(repo: Repo, r: Routine) {
       .run(new Date().toISOString(), r.id);
   }
 }
+
 export function daemon(repo: Repo, interval = 60) {
   if (!Number.isFinite(interval) || interval <= 0)
     throw new Error("Interval must be positive");
@@ -58,7 +76,6 @@ export function daemon(repo: Repo, interval = 60) {
     const awake = keepAwake(repo);
     let checking: Promise<unknown> | undefined;
     let stopped = false;
-    // Healthy: re-check every 30 min. Unhealthy: every 2 min, so one transient failure cannot pause the autopilot for half an hour.
     const healthDue = () => {
       const at = Date.parse(healthSetting(repo, "checked_at") || "") || 0;
       const gap = healthSetting(repo, "ok") === "1" ? 30 * 60000 : 2 * 60000;
@@ -96,15 +113,16 @@ export function daemon(repo: Repo, interval = 60) {
       for (const r of enabled)
         if (!jobs.has(r.id)) {
           try {
-            const job = new Cron(r.cron, () => {
+            const job = new Cron(r.cron, async () => {
               const current = repo.routines().find((x) => x.id === r.id);
-              if (current?.enabled) fireRoutine(repo, current);
+              if (current?.enabled) await fireRoutine(repo, current);
             });
             jobs.set(r.id, { signature: JSON.stringify(r), job });
           } catch (e) {
             repo.event("routine_error", String(e));
           }
         }
+      }
     };
     const timer = setInterval(heartbeat, interval * 1000);
     const stop = async () => {

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { Repo } from "../db/index.js";
 import { UsageSnapshot } from "../db/usage.js";
 
@@ -35,6 +37,42 @@ export class FakeOpenUsageProvider implements OpenUsageProvider {
         created_at: new Date().toISOString(),
       },
     ];
+  }
+}
+
+export class JsonOpenUsageProvider implements OpenUsageProvider {
+  constructor(public name: string, public filePath: string) {}
+
+  async fetch(): Promise<UsageSnapshot[]> {
+    try {
+      const content = readFileSync(this.filePath, "utf8");
+      const data = JSON.parse(content);
+      if (!Array.isArray(data)) {
+        throw new Error("Expected array of usage snapshots");
+      }
+
+      return data.map((item, index) => {
+        if (!item.provider || !item.type || !item.window) {
+          throw new Error(`Snapshot at index ${index} missing required fields (provider, type, window)`);
+        }
+        return {
+          provider: String(item.provider),
+          type: item.type === "cost" || item.type === "quota" ? item.type : "quota",
+          window: String(item.window),
+          used: typeof item.used === "number" ? item.used : "unknown",
+          remaining: typeof item.remaining === "number" ? item.remaining : "unknown",
+          reset_at: item.reset_at ? new Date(item.reset_at).toISOString() : null,
+          source: String(item.source || "json-file"),
+          freshness: item.freshness ? new Date(item.freshness).toISOString() : new Date().toISOString(),
+          raw_data: JSON.stringify(item),
+          created_at: new Date().toISOString(),
+        };
+      });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.error(`Failed to collect usage from ${this.filePath}: ${message}`);
+      return [];
+    }
   }
 }
 

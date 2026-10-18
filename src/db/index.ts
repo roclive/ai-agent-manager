@@ -556,7 +556,7 @@ export class Repo {
   latestUsage(provider: string) {
     return (
       this.db.prepare(
-        "SELECT * FROM usage_snapshots WHERE provider=? ORDER BY created_at DESC LIMIT 1",
+        "SELECT * FROM usage_snapshots WHERE provider=? ORDER BY id DESC LIMIT 1",
       ).get(provider) as UsageSnapshot | undefined
     );
   }

@@ -213,7 +213,7 @@ export function cli(repo: Repo) {
     .command("collect")
     .option("--provider <name>", "provider to collect", "fake")
     .action(async (o) => {
-      const provider = o.provider === "fake" ? new FakeOpenUsageProvider() : null;
+      const provider = o.provider === "fake" ? new FakeOpenUsageProvider() : (o.json ? new JsonOpenUsageProvider(o.provider, o.json) : null);
       if (!provider) throw new Error(`Unknown provider: ${o.provider}`);
       output(await collectUsage(repo, provider));
     });
