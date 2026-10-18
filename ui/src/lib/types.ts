@@ -51,6 +51,11 @@ export interface Project {
   id: number;
   key: string;
   name: string;
+  auto_review?: number;
+  autopilot?: number;
+  goal?: string;
+  autopilot_rank?: number;
+  context_file?: string | null;
   color?: string;
   running?: number;
   counts?: Partial<Record<TaskStatus, number>>;
@@ -91,6 +96,15 @@ export interface Event {
   message: string;
 }
 export interface Status {
+  autopilot?: {
+    auto_reviews_today: number;
+    auto_review_max: number;
+    planner_runs_today: number;
+    planner_max: number;
+    promotions_today: number;
+    idle_since?: string;
+    caffeinate: boolean;
+  };
   now: string;
   daemon: { running: boolean; pid?: number; last_tick_at: string | null };
   cooldown_until: string | null;

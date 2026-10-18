@@ -238,3 +238,63 @@ it("bulk move waits for all requests and reports partial failures", async () => 
   await expect(bulkMove([1, 2], "ready")).rejects.toThrow("1 个任务移动失败");
   expect(fetcher).toHaveBeenCalledTimes(2);
 });
+
+it("project editor submits numeric opt-ins and project goal", async () => {
+  const { Settings } = await import("./pages/Settings");
+  const fetcher = vi.fn(
+    async (url: string, init?: RequestInit) =>
+      new Response(
+        JSON.stringify(
+          init?.method === "PATCH"
+            ? {}
+            : String(url) === "/api/settings"
+              ? {
+                  max_parallel: "2",
+                  worker_timeout_min: "45",
+                  default_worker: "codex",
+                  review_mode: "manual",
+                  auto_review_daily_max: "80",
+                  planner_daily_max: "10",
+                  keep_awake: "1",
+                }
+              : [
+                  {
+                    id: 1,
+                    key: "T",
+                    name: "Test",
+                    repo_path: "/tmp/test",
+                    base_branch: "main",
+                    auto_review: 0,
+                    autopilot: 0,
+                    goal: "",
+                    autopilot_rank: 100,
+                  },
+                ],
+        ),
+      ),
+  );
+  vi.stubGlobal("fetch", fetcher);
+  setup(<Settings />, "/settings");
+  fireEvent.click(await screen.findByRole("button", { name: "编辑" }));
+  fireEvent.click(screen.getByLabelText("自动审查"));
+  fireEvent.click(screen.getByLabelText("自动驾驶"));
+  fireEvent.change(screen.getByLabelText("项目目标"), {
+    target: { value: "Improve tests" },
+  });
+  fireEvent.change(screen.getByLabelText("优先级"), { target: { value: "5" } });
+  fireEvent.click(screen.getByRole("button", { name: "保存项目" }));
+  await waitFor(() =>
+    expect(
+      fetcher.mock.calls.some(([, init]) => init?.method === "PATCH"),
+    ).toBe(true),
+  );
+  const [, init] = fetcher.mock.calls.find(
+    ([, init]) => init?.method === "PATCH",
+  )!;
+  expect(JSON.parse(String(init?.body))).toMatchObject({
+    auto_review: 1,
+    autopilot: 1,
+    goal: "Improve tests",
+    autopilot_rank: 5,
+  });
+});

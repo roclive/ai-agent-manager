@@ -19,6 +19,11 @@ export interface Project {
   base_branch: string;
   test_cmd: string | null;
   setup_cmd: string | null;
+  auto_review: number;
+  autopilot: number;
+  goal: string;
+  autopilot_rank: number;
+  context_file: string | null;
   created_at: string;
 }
 export interface Task {
@@ -85,6 +90,21 @@ export class Repo {
     CREATE TABLE IF NOT EXISTS routines(id INTEGER PRIMARY KEY,name TEXT UNIQUE NOT NULL,cron TEXT NOT NULL,action TEXT NOT NULL,payload TEXT NOT NULL DEFAULT '{}',enabled INTEGER NOT NULL DEFAULT 1,last_run_at TEXT);
     CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY,ts TEXT NOT NULL,task_id INTEGER REFERENCES tasks(id),kind TEXT NOT NULL,message TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);`);
+    const projectColumns = this.db.pragma("table_info(projects)") as {
+      name: string;
+    }[];
+    for (const [name, declaration] of Object.entries({
+      auto_review: "INTEGER NOT NULL DEFAULT 0",
+      autopilot: "INTEGER NOT NULL DEFAULT 0",
+      goal: "TEXT NOT NULL DEFAULT ''",
+      autopilot_rank: "INTEGER NOT NULL DEFAULT 100",
+      context_file: "TEXT",
+    }))
+      if (!projectColumns.some((c) => c.name === name))
+        this.db.exec(`ALTER TABLE projects ADD COLUMN ${name} ${declaration}`);
+    this.db.exec(
+      `CREATE TABLE IF NOT EXISTS autopilot_jobs(id INTEGER PRIMARY KEY, kind TEXT NOT NULL, project_id INTEGER NOT NULL REFERENCES projects(id), task_id INTEGER REFERENCES tasks(id), started_at TEXT NOT NULL, finished_at TEXT, status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 1, notes TEXT NOT NULL DEFAULT '');`,
+    );
     const columns = this.db.pragma("table_info(tasks)") as { name: string }[];
     if (!columns.some((c) => c.name === "lost_count"))
       this.db.exec(
@@ -106,6 +126,11 @@ export class Repo {
       review_mode: "manual",
       cooldown_until: "",
       last_tick_at: "",
+      auto_review_daily_max: "80",
+      planner_daily_max: "10",
+      keep_awake: "1",
+      keep_awake_pid: "",
+      idle_since: "",
     }))
       this.db.prepare("INSERT OR IGNORE INTO settings VALUES (?,?)").run(k, v);
   }
@@ -131,6 +156,13 @@ export class Repo {
   setSetting(key: string, value: string) {
     if (!Object.hasOwn(this.settings(), key))
       throw new Error("Unknown setting");
+    if (
+      ["auto_review_daily_max", "planner_daily_max"].includes(key) &&
+      (!Number.isInteger(Number(value)) || Number(value) < 0)
+    )
+      throw new Error("Expected nonnegative integer");
+    if (key === "keep_awake" && !["0", "1"].includes(value))
+      throw new Error("Expected 0 or 1");
     if (
       ["max_parallel", "worker_timeout_min"].includes(key) &&
       (!Number.isFinite(Number(value)) ||
@@ -186,6 +218,59 @@ export class Repo {
         new Date().toISOString(),
       );
     return this.project(Number(r.lastInsertRowid));
+  }
+  updateProject(key: string, patch: Record<string, unknown>) {
+    const allowed = [
+      "name",
+      "repo_path",
+      "base_branch",
+      "test_cmd",
+      "setup_cmd",
+      "auto_review",
+      "autopilot",
+      "goal",
+      "autopilot_rank",
+      "context_file",
+    ];
+    if (Object.keys(patch).some((k) => !allowed.includes(k)))
+      throw new Error("Unsupported project field");
+    const data = { ...patch };
+    for (const k of ["auto_review", "autopilot"])
+      if (data[k] !== undefined) {
+        if (![0, 1, false, true].includes(data[k] as number))
+          throw new Error(`Invalid ${k}`);
+        data[k] = Number(data[k]);
+      }
+    if (
+      data.autopilot_rank !== undefined &&
+      !Number.isSafeInteger(data.autopilot_rank)
+    )
+      throw new Error("Invalid autopilot_rank");
+    for (const k of allowed.filter(
+      (k) => !["auto_review", "autopilot", "autopilot_rank"].includes(k),
+    ))
+      if (
+        data[k] !== undefined &&
+        !(
+          data[k] === null &&
+          ["test_cmd", "setup_cmd", "context_file"].includes(k)
+        ) &&
+        typeof data[k] !== "string"
+      )
+        throw new Error(`Invalid ${k}`);
+    for (const k of ["name", "repo_path", "base_branch"])
+      if (data[k] !== undefined && !String(data[k]).trim())
+        throw new Error(`Invalid ${k}`);
+    const p = this.project(key);
+    if (Object.keys(data).length)
+      this.db
+        .prepare(
+          `UPDATE projects SET ${Object.keys(data)
+            .map((k) => `${k}=?`)
+            .join(",")} WHERE id=?`,
+        )
+        .run(...Object.values(data), p.id);
+    return this.project(key);
   }
   tasks(filter: { status?: string; project?: string } = {}) {
     return (

@@ -27,3 +27,5 @@
 - Activity uses an event-ID cursor and server-side project/task/kind filters. Project filters include events associated with that project's tasks; workspace settings/routine events remain in the all-projects feed.
 - Bulk task moves are independent requests: successful changes remain if another task is rejected, and an error reports the failed count. Task status protections remain enforced by the API.
 - Task descriptions render through react-markdown without raw HTML. Task/run statuses retain their original values in history; task status and role controls use Chinese labels.
+
+AAM-8: Project opt-in safety takes precedence over the legacy global review_mode=claude tick path: non-opted-in projects remain manual. Model tools, hooks, project settings and MCP are disabled; all required repository context is supplied in stdin. Durable job reservations count against the local-day budget, including failures and test-gate rejections. Results are applied on a subsequent tick, and promotions are dispatched on the following tick. Blocked/cancelled tasks do not prevent planning when the active queue is drained.

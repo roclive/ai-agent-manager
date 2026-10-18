@@ -11,7 +11,7 @@
   },
   "scripts": {
     "aam": "tsx src/cli.ts",
-    "test": "vitest run",
+    "test": "vitest run --configLoader runner",
     "typecheck": "tsc --noEmit",
     "ui:install": "cd ui && npm install --cache /tmp/aam-npm-cache",
     "ui:build": "cd ui && npm run build",
