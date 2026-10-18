@@ -163,15 +163,16 @@ function integrateLocked(repo: Repo, id: string) {
         const count = repo
           .tasks()
           .filter((x) => x.resolves_task_id === original.id).length;
-        if (count >= 2) {
+        const max = Number(repo.getSetting("integration_max_resolves")) || 10;
+      if (count >= max) {
           repo.updateTask(original.id, {
             status: "blocked",
             blocker:
-              "Integration conflict: maximum 2 resolution tasks exhausted",
+              `Integration conflict: maximum ${max} resolution tasks exhausted`,
           });
           repo.event(
             "integration_blocked",
-            "Maximum 2 conflict-resolution tasks exhausted",
+            `Maximum ${max} conflict-resolution tasks exhausted`,
             original.id,
           );
         } else {

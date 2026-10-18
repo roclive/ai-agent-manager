@@ -82,6 +82,7 @@ describe("integration branch", () => {
       git(f.path, ["checkout", "main"]);
       f.repo.updateTask(original.id, { status: "in_review" });
       review(f.repo, original.identifier, "approve");
+      f.repo.setSetting("integration_max_resolves", "2");
       for (let i = 0; i < 2; i++) {
         const r = f.repo
           .tasks()

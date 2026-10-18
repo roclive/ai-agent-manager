@@ -140,6 +140,7 @@ export class Repo {
       last_tick_at: "",
       auto_review_daily_max: "120",
       auto_review_concurrency: "3",
+      integration_max_resolves: "10",
       planner_daily_max: "10",
       keep_awake: "1",
       keep_awake_pid: "",
