@@ -9,6 +9,7 @@ import {
 import { dirname, resolve, relative, isAbsolute } from "node:path";
 import { Repo, type Run } from "../db/index.js";
 import { git, runner } from "./process.js";
+import { quotaFallback, readBackend } from "./llm.js";
 export function read(path: string) {
   try {
     return readFileSync(path, "utf8");
@@ -87,6 +88,8 @@ export function finalize(repo: Repo, run: Run, terminal?: "timeout" | "lost") {
         )
         .run(new Date().toISOString(), exit, workerLog, run.id);
       repo.updateTask(t.id, { status: "ready" });
+      if (quotaFallback(repo, readBackend(dir), "Worker quota exhausted"))
+        return;
       repo.setSetting(
         "cooldown_until",
         new Date(Date.now() + 30 * 60000).toISOString(),

@@ -151,6 +151,10 @@ export class Repo {
       reviewer: "codex",
       codex_worker_sandbox: "workspace-write",
       codex_reviewer_sandbox: "read-only",
+      ollama_fallback_enabled: "0",
+      llm_backend: "primary",
+      ollama_model: "gemma4:31b:cloud",
+      ollama_base_url: "http://127.0.0.1:11434/api/codex/v1",
       reviewer_ok: "",
       reviewer_checked_at: "",
       reviewer_error: "",
@@ -196,6 +200,39 @@ export class Repo {
       throw new Error("Expected integer from 1 to 5");
     if (key === "keep_awake" && !["0", "1"].includes(value))
       throw new Error("Expected 0 or 1");
+    if (key === "ollama_fallback_enabled" && !["0", "1"].includes(value))
+      throw new Error("Expected 0 or 1");
+    if (key === "llm_backend" && !["primary", "ollama"].includes(value))
+      throw new Error("Invalid LLM backend");
+    if (
+      key === "ollama_model" &&
+      (!value.trim() || value.length > 200 || /[\s\x00-\x1f]/.test(value))
+    )
+      throw new Error("Invalid Ollama model");
+    if (key === "ollama_base_url") {
+      const url = new URL(value);
+      if (
+        !["http:", "https:"].includes(url.protocol) ||
+        url.username ||
+        url.password
+      )
+        throw new Error("Invalid Ollama URL");
+    }
+    if (
+      [
+        "llm_backend",
+        "ollama_model",
+        "ollama_base_url",
+        "ollama_fallback_enabled",
+      ].includes(key) &&
+      this.getSetting(key) !== value
+    ) {
+      this.db
+        .prepare(
+          "UPDATE settings SET value='' WHERE key IN ('reviewer_ok','reviewer_checked_at','reviewer_error')",
+        )
+        .run();
+    }
     if (
       ["codex_worker_sandbox", "codex_reviewer_sandbox"].includes(key) &&
       !["read-only", "workspace-write", "danger-full-access"].includes(value)

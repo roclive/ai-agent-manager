@@ -1,4 +1,11 @@
 import { rateLimited } from "./finalize.js";
+import {
+  llmArgs,
+  llmBackend,
+  recordBackend,
+  readBackend,
+  quotaFallback,
+} from "./llm.js";
 import { integrate } from "./integration.js";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
@@ -78,6 +85,8 @@ export function autopilotStatus(repo: Repo) {
     ).filter((e) => today(e.ts)).length,
     idle_since: repo.getSetting("idle_since") || undefined,
     reviewer: repo.getSetting("reviewer"),
+    llm_backend: llmBackend(repo),
+    ollama_model: repo.getSetting("ollama_model"),
     reviewer_ok: healthSetting(repo, "ok") === "1",
     reviewer_checked_at: healthSetting(repo, "checked_at") || null,
     reviewer_error: healthSetting(repo, "error"),
@@ -122,12 +131,13 @@ export const claudeArgs: string[] = [
 ];
 export const healthSetting = (repo: Repo, key: string) =>
   repo.getSetting(`reviewer_${key}`) ||
-  (repo.getSetting("reviewer") === "claude"
+  (repo.getSetting("reviewer") === "claude" && llmBackend(repo) === "primary"
     ? repo.getSetting(`claude_${key}`)
     : "") ||
   "";
 export function reviewerCommand(repo: Repo, cwd: string, dir: string) {
-  const codex = repo.getSetting("reviewer") !== "claude";
+  const codex =
+    llmBackend(repo) === "ollama" || repo.getSetting("reviewer") !== "claude";
   return {
     cmd: codex
       ? process.env.AAM_FAKE_CODEX || "codex"
@@ -144,6 +154,7 @@ export function reviewerCommand(repo: Repo, cwd: string, dir: string) {
           'approval_policy="never"',
           "-c",
           'model_reasoning_effort="medium"',
+          ...llmArgs(repo),
           "--skip-git-repo-check",
           "-o",
           resolve(dir, "last.md"),
@@ -161,6 +172,7 @@ const wrapper = `const fs=require('node:fs'), cp=require('node:child_process'); 
 function launch(repo: Repo, job: Job, cwd: string, prompt: string) {
   const dir = dirname(resultPath(repo, job.id));
   mkdirSync(dir, { recursive: true });
+  recordBackend(repo, dir);
   const file = resolve(dir, "prompt.txt");
   writeFileSync(file, prompt + contextRule, { mode: 0o600 });
   const command = reviewerCommand(repo, cwd, dir);
@@ -393,6 +405,14 @@ export function collectAutopilot(repo: Repo) {
           };
       if (rateLimited([r.stdout, r.output, r.stderr].join("\n"), r.status)) {
         finish(repo, job, "rate_limited");
+        if (
+          quotaFallback(
+            repo,
+            readBackend(dirname(resultPath(repo, job.id))),
+            "Reviewer/planner quota exhausted",
+          )
+        )
+          continue;
         repo.setSetting(
           "cooldown_until",
           new Date(Date.now() + 30 * 60000).toISOString(),
@@ -681,6 +701,7 @@ export function checkReviewer(
     const dir = resolve(repo.home, "health", String(Date.now()));
     mkdirSync(dir, { recursive: true });
     const selectedReviewer = repo.getSetting("reviewer");
+    const selectedBackend = llmBackend(repo);
     const command = reviewerCommand(
       repo,
       repo.projects()[0]?.repo_path || repo.home,
@@ -713,7 +734,10 @@ export function checkReviewer(
       } catch {
         /* invalid output is unhealthy */
       }
-      if (repo.getSetting("reviewer") !== selectedReviewer) {
+      if (
+        repo.getSetting("reviewer") !== selectedReviewer ||
+        llmBackend(repo) !== selectedBackend
+      ) {
         resolveCheck({
           ok: false,
           result: "Reviewer changed during health check",
@@ -721,6 +745,19 @@ export function checkReviewer(
         return;
       }
       if (rateLimited([stdout, stderr, result].join("\n"), code)) {
+        if (
+          quotaFallback(
+            repo,
+            selectedBackend,
+            "Reviewer health-check quota exhausted",
+          )
+        ) {
+          resolveCheck({
+            ok: false,
+            result: "Switched to Ollama; health check will retry",
+          });
+          return;
+        }
         repo.setSetting(
           "cooldown_until",
           new Date(Date.now() + 30 * 60000).toISOString(),

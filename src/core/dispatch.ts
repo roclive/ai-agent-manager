@@ -6,6 +6,7 @@ import { ensureWorktree } from "./worktree.js";
 import { prompt, spawnWorker } from "../workers/index.js";
 import { checkQuota } from "./usage.js";
 
+import { llmArgs, llmBackend, recordBackend } from "./llm.js";
 export function dependenciesDone(repo: Repo, t: Task) {
   return (JSON.parse(t.depends_on) as string[]).every((id) => {
     try {
@@ -49,7 +50,7 @@ export function dispatch(repo: Repo, id: string, force = false) {
     throw new Error("Workers are in cooldown");
 
   // Quota Check
-  const quota = checkQuota(repo, t.worker);
+  const quota = checkQuota(repo, llmBackend(repo) === "ollama" ? "ollama" : t.worker);
   if (!quota.ok) {
     const message = quota.warning || `Quota exhausted for ${t.worker}`;
     repo.updateTask(t.id, { status: "blocked", blocker: message });
@@ -71,15 +72,17 @@ export function dispatch(repo: Repo, id: string, force = false) {
   }
   const startSha = git(worktree, ["rev-parse", "HEAD"]);
   const started = new Date().toISOString();
+  const worker = llmBackend(repo) === "ollama" ? "codex" : t.worker;
   const result = repo.db
     .prepare(
       "INSERT INTO runs(task_id,worker,status,started_at,start_sha,log_path,last_message_path) VALUES (?,?,'running',?,?,'','')",
     )
-    .run(t.id, t.worker, started, startSha);
+    .run(t.id, worker, started, startSha);
   const idRun = Number(result.lastInsertRowid);
   const runDir = resolve(repo.home, "runs", String(idRun));
   try {
     mkdirSync(runDir, { recursive: true });
+    recordBackend(repo, runDir);
     const promptFile = resolve(runDir, "prompt.md");
     writeFileSync(
       promptFile,
@@ -89,11 +92,12 @@ export function dispatch(repo: Repo, id: string, force = false) {
         t.resolves_task_id ? repo.task(t.resolves_task_id) : undefined,
       ),
     );
-    const pid = spawnWorker(t.worker, {
+    const pid = spawnWorker(worker, {
       worktree,
       promptFile,
       runDir,
       sandbox: repo.getSetting("codex_worker_sandbox"),
+      modelArgs: llmArgs(repo),
     });
     repo.db
       .prepare(
@@ -106,7 +110,11 @@ export function dispatch(repo: Repo, id: string, force = false) {
         idRun,
       );
     repo.updateTask(t.id, { status: "in_progress" });
-    repo.event("dispatch", `Started ${t.worker} run ${idRun}`, t.id);
+    repo.event(
+      "dispatch",
+      `Started ${worker} run ${idRun} (${llmBackend(repo)})`,
+      t.id,
+    );
     return idRun;
   } catch (e) {
     repo.db
