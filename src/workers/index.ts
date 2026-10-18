@@ -61,7 +61,7 @@ export function command(worker: string, ctx: Context): Command {
   throw new Error("Unknown worker");
 }
 export function prompt(project: Project, task: Task) {
-  return `Project: ${project.name}\nTask: ${task.identifier}: ${task.title}\nRole: ${task.role}\n\n${task.description}\n\nAcceptance: tests via ${project.test_cmd || "(no test command configured)"}\n\nPrevious feedback:\n${task.feedback || "(none)"}\n\nRules:\n- Work only in this worktree. Do not touch files outside it.\n- Do not run git add or git commit; aam commits your changes for you.\n- Do not push.\n- Write a short summary of what changed at the end.\n`;
+  return `Project: ${project.name}\nTask: ${task.identifier}: ${task.title}\nRole: ${task.role}\n\n${task.description}\n\nAcceptance: tests via ${project.test_cmd || "(no test command configured)"}\n\n${task.feedback ? `上一轮审查意见（必须逐条处理）\n${task.feedback}\n请逐条处理每个发现，并为每个发现添加回归测试。` : "Previous feedback:\n(none)"}\n\nRules:\n- Work only in this worktree. Do not touch files outside it.\n- Do not run git add or git commit; aam commits your changes for you.\n- Do not push.\n- Write a short summary of what changed at the end.\n`;
 }
 export function spawnWorker(worker: string, ctx: Context) {
   const c = command(worker, ctx);

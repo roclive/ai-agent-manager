@@ -1,6 +1,8 @@
 import { integrate } from "./integration.js";
 import { Repo } from "../db/index.js";
 import { git, runner, type Runner } from "./process.js";
+export const reviewCalibration =
+  "List each finding with severity [P0], [P1], [P2], or [P3]. Approve (verdict approve, with notes listing the nits) when the only findings are [P3] nits or style. Reject for any [P0]/[P1]/[P2] correctness, security, data-loss or spec violation.";
 export function review(repo: Repo, id: string, verdict: string, notes = "") {
   if (!["approve", "reject"].includes(verdict))
     throw new Error("Expected approve or reject");
@@ -55,7 +57,7 @@ export function claudeReview(repo: Repo, id: string, run: Runner = runner) {
     `${p.base_branch}...${t.branch}`,
     "--stat",
   ]);
-  const prompt = `Review ${t.identifier}: ${t.title}\n${t.description}\nTests: ${JSON.stringify(repo.runs(t.id)[0])}\n${stat}\n${Buffer.from(diff).subarray(0, 60000).toString()}\nReply with JSON {"verdict":"approve"|"reject","notes":"..."}.`;
+  const prompt = `Review ${t.identifier}: ${t.title}\n${t.description}\nTests: ${JSON.stringify(repo.runs(t.id)[0])}\n${stat}\n${Buffer.from(diff).subarray(0, 60000).toString()}\n${reviewCalibration}\nReply with JSON {"verdict":"approve"|"reject","notes":"..."}.`;
   const r = run(
     "claude",
     ["-p", "--output-format", "json", prompt],

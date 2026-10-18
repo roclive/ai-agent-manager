@@ -360,6 +360,27 @@ export class Repo {
       });
     })();
   }
+  retryTask(id: string | number, attempts?: number) {
+    return this.db.transaction(() => {
+      const task = this.task(id);
+      if (this.runs(task.id).some((run) => run.status === "running"))
+        throw new Error("Task has a running worker");
+      const updated = this.updateTask(id, {
+        status: "ready",
+        blocker: "",
+        attempts:
+          attempts === undefined
+            ? Math.max(0, task.max_attempts - 1)
+            : attempts,
+      });
+      this.event(
+        "retry",
+        `Retry requested; attempts ${task.attempts} -> ${updated.attempts}`,
+        task.id,
+      );
+      return updated;
+    })();
+  }
   updateTask(id: string | number, patch: Record<string, unknown>) {
     const t = this.task(id);
     const allowed = [

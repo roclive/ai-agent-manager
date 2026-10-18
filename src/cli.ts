@@ -132,9 +132,24 @@ export function cli(repo: Repo) {
     .action((id, status, o) => {
       if (repo.runs(repo.task(id).id).some((r) => r.status === "running"))
         throw new Error("Cannot move a task with a running worker");
-      output(repo.updateTask(id, { status, feedback: o.note }));
-      repo.event("move", status, repo.task(id).id);
+      output(repo.updateTask(id, { status }));
+      repo.event(
+        "move",
+        o.note === undefined ? status : `${status}: ${o.note}`,
+        repo.task(id).id,
+      );
     });
+  task
+    .command("retry <id>")
+    .option("--attempts <n>")
+    .action((id, o) =>
+      output(
+        repo.retryTask(
+          id,
+          o.attempts === undefined ? undefined : Number(o.attempts),
+        ),
+      ),
+    );
   task
     .command("edit <id>")
     .option("--attempts <n>")

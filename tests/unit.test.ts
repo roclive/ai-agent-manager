@@ -204,6 +204,9 @@ it("parses nested Claude JSON and leaves invalid reviews pending", () => {
   claudeReview(f.repo, t.identifier, (cmd, args, cwd, _input, timeout) => {
     expect(cmd).toBe("claude");
     expect(args.slice(0, 3)).toEqual(["-p", "--output-format", "json"]);
+    expect(args[3]).toContain("severity [P0], [P1], [P2], or [P3]");
+    expect(args[3]).toContain("only findings are [P3] nits or style");
+    expect(args[3]).toContain("Reject for any [P0]/[P1]/[P2]");
     expect(cwd).toBe(f.path);
     expect(timeout).toBe(120000);
     return {
@@ -390,4 +393,16 @@ it("installs, reports and removes both launchd services using an isolated home a
   expect(
     existsSync(resolve(userHome, "Library/LaunchAgents/com.aam.ui.plist")),
   ).toBe(false);
+});
+
+it("includes review feedback and a regression test requirement in worker prompts", () => {
+  f = fixture();
+  const feedback = "[P2] Preserve feedback\n[P1] Prevent data loss";
+  const task = f.task({ feedback });
+  const text = prompt(f.repo.project("T"), task);
+  expect(text).toContain(`上一轮审查意见（必须逐条处理）\n${feedback}`);
+  expect(text).toContain("为每个发现添加回归测试");
+  expect(prompt(f.repo.project("T"), { ...task, feedback: "" })).not.toContain(
+    "上一轮审查意见",
+  );
 });

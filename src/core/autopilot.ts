@@ -7,7 +7,7 @@ import { userInfo } from "node:os";
 import { Repo, type Project } from "../db/index.js";
 import { killGroup, alive } from "./process.js";
 import { dependenciesDone } from "./dispatch.js";
-import { parseVerdict } from "./review.js";
+import { reviewCalibration, parseVerdict } from "./review.js";
 
 type Job = {
   id: number;
@@ -200,19 +200,17 @@ function finish(repo: Repo, job: Job, status: string, notes = "") {
 }
 function reject(repo: Repo, job: Job, notes: string) {
   const t = repo.task(job.task_id!);
-  const previous = jobs(repo).find(
-    (j) =>
-      j.task_id === t.id &&
-      j.kind === "review" &&
-      j.id < job.id &&
-      ["reject", "approve"].includes(j.status),
-  );
-  const blocked = previous?.status === "reject";
+  const attempts = t.attempts + 1;
+  const blocked = attempts >= t.max_attempts;
+  const bytes = Buffer.from(notes);
+  let end = Math.min(bytes.length, 8192);
+  while (end < bytes.length && (bytes[end]! & 0xc0) === 0x80) end--;
+  notes = bytes.subarray(0, end).toString("utf8");
   repo.updateTask(t.id, {
     status: blocked ? "blocked" : "ready",
     feedback: notes,
-    attempts: t.attempts + 1,
-    blocker: blocked ? `auto-review rejected twice: ${notes}` : "",
+    attempts,
+    blocker: blocked ? `auto-review rejected ${attempts} times: ${notes}` : "",
   });
   finish(repo, job, "reject", notes);
   repo.event("auto_review", `reject: ${notes}`, t.id);
@@ -282,7 +280,7 @@ export function reviewPrompt(repo: Repo, taskId: number) {
           .slice(-60)
           .join("\n")
       : ""
-  }\n${gitRead(t.worktree_path, ["diff", "--stat", range, "--"])}\nFiles (names only):\n${names.map((n) => JSON.stringify(n)).join("\n")}\nLarge files:\n${omitted.join("\n")}\n${clip(diff, limit)}\nRules: local work only, never push; tests must pass; no secrets; scope matches the task. Return ONLY JSON {"verdict":"approve"|"reject","notes":"..."}.`;
+  }\n${gitRead(t.worktree_path, ["diff", "--stat", range, "--"])}\nFiles (names only):\n${names.map((n) => JSON.stringify(n)).join("\n")}\nLarge files:\n${omitted.join("\n")}\n${clip(diff, limit)}\n${reviewCalibration}\nRules: local work only, never push; tests must pass; no secrets; scope matches the task. Return ONLY JSON {"verdict":"approve"|"reject","notes":"..."}.`;
 }
 export type PlannedTask = {
   title: string;

@@ -46,7 +46,26 @@ it("runs executable CLI management commands and reaps workers after the launchin
   });
   for (const invalid of ["-1", "1.5", "NaN"])
     run(["task", "edit", "T-1", "--attempts", invalid], false);
-  run(["task", "edit", "T-1", "--attempts", "0"]);
+  run(["task", "move", "T-1", "blocked", "--note", "Human note"]);
+  expect(f.repo.task("T-1").feedback).toBe("literal $(false)\nfeedback");
+  expect(JSON.stringify(f.repo.events(10))).toContain("Human note");
+  f.repo.updateTask("T-1", { blocker: "exhausted" });
+  run(["task", "move", "T-1", "ready"]);
+  expect(f.repo.task("T-1")).toMatchObject({
+    blocker: "",
+    attempts: 2,
+    feedback: "literal $(false)\nfeedback",
+  });
+  run(["task", "retry", "T-1"]);
+  expect(f.repo.task("T-1").attempts).toBe(2);
+  for (const invalid of ["-1", "1.5", "NaN"])
+    run(["task", "retry", "T-1", "--attempts", invalid], false);
+  run(["task", "retry", "T-1", "--attempts", "0"]);
+  expect(f.repo.task("T-1")).toMatchObject({
+    status: "ready",
+    attempts: 0,
+    feedback: "literal $(false)\nfeedback",
+  });
   run(["settings", "set", "max_parallel", "1"]);
   expect(run(["settings", "get", "max_parallel"])).toContain("1");
   run([

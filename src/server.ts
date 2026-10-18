@@ -104,6 +104,21 @@ export function createApp(
     return c.json(task, 201);
   });
   app.get("/api/tasks/:id", (c) => c.json(taskDetail(repo, c.req.param("id"))));
+  app.post("/api/tasks/:id/retry", async (c) => {
+    const input = await c.req.text();
+    const body: Record<string, unknown> = input ? JSON.parse(input) : {};
+    if (
+      !body ||
+      Array.isArray(body) ||
+      typeof body !== "object" ||
+      Object.keys(body).some((key) => key !== "attempts") ||
+      (Object.hasOwn(body, "attempts") && typeof body.attempts !== "number")
+    )
+      throw new Error("Invalid retry request");
+    return c.json(
+      repo.retryTask(c.req.param("id"), body.attempts as number | undefined),
+    );
+  });
   app.patch("/api/tasks/:id", async (c) => {
     const id = c.req.param("id");
     const input = await c.req.json<Record<string, unknown>>();
