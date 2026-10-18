@@ -10,3 +10,5 @@ aam-implementation.bundle
 *.bundle
 BACKLOG.md
 PROGRESS.md
+ui/node_modules/
+ui/dist/

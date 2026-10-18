@@ -1,0 +1,244 @@
+// Adapted from paperclipai/paperclip (MIT)
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import {
+  DndContext,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  useDroppable,
+  closestCorners,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  sortableKeyboardCoordinates,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
+  Plus,
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+  GripVertical,
+} from "lucide-react";
+import {
+  statuses,
+  statusLabels,
+  roleLabels,
+  type Task,
+  type TaskStatus,
+  type Run,
+} from "../lib/types";
+import { groupTasks, planDrop } from "../lib/board";
+import { StatusIcon } from "./StatusIcon";
+import { PriorityIcon } from "./PriorityIcon";
+import { Card } from "./ui/card";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+function dependencies(task: Task): string[] {
+  try {
+    return typeof task.depends_on === "string"
+      ? JSON.parse(task.depends_on)
+      : task.depends_on;
+  } catch {
+    return [];
+  }
+}
+function Running({ run }: { run: Run }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const seconds = Math.max(
+    0,
+    Math.floor((now - Date.parse(run.started_at)) / 1000),
+  );
+  return (
+    <span className="running">
+      <i />
+      {`运行中 · ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`}
+    </span>
+  );
+}
+function KanbanCard({ task, run }: { task: Task; run?: Run }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: task.id });
+  return (
+    <Card
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.35 : 1,
+      }}
+      className="task-card"
+    >
+      <div className="card-meta">
+        <span>{task.identifier}</span>
+        <PriorityIcon priority={task.priority} />
+        <button
+          {...attributes}
+          {...listeners}
+          className="drag-handle"
+          aria-label={`拖动 ${task.identifier}`}
+        >
+          <GripVertical size={14} />
+        </button>
+      </div>
+      <Link
+        className="task-title"
+        to={`?task=${encodeURIComponent(task.identifier)}`}
+      >
+        {task.title}
+      </Link>
+      <div className="card-tags">
+        <Badge variant="secondary">{task.worker}</Badge>
+        <span>{roleLabels[task.role]}</span>
+        <span className="ml-auto">
+          {task.attempts}/{task.max_attempts} 次
+        </span>
+      </div>
+      {dependencies(task).length > 0 && (
+        <div className="card-tags">
+          依赖{" "}
+          {dependencies(task).map((d) => (
+            <Badge key={d} variant="outline">
+              {d}
+            </Badge>
+          ))}
+        </div>
+      )}
+      {task.blocker && (
+        <p className="blocker">
+          <AlertTriangle size={13} />
+          {task.blocker}
+        </p>
+      )}
+      {run && <Running run={run} />}
+    </Card>
+  );
+}
+function KanbanColumn({
+  status,
+  tasks,
+  runs,
+  onCreate,
+}: {
+  status: TaskStatus;
+  tasks: Task[];
+  runs: Run[];
+  onCreate: (s: TaskStatus) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: status });
+  const [collapsed, setCollapsed] = useState(status === "cancelled");
+  return (
+    <section
+      ref={setNodeRef}
+      className={`kanban-column ${collapsed ? "collapsed" : ""} ${isOver ? "over" : ""}`}
+      data-status={status}
+      aria-label={statusLabels[status]}
+    >
+      <header>
+        <StatusIcon status={status} />
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className="column-label"
+        >
+          {statusLabels[status]}
+          {collapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+        </button>
+        <span className="column-count">{tasks.length}</span>
+        <Button
+          size="icon"
+          variant="ghost"
+          aria-label={`在${statusLabels[status]}新建任务`}
+          onClick={() => onCreate(status)}
+        >
+          <Plus />
+        </Button>
+      </header>
+      {!collapsed && (
+        <div className="column-body">
+          <SortableContext
+            items={tasks.map((t) => t.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            {tasks.map((t) => (
+              <KanbanCard
+                key={t.id}
+                task={t}
+                run={
+                  runs.find(
+                    (r) => r.task_id === t.id && r.status === "running",
+                  ) ?? t.runs?.find((r) => r.status === "running")
+                }
+              />
+            ))}
+          </SortableContext>
+          {tasks.length === 0 && <p className="column-empty">拖动任务至此</p>}
+        </div>
+      )}
+    </section>
+  );
+}
+export function KanbanBoard({
+  tasks,
+  runs,
+  onMove,
+  onCreate,
+  disabled = false,
+  allTasks = tasks,
+}: {
+  tasks: Task[];
+  runs: Run[];
+  onMove: (
+    id: number,
+    patch: { status: TaskStatus; sort_order: number },
+  ) => void;
+  onCreate: (status: TaskStatus) => void;
+  disabled?: boolean;
+  allTasks?: Task[];
+}) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+  const grouped = groupTasks(tasks);
+  const dragEnd = (event: DragEndEvent) => {
+    if (disabled || !event.over) return;
+    const patch = planDrop(allTasks, Number(event.active.id), event.over.id);
+    if (patch) onMove(Number(event.active.id), patch);
+  };
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCorners}
+      onDragEnd={dragEnd}
+    >
+      <div className="kanban-board" aria-busy={disabled}>
+        {statuses.map((status) => (
+          <KanbanColumn
+            key={status}
+            status={status}
+            tasks={grouped[status]}
+            runs={runs}
+            onCreate={onCreate}
+          />
+        ))}
+      </div>
+    </DndContext>
+  );
+}

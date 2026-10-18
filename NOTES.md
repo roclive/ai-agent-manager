@@ -13,3 +13,9 @@
 - HTTP task creation uses `{project: "KEY", title, ...taskFields}`; dependency arrays are stored as JSON text in SQLite responses. Run selection (`logs --run`) uses the database run ID. Pruning refuses dirty worktrees rather than discarding uncommitted files.
 
 - Manager review fixes supersede the original spec: aam commits worker changes from last.md (summary line capped at 72 characters, body at 4096 UTF-8 bytes); workers leave changes uncommitted. Dependency merges precede setup, skip missing/contained branches, and abort conflicts; only newly created branches/worktrees are removed on conflict. Preparation errors block dispatch without consuming worker attempts. Rate-limit detection requires a failed/unknown exit and an error-bearing log line.
+
+## AAM-5 UI
+- Paperclip components are copied into ui/src and adapted locally; there are no runtime vendor imports.
+- Legacy server rejects fractional `sort` values (it stores them in positive-integer seq). Midpoint reordering uses the AAM-4 contract; legacy fallback rounds to a positive integer so status moves still work. Adjacent legacy positions may tie until AAM-4 adds REAL sort_order. Task identifiers are never edited.
+- Missing legacy status/runs endpoints show unavailable daemon state / no running indicators; SSE failures fall back to polling.
+- Project colour is taken from the API when supplied, with a neutral fallback because AAM-4 does not specify a colour field.

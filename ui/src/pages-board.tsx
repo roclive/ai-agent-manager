@@ -1,0 +1,191 @@
+import { useState, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Search, Plus } from "lucide-react";
+import { useTasks, useRuns, useEventStream, useProjects } from "./lib/queries";
+import { api } from "./lib/api";
+import { applyDrop } from "./lib/board";
+import type { Task, TaskStatus } from "./lib/types";
+import { statusLabels } from "./lib/types";
+import { KanbanBoard } from "./components/KanbanBoard";
+import { NewTaskDialog } from "./components/NewTaskDialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "./components/ui/sheet";
+import { Button } from "./components/ui/button";
+import { Input } from "./components/ui/input";
+import { NativeSelect } from "./components/ui/select";
+export function BoardPage({ project }: { project: string }) {
+  const live = useEventStream();
+  const tasks = useTasks(live),
+    runs = useRuns(live),
+    projects = useProjects();
+  const client = useQueryClient();
+  const [search, setSearch] = useState(""),
+    [worker, setWorker] = useState(""),
+    [priority, setPriority] = useState("");
+  const [creating, setCreating] = useState<TaskStatus | null>(null),
+    [toast, setToast] = useState(""),
+    [pending, setPending] = useState(false);
+  const moving = useRef(false);
+  const [params, setParams] = useSearchParams();
+  const selected = params.get("task");
+  const detail = useQuery({
+    queryKey: ["tasks", "detail", selected],
+    queryFn: () => api.task(selected!),
+    enabled: !!selected,
+    refetchInterval: live ? false : 5000,
+  });
+  const move = async (
+    id: number,
+    patch: { status: TaskStatus; sort_order: number },
+  ) => {
+    if (moving.current) return;
+    moving.current = true;
+    setPending(true);
+    setToast("");
+    await client.cancelQueries({ queryKey: ["tasks"] });
+    const snapshot = client.getQueryData<Task[]>(["tasks"]) ?? [];
+    try {
+      await applyDrop(snapshot, id, patch, api.patchTask, (items) =>
+        client.setQueryData(["tasks"], items),
+      );
+    } catch (error) {
+      const message = (error as Error).message;
+      setToast(
+        message === "Task has a running worker"
+          ? "任务有正在运行的执行器，无法移动。"
+          : `移动失败：${message}`,
+      );
+    } finally {
+      moving.current = false;
+      setPending(false);
+      void client.invalidateQueries({ queryKey: ["tasks"] });
+      void client.invalidateQueries({ queryKey: ["projects"] });
+    }
+  };
+  const projectId = projects.data?.find((p) => p.key === project)?.id;
+  const filtered = (tasks.data ?? []).filter(
+    (t) =>
+      (!project || t.project_id === projectId) &&
+      (!worker || t.worker === worker) &&
+      (!priority || t.priority === priority) &&
+      `${t.identifier} ${t.title} ${t.description}`
+        .toLowerCase()
+        .includes(search.toLowerCase()),
+  );
+  return (
+    <>
+      <div className="page-heading">
+        <div>
+          <h1>看板</h1>
+          <p>跟进任务，从待办到完成。</p>
+        </div>
+        <Button onClick={() => setCreating("backlog")}>
+          <Plus />
+          新建任务
+        </Button>
+      </div>
+      <div className="filters">
+        <div className="search-field">
+          <Search size={15} />
+          <Input
+            aria-label="搜索任务"
+            placeholder="搜索任务…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <NativeSelect
+          aria-label="筛选执行器"
+          value={worker}
+          onChange={(e) => setWorker(e.target.value)}
+        >
+          <option value="">全部执行器</option>
+          <option>codex</option>
+          <option>opencode</option>
+        </NativeSelect>
+        <NativeSelect
+          aria-label="筛选优先级"
+          value={priority}
+          onChange={(e) => setPriority(e.target.value)}
+        >
+          <option value="">全部优先级</option>
+          {["P0", "P1", "P2", "P3"].map((p) => (
+            <option key={p}>{p}</option>
+          ))}
+        </NativeSelect>
+        <span className="filter-count">
+          {filtered.length} 个任务 · {live ? "实时更新" : "每 5 秒更新"}
+        </span>
+      </div>
+      {toast && (
+        <div className="toast" role="alert">
+          {toast}
+          <Button variant="ghost" onClick={() => setToast("")}>
+            关闭
+          </Button>
+        </div>
+      )}
+      {tasks.isPending ? (
+        <p role="status">正在加载任务…</p>
+      ) : tasks.isError ? (
+        <div role="alert">
+          无法加载任务：{tasks.error.message}
+          <Button variant="outline" onClick={() => void tasks.refetch()}>
+            重试
+          </Button>
+        </div>
+      ) : (
+        <KanbanBoard
+          allTasks={tasks.data}
+          tasks={filtered}
+          runs={runs.data ?? []}
+          onMove={(id, patch) => void move(id, patch)}
+          onCreate={setCreating}
+          disabled={pending}
+        />
+      )}
+      {creating && (
+        <NewTaskDialog
+          status={creating}
+          projects={projects.data ?? []}
+          project={project}
+          onClose={() => setCreating(null)}
+        />
+      )}
+      <Sheet
+        open={!!selected}
+        onOpenChange={(open) => {
+          if (!open) {
+            const next = new URLSearchParams(params);
+            next.delete("task");
+            setParams(next);
+          }
+        }}
+      >
+        <SheetContent className="overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>{detail.data?.title ?? selected}</SheetTitle>
+            <SheetDescription>
+              {detail.data
+                ? `${detail.data.identifier} · ${statusLabels[detail.data.status]}`
+                : "任务详情"}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="p-5 whitespace-pre-wrap">
+            {detail.isPending
+              ? "正在加载…"
+              : detail.isError
+                ? "无法加载任务详情"
+                : detail.data?.description || "暂无描述"}
+          </div>
+        </SheetContent>
+      </Sheet>
+    </>
+  );
+}
