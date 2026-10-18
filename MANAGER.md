@@ -34,6 +34,14 @@
 
 ## 下一步优先级
 
+### 2026-10-18 22:38 JST 唤醒记录
+
+- Codex 可见额度已用29%，普通使用正常；未触发90%切换阈值。`llm_backend=primary`，Ollama兜底已开启。单个 launchd daemon、caffeinate、3个 worker 正常，未发现 blocked；不要中断正在修复 BGM-2 的 worker。
+- 接手 NPO-11 的误拒：审核器误将 GPT Image 2.5 按 DALL·E 规范要求改成 response_format，并声称图片 API 不返回 token usage。已核对官方 Create image API reference：output_format 支持 GPT Image，GPT Image 返回 base64、不支持旧 response_format，官方示例含 usage。
+- 在确认无 worker 后将 NPO-11 暂存 backlog 作为管理租约，补充请求参数/usage契约断言和模型文档；本机完整79测试通过，提交 `11ae025`。NPO-10 原始真实 smoke PNG 存在，SHA-256 与记录一致；未进行额外付费 API 调用。
+- 在 tick 锁内撤销这次无效拒绝消耗的1次尝试、写入 manager_review_correction 证据并人工批准 NPO-11；已成功集成，解除 NPO-12 前置依赖。保留 API 文档证据，避免同一错误再次返工。
+- 本轮 AAM 107项测试和类型检查通过。BGM-2 的测试回归仍由现有 worker 处理；NPO-13 正在审核；TM-6 的词性/例句问题仍待处理。
+
 ### 2026-10-18 22:22 JST 唤醒记录
 
 - 唤醒已实际触发；launchd 单实例、caffeinate、Codex full-access 及配额退避设置正常。审核预算 120，目前约 83 次，未遇配额冷却。
