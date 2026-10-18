@@ -97,6 +97,50 @@ it("runs executable CLI management commands and reaps workers after the launchin
   run(["task", "move", "T-1", "backlog", "--note", "Reopen"]);
   expect(f.repo.task("T-1").status).toBe("backlog");
 });
+
+it("allows collecting usage via JSON provider in CLI", async () => {
+  f = fixture();
+  const jsonPath = resolve(f.root, "usage.json");
+  writeFileSync(jsonPath, JSON.stringify([
+    { provider: "openai", type: "quota", window: "monthly", used: 100, remaining: 900 }
+  ]));
+  const run = (args: string[]) => {
+    const r = spawnSync(executable, args, {
+      cwd: f.root,
+      env: { ...process.env, AAM_HOME: f.repo.home },
+      encoding: "utf8",
+      timeout: 5000,
+    });
+    expect(r.status).toBe(0);
+    return r.stdout;
+  };
+  run(["usage", "collect", "--provider", "test", "--json", jsonPath]);
+  expect(f.repo.latestUsage("openai")).toBeDefined();
+  expect(Number(f.repo.latestUsage("openai")?.remaining)).toBe(900);
+});
+
+
+it("allows collecting usage via JSON provider in CLI", async () => {
+  f = fixture();
+  const jsonPath = resolve(f.root, "usage.json");
+  writeFileSync(jsonPath, JSON.stringify([
+    { provider: "openai", type: "quota", window: "monthly", used: 100, remaining: 900 }
+  ]));
+  const run = (args: string[]) => {
+    const r = spawnSync(executable, args, {
+      cwd: f.root,
+      env: { ...process.env, AAM_HOME: f.repo.home },
+      encoding: "utf8",
+      timeout: 5000,
+    });
+    expect(r.status).toBe(0);
+    return r.stdout;
+  };
+  run(["usage", "collect", "--provider", "test", "--json", jsonPath]);
+  expect(f.repo.latestUsage("openai")).toBeDefined();
+  expect(Number(f.repo.latestUsage("openai")?.remaining)).toBe(900);
+});
+
 it("stops daemon gracefully while its detached worker continues", async () => {
   f = fixture("sleep 0.5\nprintf detached > detached.txt\nexit 0");
   f.task();

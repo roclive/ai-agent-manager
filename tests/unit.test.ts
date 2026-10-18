@@ -43,6 +43,32 @@ describe("repository", () => {
     const other = new Repo(r.home);
     expect(other.task(t.identifier).description).toBe("hello");
     other.close();
+  
+  it("returns events in descending order by id", () => {
+    f = fixture();
+    const r = f.repo;
+    r.event("e1", "msg1");
+    r.event("e2", "msg2");
+    r.event("e3", "msg3");
+    const events = r.events();
+    expect((events[0] as any).message).toBe("msg3");
+    expect((events[1] as any).message).toBe("msg2");
+    expect((events[2] as any).message).toBe("msg1");
+  });
+
+  
+  it("returns events in descending order by id", () => {
+    f = fixture();
+    const r = f.repo;
+    r.event("e1", "msg1");
+    r.event("e2", "msg2");
+    r.event("e3", "msg3");
+    const events = r.events();
+    expect((events[0] as any).message).toBe("msg3");
+    expect((events[1] as any).message).toBe("msg2");
+    expect((events[2] as any).message).toBe("msg1");
+  });
+
   });
   it("rejects invalid mutations atomically", () => {
     f = fixture();

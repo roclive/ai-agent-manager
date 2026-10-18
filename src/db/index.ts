@@ -489,7 +489,7 @@ export class Repo {
   events(limit = 50, taskId?: number) {
     return this.db
       .prepare(
-        `SELECT * FROM events ${taskId === undefined ? "" : "WHERE task_id=?"} ORDER by id DESC LIMIT ?`,
+        `SELECT * FROM events ${taskId === undefined ? "" : "WHERE task_id=?"} ORDER BY id DESC LIMIT ?`,
       )
       .all(...(taskId === undefined ? [limit] : [taskId, limit]));
   }

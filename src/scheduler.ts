@@ -4,7 +4,7 @@ import { Cron } from "croner";
 import { Repo, type Routine } from "./db/index.js";
 import { tick } from "./core/tick.js";
 import { runner } from "./core/process.js";
-import { collectUsage, JsonOpenUsageProvider, FakeOpenUsageProvider } from "./workers/openusage.js";
+import { collectUsage, JsonOpenUsageProvider, FakeOpenUsageProvider, type OpenUsageProvider } from "./workers/openusage.js";
 
 export function validateRoutine(
   cron: string,
@@ -43,7 +43,7 @@ export async function fireRoutine(repo: Repo, r: Routine) {
       repo.event("routine", `${r.name} created ${t.identifier}`, t.id);
     } else if (r.action === "collect_usage") {
       const providerName = String(p.provider);
-      let provider: any;
+      let provider: OpenUsageProvider;
       if (providerName === "fake") {
         provider = new FakeOpenUsageProvider();
       } else if (p.json) {
