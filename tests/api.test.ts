@@ -48,6 +48,17 @@ it("serves task, routine, event and settings operations with validation", async 
       })
     ).status,
   ).toBe(201);
+  expect(
+    (
+      await req("routines", "POST", {
+        name: "usage",
+        cron: "0 * * * *",
+        action: "collect_usage",
+        payload: { provider: "fake" },
+      })
+    ).status,
+  ).toBe(201);
+  expect(f.repo.routines().find((routine) => routine.name === "usage")).toMatchObject({action:"collect_usage"});
   const routines = await (await req("routines")).json();
   expect(
     (await req("routines", "PATCH", { id: routines[0].id, enabled: false }))
@@ -68,7 +79,7 @@ it("serves task, routine, event and settings operations with validation", async 
   ).toBe(400);
   expect((await req("events?limit=-1")).status).toBe(400);
   expect((await req("runs/999/log")).status).toBe(404);
-  expect(await (await req("events")).json()).toHaveLength(6);
+  expect(await (await req("events")).json()).toHaveLength(7);
   f.repo.updateTask(task.identifier, { status: "backlog" });
   expect(await (await req("tick", "POST")).json()).toEqual({ ran: true });
 });

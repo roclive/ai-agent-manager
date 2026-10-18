@@ -27,6 +27,10 @@ function date(value: unknown, nullable = false): string | null {
   if (typeof value !== "string" || !Number.isFinite(Date.parse(value))) throw Error("Invalid usage timestamp");
   return new Date(value).toISOString();
 }
+function metricValue(metric: Record<string, unknown>, field: string) {
+  const key = Object.keys(metric).find((candidate) => candidate.toLowerCase() === field);
+  return key === undefined ? undefined : metric[key];
+}
 // AAM interchange envelope. Raw unversioned arrays remain readable for existing exports.
 export function parseUsage(content: string, source: string): UsageInput[] {
   if (Buffer.byteLength(content) > 1024 * 1024) throw Error("Usage payload exceeds 1 MiB");
@@ -43,14 +47,29 @@ export function parseUsage(content: string, source: string): UsageInput[] {
       let quotas = 0;
       for (const [name, metric] of Object.entries(snapshot.metrics)) {
         if (!record(metric)) throw Error("Invalid OpenUsage metric");
-        const cost = metric.unit === "USD";
-        // Analytical ratios and cumulative consumption never establish subscription limits.
-        const quota = /quota|limit|^(rpm|tpm|rpd|tpd)$/.test(name);
+        const unit = metricValue(metric, "unit");
+        const window = metricValue(metric, "window");
+        const used = metricValue(metric, "used");
+        const explicitRemaining = metricValue(metric, "remaining");
+        const limit = metricValue(metric, "limit");
+        // Percentage analytics are not dispatch quotas even if they expose a scale
+        // as `limit`. OpenUsage quota windows, however, are not consistently named:
+        // prefer their explicit limit and known usage/balance names over the unit.
+        const analytical = unit === "%";
+        const quota = !analytical && (
+          limit !== undefined ||
+          /quota|limit|credit|balance|rolling_usage|weekly_usage|usage_five_hour|^(rpm|tpm|rpd|tpd)$/i.test(name)
+        );
+        const cost = !quota && unit === "USD";
         if (!cost && !quota) continue;
-        if (quota && !cost) quotas++;
+        if (quota) quotas++;
+        const remaining = explicitRemaining ??
+          (typeof limit === "number" && typeof used === "number"
+            ? Math.max(0, limit - used)
+            : "unknown");
         flattened.push({provider, type: cost ? "cost" : "quota",
-          window: `${account}/${name}[${String(metric.unit ?? "unknown")}]/${String(metric.window ?? "unknown")}`,
-          used: metric.used ?? "unknown", remaining: cost || !trusted ? "unknown" : metric.remaining ?? "unknown",
+          window: `${account}/${name}[${String(unit ?? "unknown")}]/${String(window ?? "unknown")}`,
+          used: used ?? "unknown", remaining: cost || !trusted ? "unknown" : remaining,
           reset_at: resets[name] ?? resets[name + "_reset"] ?? null,
           freshness: snapshot.timestamp ?? "unknown"});
       }

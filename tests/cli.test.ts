@@ -83,6 +83,11 @@ it("runs executable CLI management commands and reaps workers after the launchin
   run(["routine", "disable", "sweep"]);
   run(["routine", "enable", "sweep"]);
   expect(run(["routine", "list"])).toContain("sweep");
+  run([
+    "routine", "add", "--name", "usage", "--cron", "0 * * * *",
+    "--action", "collect_usage", "--payload", '{"provider":"fake"}',
+  ]);
+  expect(f.repo.routines().find((routine) => routine.name === "usage")).toMatchObject({action:"collect_usage"});
   run(["run", "T-1"]);
   await waitExit(f.repo, f.repo.runs()[0].id);
   run(["tick"]);

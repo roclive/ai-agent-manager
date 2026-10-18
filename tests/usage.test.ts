@@ -90,6 +90,29 @@ it("imports the documented OpenUsage 0.26 string-version envelope without turnin
   expect(rows.every(s=>!s.window.includes("account-"))).toBe(true);
 });
 
+it("treats OpenUsage limited usage windows and USD balances as quota, including capitalized fields", () => {
+  f = fixture();
+  const now = new Date().toISOString();
+  const data = {schema_version:"1",openusage_version:"0.26.1",source:"daemon",snapshots:[
+    {provider_id:"codex",timestamp:now,status:"LIMITED",metrics:{
+      rolling_usage:{Unit:"requests",Window:"5h",Used:100,Limit:100},
+      weekly_usage:{unit:"requests",window:"7d",used:25,limit:100},
+      usage_five_hour:{unit:"requests",window:"5h",used:10,remaining:90},
+      credit_balance:{unit:"USD",window:"monthly",used:20,remaining:0},
+      monthly_limit:{unit:"USD",window:"monthly",used:50,limit:50},
+      total_cost:{unit:"USD",window:"monthly",used:12},
+    }},
+  ]};
+  const rows = parseUsage(JSON.stringify(data), "cli:fixture");
+  for (const name of ["rolling_usage", "weekly_usage", "usage_five_hour", "credit_balance", "monthly_limit"])
+    expect(rows.find((snapshot) => snapshot.window.includes(name))?.type).toBe("quota");
+  expect(rows.find((snapshot) => snapshot.window.includes("rolling_usage"))).toMatchObject({used:100,remaining:0});
+  expect(rows.find((snapshot) => snapshot.window.includes("monthly_limit"))?.remaining).toBe(0);
+  expect(rows.find((snapshot) => snapshot.window.includes("total_cost"))).toMatchObject({type:"cost",remaining:"unknown"});
+  for (const snapshot of rows) f.repo.addUsageSnapshot(snapshot);
+  expect(checkQuota(f.repo, "codex").ok).toBe(false);
+});
+
 it("does not block the selected Ollama backend with a different provider's exhausted quota", () => {
   f=fixture();
   f.repo.setSetting("ollama_fallback_enabled","1");f.repo.setSetting("llm_backend","ollama");

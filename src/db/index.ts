@@ -558,7 +558,7 @@ export class Repo {
   ) {
     if (typeof name !== "string" || !name.trim())
       throw new Error("Routine name required");
-    if (!["heartbeat", "create_task", "shell"].includes(action))
+    if (!["heartbeat", "create_task", "shell", "collect_usage"].includes(action))
       throw new Error("Invalid action");
     this.db
       .prepare(
