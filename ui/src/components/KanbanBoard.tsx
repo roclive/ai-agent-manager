@@ -1,4 +1,5 @@
 // Adapted from paperclipai/paperclip (MIT)
+import { ProjectChip } from "./ProjectChip";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -93,6 +94,12 @@ function KanbanCard({ task, run }: { task: Task; run?: Run }) {
       className="task-card"
     >
       <div className="card-meta">
+        <ProjectChip
+          projectKey={task.identifier.slice(
+            0,
+            task.identifier.lastIndexOf("-"),
+          )}
+        />
         <span>{task.identifier}</span>
         <PriorityIcon priority={task.priority} />
         <button

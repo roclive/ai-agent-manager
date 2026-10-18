@@ -1,4 +1,6 @@
 // Adapted from paperclipai/paperclip (MIT)
+import { ProjectChip } from "../components/ProjectChip";
+import { priorityLabels, workerLabels } from "../lib/types";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useTasks, useProjects } from "../lib/queries";
@@ -127,13 +129,13 @@ export function Backlog({ project }: { project: string }) {
                 {statusLabels[s]} · {rows.filter((t) => t.status === s).length}
               </summary>
               <div className="table-scroll">
-                <table>
+                <table className="backlog-table">
                   <thead>
                     <tr>
                       {[
                         "选择",
-                        "ID",
-                        "标题",
+                        "ID / 标题",
+                        "项目",
                         "优先级",
                         "角色",
                         "执行器",
@@ -168,9 +170,25 @@ export function Backlog({ project }: { project: string }) {
                             <Link to={`?task=${t.identifier}`}>
                               {t.identifier}
                             </Link>
+                            <Link
+                              className="backlog-title"
+                              to={`?task=${t.identifier}`}
+                            >
+                              {t.title}
+                            </Link>
                           </td>
                           <td>
-                            <Link to={`?task=${t.identifier}`}>{t.title}</Link>
+                            <ProjectChip
+                              projectKey={
+                                projects.data?.find(
+                                  (p) => p.id === t.project_id,
+                                )?.key ??
+                                t.identifier.slice(
+                                  0,
+                                  t.identifier.lastIndexOf("-"),
+                                )
+                              }
+                            />
                           </td>
                           {(
                             ["priority", "role", "worker", "status"] as const
@@ -198,7 +216,10 @@ export function Backlog({ project }: { project: string }) {
                                       : statuses
                                   ).map((v) => (
                                     <option key={v} value={v}>
-                                      {statusLabels[v as Task["status"]] ?? v}
+                                      {statusLabels[v as Task["status"]] ??
+                                        priorityLabels[v] ??
+                                        workerLabels[v] ??
+                                        v}
                                     </option>
                                   ))}
                                 </NativeSelect>

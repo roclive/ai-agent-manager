@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { writeFileSync, readFileSync, realpathSync } from "node:fs";
+import { writeFileSync, readFileSync, realpathSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { Repo } from "../src/db/index.js";
@@ -346,4 +346,48 @@ it("migrates start_sha idempotently without inventing snapshots for old runs", (
       other.close();
     }
   }
+});
+
+it("installs, reports and removes both launchd services using an isolated home and runner", async () => {
+  f = fixture();
+  const { launchd } = await import("../src/launchd.js");
+  const userHome = resolve(f.root, "launchd-home");
+  const calls: string[][] = [];
+  const run = (_cmd: string, args: string[]) => {
+    calls.push(args);
+    return {
+      status: 0,
+      stdout: "state = running\npid = 123\nlast exit code = 0",
+      stderr: "",
+    };
+  };
+  launchd(f.repo, "install", false, run, userHome);
+  expect(calls).toHaveLength(0);
+  for (const service of ["daemon", "ui"]) {
+    const body = readFileSync(
+      resolve(userHome, `Library/LaunchAgents/com.aam.${service}.plist`),
+      "utf8",
+    );
+    expect(body).toContain(`<string>com.aam.${service}</string>`);
+    expect(body).toContain(`<string>${userHome}</string>`);
+    expect(body).toContain(`Library/Logs/aam/${service}.log`);
+    expect(body).toContain("<key>KeepAlive</key><true/>");
+    if (service === "ui")
+      expect(body).toContain(
+        "<string>serve</string><string>--port</string><string>3199</string>",
+      );
+  }
+  launchd(f.repo, "install", true, run, userHome);
+  expect(calls.filter((a) => a[0] === "load")).toHaveLength(2);
+  expect(launchd(f.repo, "status", false, run, userHome)).toMatchObject({
+    services: [
+      { label: "com.aam.daemon", state: "running", pid: 123, lastExitCode: 0 },
+      { label: "com.aam.ui", state: "running", pid: 123, lastExitCode: 0 },
+    ],
+  });
+  launchd(f.repo, "uninstall", false, run, userHome);
+  expect(calls.filter((a) => a[0] === "unload")).toHaveLength(2);
+  expect(
+    existsSync(resolve(userHome, "Library/LaunchAgents/com.aam.ui.plist")),
+  ).toBe(false);
 });

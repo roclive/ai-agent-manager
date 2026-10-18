@@ -32,8 +32,21 @@ import {
   SheetDescription,
 } from "./ui/sheet";
 export function Layout() {
-  const [project, setProject] = useState(""),
+  const [project, setProject] = useState(() => {
+      try {
+        return localStorage.getItem("aam.project") ?? "";
+      } catch {
+        return "";
+      }
+    }),
     [menu, setMenu] = useState(false);
+  useEffect(() => {
+    try {
+      localStorage.setItem("aam.project", project);
+    } catch {
+      /* Storage may be unavailable. */
+    }
+  }, [project]);
   const projects = useProjects(),
     status = useStatus();
   useEventStream();

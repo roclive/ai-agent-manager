@@ -865,3 +865,56 @@ summary {
   background: var(--muted);
   padding: 12px;
 }
+
+.project-chip {
+  display: inline-block;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.backlog-table {
+  min-width: 1250px;
+  table-layout: auto;
+}
+.backlog-table th,
+.backlog-table td {
+  white-space: nowrap;
+}
+.backlog-table th:nth-child(2),
+.backlog-table td:nth-child(2) {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--background);
+  min-width: 240px;
+  max-width: 320px;
+  box-shadow: 1px 0 var(--border);
+}
+.backlog-title {
+  display: block;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.backlog-table select {
+  min-width: 140px;
+}
+.backlog-table td:last-child {
+  min-width: 170px;
+}
+.field-error {
+  color: var(--destructive, #dc2626);
+  font-size: 12px;
+}
+.routine-error {
+  border: 1px solid var(--destructive, #dc2626);
+  padding: 12px;
+  border-radius: 6px;
+  color: var(--destructive, #dc2626);
+}
+.event-kind {
+  border-radius: 4px;
+  padding: 3px 7px;
+  white-space: nowrap;
+}

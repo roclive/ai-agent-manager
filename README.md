@@ -179,3 +179,9 @@ See `NOTES.md` for implementation choices and delivery constraints.
 Stop the daemon with `kill -TERM <pid>`; detached workers keep running and are reaped on the next start. Never kill the daemon’s process tree.
 
 Reset retry accounting with `aam task edit <ID> --attempts 0` and replace feedback with `aam task edit <ID> --feedback-file feedback.txt`.
+
+运行 `aam launchd install --load` 可安装并加载两个常驻服务：
+`com.aam.daemon` 负责调度，`com.aam.ui` 提供 http://127.0.0.1:3199 的网页界面。
+先运行 `cd ui && npm run build` 构建网页。UI 日志位于
+`~/Library/Logs/aam/ui.log`。`aam launchd status` 显示两个服务的状态、PID 和上次退出码；
+`aam launchd uninstall` 卸载两者。不加 `--load` 时仅写入 plist。
