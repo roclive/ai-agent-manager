@@ -257,9 +257,9 @@ export function uiRoutes(
     repo.event("routine", `Deleted ${r.name}: name`);
     return c.json({ deleted: true });
   });
-  app.post("/api/routines/:id/run", (c) => {
+  app.post("/api/routines/:id/run", async (c) => {
     const r = routine(c.req.param("id"));
-    fireRoutine(repo, r);
+    await fireRoutine(repo, r);
     return c.json(routineJSON(routine(String(r.id))));
   });
   app.get("/api/routines/:id/runs", (c) => {

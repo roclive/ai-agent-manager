@@ -90,6 +90,25 @@ it("imports the documented OpenUsage 0.26 string-version envelope without turnin
   expect(rows.every(s=>!s.window.includes("account-"))).toBe(true);
 });
 
+it("classifies the official OpenRouter monthly USD usage metric as cost", () => {
+  const data = {schema_version:"1",openusage_version:"0.26.1",source:"daemon",snapshots:[
+    {provider_id:"openrouter",account_id:"default",timestamp:new Date().toISOString(),status:"OK",metrics:{
+      usage_monthly:{used:12.34,unit:"USD",window:"30d"},
+    }},
+  ]};
+  const rows = parseUsage(JSON.stringify(data), "cli:fixture");
+  expect(rows).toHaveLength(2);
+  const cost = rows.find((snapshot) => snapshot.window.includes("usage_monthly"));
+  expect(cost).toMatchObject({
+    provider:"openrouter", type:"cost", used:12.34, remaining:"unknown",
+    source:"cli:fixture;openusage:0.26.1;daemon",
+  });
+  expect(cost?.window).toContain("usage_monthly[USD]/30d");
+  expect(rows.find((snapshot) => snapshot.type === "quota")).toMatchObject({
+    remaining:"unknown",
+  });
+});
+
 it("imports Codex percentage rate-limit windows as quota and applies scheduling warnings", () => {
   f = fixture();
   const now = new Date().toISOString();

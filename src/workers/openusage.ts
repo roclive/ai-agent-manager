@@ -57,8 +57,13 @@ export function parseUsage(content: string, source: string): UsageInput[] {
         // windows, so recognize their metric names before filtering analytics.
         const quotaName = /quota|limit|credit|balance|rolling_usage|weekly_usage|usage_(?:five_hour|monthly)|^(?:rpm|tpm|rpd|tpd)$/i.test(name);
         const analytical = unit === "%" && !quotaName;
-        const quota = !analytical && (limit !== undefined || quotaName);
-        const cost = !quota && unit === "USD";
+        // Currency-denominated usage is spend unless the metric carries
+        // concrete quota evidence. Names such as OpenRouter's
+        // `usage_monthly` are otherwise ambiguous and must not turn cost into
+        // dispatch-blocking quota.
+        const quotaEvidence = limit !== undefined || explicitRemaining !== undefined;
+        const cost = unit === "USD" && !quotaEvidence;
+        const quota = !analytical && !cost && (quotaEvidence || quotaName);
         if (!cost && !quota) continue;
         if (quota) quotas++;
         const remaining = explicitRemaining ??

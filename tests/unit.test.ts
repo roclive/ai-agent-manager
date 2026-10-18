@@ -250,7 +250,7 @@ it("parses nested Claude JSON and leaves invalid reviews pending", () => {
   expect(f.repo.task(t.id).status).toBe("done");
 });
 
-it("runs create_task and shell routines and generates launchd plist", () => {
+it("runs create_task and shell routines and generates launchd plist", async () => {
   f = fixture();
   validateRoutine("*/5 * * * *", "create_task", {
     project: "T",
@@ -261,14 +261,14 @@ it("runs create_task and shell routines and generates launchd plist", () => {
     project: "T",
     title: "Scheduled",
   });
-  fireRoutine(f.repo, f.repo.routines()[0]);
+  await fireRoutine(f.repo, f.repo.routines()[0]);
   expect(f.repo.tasks()[0].title).toBe("Scheduled");
   expect(f.repo.routines()[0].last_run_at).toBeTruthy();
   f.repo.addRoutine("shell", "* * * * *", "shell", {
     cmd: "printf routine-output",
     cwd: f.path,
   });
-  fireRoutine(f.repo, f.repo.routines()[1]);
+  await fireRoutine(f.repo, f.repo.routines()[1]);
   expect(JSON.stringify(f.repo.events())).toContain("routine-output");
   const xml = plist(f.repo);
   const escape = (value: string) =>

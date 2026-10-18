@@ -153,6 +153,23 @@ it("records events for successful HTTP edits and skips rejected mutations", asyn
     message: expect.stringContaining("Deleted"),
   });
 });
+
+it("waits for collect-usage run-now persistence before responding", async () => {
+  f = fixture();
+  f.repo.addRoutine("usage-now", "0 * * * *", "collect_usage", {provider:"fake"});
+  const routine = f.repo.routines()[0];
+  const response = await createApp(f.repo).request(`/api/routines/${routine.id}/run`, {
+    method:"POST",
+    headers:{"X-AAM":"1"},
+  });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({id:routine.id,last_run_at:expect.any(String)});
+  expect(f.repo.usageSnapshots()).toHaveLength(2);
+  expect(f.repo.events()).toEqual(expect.arrayContaining([
+    expect.objectContaining({kind:"usage_collected"}),
+    expect.objectContaining({kind:"routine",message:expect.stringContaining("collected 2 snapshots")}),
+  ]));
+});
 it("paginates and filters activity without losing older matching events", async () => {
   f = fixture();
   const a = f.task(),
