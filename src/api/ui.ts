@@ -126,7 +126,7 @@ export function uiRoutes(
   app.post("/api/tasks/:id/cancel", (c) => {
     const t = repo.task(c.req.param("id"));
     for (const r of repo.runs(t.id).filter((r) => r.status === "running")) {
-      killGroup(r.pid);
+      if (alive(r.pid)) killGroup(r.pid);
       repo.db
         .prepare(
           "UPDATE runs SET status='failed',ended_at=?,summary='cancelled by user' WHERE id=?",
@@ -174,13 +174,21 @@ export function uiRoutes(
     } catch {
       /* idle */
     }
-    const running = Number.isInteger(pid) && pid > 0 && alive(pid);
+    const lockAlive = Number.isInteger(pid) && pid > 0 && alive(pid);
+    const now = Date.now();
+    const lastTick = repo.getSetting("last_tick_at") || null;
+    const timestamp = Date.parse(lastTick ?? "");
+    const age = Number.isFinite(timestamp)
+      ? Math.max(0, (now - timestamp) / 1000)
+      : null;
+    const running = lockAlive || (age !== null && age <= 180);
     return c.json({
-      now: new Date().toISOString(),
+      now: new Date(now).toISOString(),
       daemon: {
         running,
-        ...(running ? { pid } : {}),
-        last_tick_at: repo.getSetting("last_tick_at") || null,
+        ...(lockAlive ? { pid } : {}),
+        last_tick_at: lastTick,
+        last_tick_age_s: age,
       },
       cooldown_until: repo.getSetting("cooldown_until"),
       running_runs: repo.runs().filter((r) => r.status === "running").length,
@@ -192,10 +200,26 @@ export function uiRoutes(
     });
   });
   app.get("/api/stream", (c) => {
-    const raw = c.req.header("Last-Event-ID") ?? "0";
-    if (!/^\d+$/.test(raw) || !Number.isSafeInteger(Number(raw)))
-      throw new Error("Invalid event ID");
-    let cursor = Number(raw);
+    const raw = c.req.header("Last-Event-ID") ?? c.req.query("since");
+    const replay = c.req.query("replay") ?? "0";
+    for (const value of [raw, replay])
+      if (
+        value !== undefined &&
+        (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value)))
+      )
+        throw new Error("Invalid event ID or replay count");
+    const latest = (
+      repo.db.prepare("SELECT COALESCE(MAX(id),0) AS id FROM events").get() as {
+        id: number;
+      }
+    ).id;
+    let cursor = raw === undefined ? latest : Number(raw);
+    if (raw === undefined && Number(replay) > 0) {
+      const rows = repo.db
+        .prepare("SELECT id FROM events ORDER BY id DESC LIMIT ?")
+        .all(Number(replay)) as { id: number }[];
+      if (rows.length) cursor = rows[rows.length - 1].id - 1;
+    }
     return streamSSE(c, async (stream) => {
       let stopped = false;
       stream.onAbort(() => {
@@ -275,7 +299,8 @@ export function uiRoutes(
     }
     const safeFile = (candidate: string) => {
       const file = realpathSync(candidate);
-      if (!file.startsWith(root + sep)) throw new Error("Invalid path");
+      if (file !== root && !file.startsWith(root + sep))
+        throw new Error("Invalid path");
       return file;
     };
     let file: string;
@@ -307,7 +332,9 @@ export function uiRoutes(
     );
     c.header(
       "Cache-Control",
-      /[.-][\w-]{8,}\.[^.]+$/.test(file) && extname(file) !== ".html"
+      file.startsWith(root + sep + "assets" + sep) &&
+        /[.-][\w-]+\.[^.]+$/.test(file) &&
+        extname(file) !== ".html"
         ? "public, max-age=31536000, immutable"
         : "no-cache",
     );

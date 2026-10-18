@@ -149,8 +149,8 @@ Non-GET API requests require `X-AAM: 1`, or an Origin/Referer from localhost/127
 | GET | `/api/runs?status=&task=&limit=50` | Newest runs with task/project and elapsed_s |
 | GET | `/api/runs/:id/log?tail=100` | Worker log |
 | GET | `/api/runs/:id/test-log?tail=100` | Test log |
-| GET | `/api/status` | Tick lock liveness, last tick, cooldown, concurrency, task counts |
-| GET | `/api/stream` | SSE `events` rows with IDs; Last-Event-ID resumes; ping every 20s |
+| GET | `/api/status` | Live tick lock or heartbeat within 180s; daemon.last_tick_age_s, cooldown, concurrency, task counts |
+| GET | `/api/stream` | SSE new `events` rows with IDs; Last-Event-ID or ?since=N resumes; ?replay=K replays the last K (default 0); ping every 20s |
 | GET, POST, PATCH | `/api/routines` | List/create; legacy edit by id/name |
 | PATCH, DELETE | `/api/routines/:id` | Edit or delete routine |
 | POST | `/api/routines/:id/run` | Fire immediately |

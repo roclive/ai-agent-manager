@@ -1,12 +1,16 @@
-import { it, expect, afterEach } from "vitest";
+import { it, expect, afterEach, vi } from "vitest";
 import { mkdirSync, writeFileSync, symlinkSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { createApp } from "../src/server.js";
 import { Repo } from "../src/db/index.js";
 import { fixture } from "./helpers.js";
+import { daemon } from "../src/scheduler.js";
 import { alive } from "../src/core/process.js";
 let f: ReturnType<typeof fixture>;
-afterEach(() => f?.cleanup());
+afterEach(() => {
+  vi.useRealTimers();
+  f?.cleanup();
+});
 function setup(script?: string) {
   f = fixture(script);
   const dist = resolve(f.root, "dist");
@@ -191,6 +195,7 @@ it("dispatches and cancels a real fake process group, exposes runs and logs", as
   expect((await req(`/api/tasks/${t.id}/cancel`, "POST")).status).toBe(200);
   await new Promise((r) => setTimeout(r, 50));
   expect(alive(run.pid)).toBe(false);
+  expect(() => process.kill(-run.pid!, 0)).toThrow();
   expect(f.repo.runs()[0]).toMatchObject({
     status: "failed",
     summary: "cancelled by user",
@@ -241,28 +246,60 @@ it("streams newly inserted events and resumes after last event ID", async () => 
   const { app } = setup();
   f.repo.event("old", "old");
   const response = await app.request("/api/stream", {
-    headers: { "Last-Event-ID": "1" },
+    headers: {},
   });
   const reader = response.body!.getReader();
   f.repo.event("new", "new");
+  f.repo.event("new", "second");
   const result = await reader.read();
   const text = new TextDecoder().decode(result.value);
   expect(text).toContain("event: events");
   expect(text).toContain("id: 2");
   expect(text).toContain("new");
   expect(text).not.toContain("old");
+  const second = new TextDecoder().decode((await reader.read()).value);
+  expect(second).toContain("id: 3");
+  expect(second).not.toContain("id: 2");
   await reader.cancel();
+  for (const [url, headers] of [
+    ["/api/stream", { "Last-Event-ID": "2" }],
+    ["/api/stream?since=2", {}],
+    ["/api/stream?replay=1", {}],
+  ] as [string, Record<string, string>][]) {
+    const resumed = await app.request(url, { headers });
+    const reader = resumed.body!.getReader();
+    const text = new TextDecoder().decode((await reader.read()).value);
+    expect(text).toContain("id: 3");
+    expect(text).not.toContain("id: 2");
+    await reader.cancel();
+  }
 });
 it("serves missing UI notice, assets, SPA fallback and rejects symlink escapes", async () => {
   const { req, dist } = setup();
   expect(await (await req("/")).text()).toContain("UI not built");
   mkdirSync(resolve(dist, "assets"), { recursive: true });
   writeFileSync(resolve(dist, "index.html"), "<h1>App</h1>");
-  writeFileSync(resolve(dist, "assets/app-12345678.js"), "console.log(1)");
-  expect(await (await req("/tasks/T-1")).text()).toContain("App");
-  const asset = await req("/assets/app-12345678.js");
+  writeFileSync(resolve(dist, "assets/app-abc.js"), "console.log(1)");
+  mkdirSync(resolve(dist, "directory"));
+  writeFileSync(resolve(dist, "plain.js"), "plain");
+  for (const path of ["/", "/board", "/directory", "/index.html"]) {
+    const response = await req(path);
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("App");
+    expect(response.headers.get("Content-Type")).toContain("text/html");
+    expect(response.headers.get("Cache-Control")).toBe("no-cache");
+  }
+  expect((await req("/plain.js")).headers.get("Cache-Control")).toBe(
+    "no-cache",
+  );
+  writeFileSync(resolve(f.root, "x"), "OUTSIDE SECRET");
+  for (const path of ["/%2e%2e/x", "/a/../../x"])
+    expect(await (await req(path)).text()).not.toContain("OUTSIDE SECRET");
+  const asset = await req("/assets/app-abc.js");
   expect(asset.headers.get("Content-Type")).toContain("javascript");
-  expect(asset.headers.get("Cache-Control")).toContain("immutable");
+  expect(asset.headers.get("Cache-Control")).toBe(
+    "public, max-age=31536000, immutable",
+  );
   symlinkSync(resolve(f.path, "initial.txt"), resolve(dist, "escape"));
   expect((await req("/escape")).status).toBe(400);
   expect((await req("/%2e%2e%2fsecret")).status).toBe(400);
@@ -285,4 +322,28 @@ it("migrates sort_order from seq exactly once and records ticks", async () => {
   expect(Number.isFinite(Date.parse(f.repo.getSetting("last_tick_at")!))).toBe(
     true,
   );
+});
+
+it("reports recent daemon heartbeats and records scheduler ticks", async () => {
+  const { req } = setup();
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-10-18T00:00:00Z"));
+  const stopped = daemon(f.repo, 60);
+  expect(f.repo.getSetting("last_tick_at")).toBe("2026-10-18T00:00:00.000Z");
+  await vi.advanceTimersByTimeAsync(60000);
+  expect(f.repo.getSetting("last_tick_at")).toBe("2026-10-18T00:01:00.000Z");
+  process.emit("SIGTERM");
+  await stopped;
+  for (const [seconds, running] of [
+    [0, true],
+    [180, true],
+    [181, false],
+  ] as const) {
+    vi.setSystemTime(
+      new Date(Date.parse("2026-10-18T00:01:00Z") + seconds * 1000),
+    );
+    expect(await (await req("/api/status")).json()).toMatchObject({
+      daemon: { running, last_tick_age_s: seconds },
+    });
+  }
 });
