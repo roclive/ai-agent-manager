@@ -168,3 +168,42 @@ it("paginates and filters activity without losing older matching events", async 
   expect(await events("project=missing")).toEqual([]);
   expect((await app.request("/api/events?before=bad")).status).toBe(400);
 });
+
+it("retries with preserved feedback, validated attempts, and running-worker protection", async () => {
+  f = fixture();
+  const t = f.task({
+    status: "blocked",
+    attempts: 3,
+    feedback: "[P2] Fix data loss",
+    blocker: "exhausted",
+  });
+  const app = createApp(f.repo);
+  const retry = (body?: unknown, id = t.identifier) =>
+    app.request(`/api/tasks/${id}/retry`, {
+      method: "POST",
+      headers: { "X-AAM": "1", "Content-Type": "application/json" },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  expect(await (await retry()).json()).toMatchObject({
+    status: "ready",
+    attempts: 2,
+    blocker: "",
+    feedback: t.feedback,
+  });
+  expect(await (await retry({ attempts: 0 })).json()).toMatchObject({
+    attempts: 0,
+    feedback: t.feedback,
+  });
+  for (const attempts of [-1, 1.5, "1", null])
+    expect((await retry({ attempts })).status).toBe(400);
+  expect((await retry({}, "missing")).status).toBe(404);
+  f.repo.updateTask(t.id, { max_attempts: 1 });
+  expect(await (await retry({})).json()).toMatchObject({ attempts: 0 });
+  f.repo.db
+    .prepare(
+      "INSERT INTO runs(task_id,worker,status,started_at,log_path,last_message_path) VALUES (?,'codex','running',?,'','')",
+    )
+    .run(t.id, new Date().toISOString());
+  expect((await retry()).status).toBe(400);
+  expect(f.repo.task(t.id).attempts).toBe(0);
+});

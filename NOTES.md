@@ -45,3 +45,5 @@ while status exposes compatibility aliases for the selected reviewer.
 Verified codex exec --help flags. Manual minimal-environment smoke invocation was
 attempted once, but this execution sandbox rejected app-server initialization
 with EPERM before authentication; login success cannot be confirmed here.
+
+- AAM-13: Auto-review rejection consumes the shared task attempt budget; only exhaustion blocks. Feedback is retained up to 8192 UTF-8 bytes without splitting a character. Move notes live in events. Retry preserves feedback, clears the blocker, and defaults attempts to max_attempts - 1 (minimum 0); explicit attempts must be a nonnegative integer. Like move, retry refuses tasks with a running worker. Reviewer severity calibration applies to both review prompt paths.

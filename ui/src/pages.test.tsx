@@ -556,3 +556,26 @@ it("shows Claude login failure on the autopilot dashboard", async () => {
   ).toHaveTextContent("Please run /login");
   client.clear();
 });
+
+it("offers retry for blocked tasks and posts the retry action", async () => {
+  const fetcher = vi.fn(
+    async (url: string) =>
+      new Response(
+        JSON.stringify(
+          url === "/api/tasks"
+            ? [task]
+            : { ...task, status: "blocked", feedback: "Fix finding" },
+        ),
+      ),
+  );
+  vi.stubGlobal("fetch", fetcher);
+  const c = setup(<TaskDrawer />);
+  fireEvent.click(await screen.findByText("再试一次"));
+  await waitFor(() =>
+    expect(fetcher).toHaveBeenCalledWith(
+      "/api/tasks/1/retry",
+      expect.objectContaining({ method: "POST", body: "{}" }),
+    ),
+  );
+  c.clear();
+});

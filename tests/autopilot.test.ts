@@ -73,7 +73,7 @@ it("never reviews or promotes non-opted-in projects even with legacy global mode
   expect(f.repo.task(t.id).status).toBe("in_review");
 });
 it.each(["approve", "reject"])(
-  "applies async %s and blocks after two consecutive rejects",
+  "applies async %s and blocks only when attempts are exhausted",
   (verdict) => {
     f = fixture();
     f.repo.setSetting("claude_ok", "1");
@@ -89,9 +89,19 @@ it.each(["approve", "reject"])(
       pending("review", t.id, { verdict, notes: "again" });
       collectAutopilot(f.repo);
       expect(f.repo.task(t.id)).toMatchObject({
-        status: "blocked",
+        status: "ready",
         attempts: 2,
-        blocker: "auto-review rejected twice: again",
+        feedback: "again",
+        blocker: "",
+      });
+      f.repo.updateTask(t.id, { status: "in_review" });
+      pending("review", t.id, { verdict, notes: "final finding" });
+      collectAutopilot(f.repo);
+      expect(f.repo.task(t.id)).toMatchObject({
+        status: "blocked",
+        attempts: 3,
+        feedback: "final finding",
+        blocker: "auto-review rejected 3 times: final finding",
       });
     }
   },
@@ -474,9 +484,37 @@ it("lists every changed file and omits large file contents on both sides of the 
     worktree_path: f.path,
   });
   const prompt = reviewPrompt(f.repo, t.id);
+  expect(prompt).toContain("severity [P0], [P1], [P2], or [P3]");
+  expect(prompt).toContain("only findings are [P3] nits or style");
+  expect(prompt).toContain("Reject for any [P0]/[P1]/[P2]");
   expect(prompt).toContain('"large.json": 40000 bytes (diff omitted)');
   expect(prompt).toContain('"small.txt"');
   expect(prompt).toContain("+review this change");
   expect(prompt).not.toContain("SENSITIVE_LARGE_DATA");
   expect(prompt).not.toContain("+small replacement");
 });
+
+it.each([1, 5])(
+  "uses configured max_attempts %s and keeps up to 8 KB of notes",
+  (max_attempts) => {
+    f = fixture();
+    f.repo.updateProject("T", { auto_review: 1 });
+    const t = f.task({
+      status: "in_review",
+      max_attempts,
+      attempts: max_attempts - 1,
+    });
+    const notes = "[P2] " + "详细发现".repeat(1500);
+    pending("review", t.id, { verdict: "reject", notes });
+    collectAutopilot(f.repo);
+    const updated = f.repo.task(t.id);
+    expect(updated.status).toBe("blocked");
+    expect(updated.attempts).toBe(max_attempts);
+    expect(Buffer.byteLength(updated.feedback)).toBeLessThanOrEqual(8192);
+    expect(notes.startsWith(updated.feedback)).toBe(true);
+    expect(updated.feedback.length).toBeGreaterThan(2000);
+    expect(updated.blocker).toBe(
+      `auto-review rejected ${max_attempts} times: ${updated.feedback}`,
+    );
+  },
+);

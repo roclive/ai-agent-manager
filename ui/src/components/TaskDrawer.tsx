@@ -281,6 +281,11 @@ function Detail({ task }: { task: TaskDetail }) {
         </div>
       )}
       <div className="filters mt-6">
+        {task.status === "blocked" && (
+          <Button disabled={action.isPending} onClick={() => post("retry")}>
+            再试一次
+          </Button>
+        )}
         <Button variant="outline" onClick={() => setConfirm("run")}>
           立即运行
         </Button>
