@@ -16,6 +16,7 @@ import { alive, git, killGroup } from "../core/process.js";
 import { dispatch } from "../core/dispatch.js";
 import { review } from "../core/review.js";
 import { merge } from "../core/worktree.js";
+import { autopilotStatus } from "../core/autopilot.js";
 import { fireRoutine } from "../scheduler.js";
 export const routineJSON = (r: Routine) => {
   const cron = new Cron(r.cron, { paused: true });
@@ -78,33 +79,9 @@ export function uiRoutes(
   });
   app.patch("/api/projects/:key", async (c) => {
     const p = await c.req.json<Record<string, unknown>>();
-    if (
-      Object.keys(p).some(
-        (k) =>
-          ![
-            "name",
-            "repo_path",
-            "base_branch",
-            "test_cmd",
-            "setup_cmd",
-          ].includes(k),
-      )
-    )
-      throw new Error("Unsupported project field");
     const next = { ...repo.project(c.req.param("key")), ...p };
     validateProject(next);
-    repo.db
-      .prepare(
-        "UPDATE projects SET name=?,repo_path=?,base_branch=?,test_cmd=?,setup_cmd=? WHERE id=?",
-      )
-      .run(
-        next.name,
-        resolve(next.repo_path as string),
-        next.base_branch,
-        next.test_cmd,
-        next.setup_cmd,
-        next.id,
-      );
+    repo.updateProject(c.req.param("key"), p);
     repo.event(
       "settings",
       `Updated project ${next.key}: ${Object.keys(p).join(", ")}`,
@@ -205,6 +182,8 @@ export function uiRoutes(
       counts_by_status: Object.fromEntries(
         statuses.map((s) => [s, repo.tasks({ status: s }).length]),
       ),
+      autopilot: autopilotStatus(repo),
+      keep_awake_pid: Number(repo.getSetting("keep_awake_pid")) || null,
       review_pending: repo.tasks({ status: "in_review" }).length,
     });
   });

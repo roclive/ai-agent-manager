@@ -78,6 +78,23 @@ export function Dashboard({ project }: { project: string }) {
         </Button>
       </div>
       <ActionError error={action.error} />
+      {status.data?.autopilot && (
+        <section className="page-section">
+          <h2>夜间自动驾驶</h2>
+          <p>
+            今日审查 {status.data.autopilot.auto_reviews_today} /{" "}
+            {status.data.autopilot.auto_review_max} · 今日规划{" "}
+            {status.data.autopilot.planner_runs_today} /{" "}
+            {status.data.autopilot.planner_max} · 已提升{" "}
+            {status.data.autopilot.promotions_today}
+          </p>
+          <p>
+            保持唤醒：{status.data.autopilot.caffeinate ? "运行中" : "关闭"}
+            {status.data.autopilot.idle_since &&
+              ` · 空闲开始：${new Date(status.data.autopilot.idle_since).toLocaleString("zh-CN")}`}
+          </p>
+        </section>
+      )}
       <Cooldown until={status.data?.cooldown_until} />
       <Load
         pending={tasks.isPending || runs.isPending}

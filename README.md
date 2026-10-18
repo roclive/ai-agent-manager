@@ -185,3 +185,36 @@ Reset retry accounting with `aam task edit <ID> --attempts 0` and replace feedba
 先运行 `cd ui && npm run build` 构建网页。UI 日志位于
 `~/Library/Logs/aam/ui.log`。`aam launchd status` 显示两个服务的状态、PID 和上次退出码；
 `aam launchd uninstall` 卸载两者。不加 `--load` 时仅写入 plist。
+
+## 夜间自动驾驶
+
+所有项目默认关闭自动审查和自动驾驶，迁移不会启用已有项目。按项目开启：
+
+```sh
+aam project edit AAM --auto-review on --autopilot on --goal-file goal.txt --rank 10 --context-file context.md
+aam autopilot status
+aam daemon --interval 60
+```
+
+`--goal` 可直接设置目标（与 `--goal-file` 互斥）；共享上下文文件路径相对项目仓库，每次规划时读取并前置到新任务描述。优先级数值越小越先补充任务，同优先级项目轮流获得空位。依赖未完成的任务不会提升，受阻任务不影响其余工作。空队列且目标非空时生成 3–5 个小任务；成功规划至少间隔 20 分钟，失败后退避 30 分钟。
+
+自动审查只处理明确启用的项目，不会合并或推送。测试失败直接拒绝；连续两次自动拒绝会阻塞任务。无法解析的审查输出重试一次；后台 Claude 作业最长 240 秒，由后续 heartbeat 回收。审查每分钟最多启动一次。每日预算按本机日期计算，默认审查 80 次、规划 10 次，可在设置页面或 CLI 调整：
+
+```sh
+aam settings set auto_review_daily_max 80
+aam settings set planner_daily_max 10
+aam settings set keep_awake 1
+```
+
+守护进程在 macOS 使用 `caffeinate -i -m -w <pid>` 保持唤醒，退出时释放。电池供电时合盖睡眠无法阻止，请保持开盖并连接电源。仪表盘「夜间自动驾驶」显示预算、提升数量、空闲时间及唤醒状态。
+
+关闭时，对每个已启用项目执行以下命令；开关关闭后待回收的模型结果也不会应用：
+
+```sh
+aam project edit AAM --auto-review off --autopilot off
+aam settings set auto_review_daily_max 0
+aam settings set planner_daily_max 0
+aam settings set keep_awake 0
+```
+
+全局 `review_mode` 保留为兼容设置；自动驾驶始终要求项目明确启用自动审查，其他项目仍需人工审查。

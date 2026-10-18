@@ -32,3 +32,5 @@
 - Backlog keeps the task ID and title together in one sticky column; other columns scroll horizontally. Project chips use a deterministic key colour.
 - Cron input checks only for five or six whitespace-separated fields; the scheduler remains authoritative for syntax and ranges.
 - launchd status keeps the existing top-level daemon fields for compatibility and adds a services array with daemon/UI state, PID and last exit code. The injectable user-home path isolates plist/log paths in tests.
+
+AAM-8: Project opt-in safety takes precedence over the legacy global review_mode=claude tick path: non-opted-in projects remain manual. Model tools, hooks, project settings and MCP are disabled; all required repository context is supplied in stdin. Durable job reservations count against the local-day budget, including failures and test-gate rejections. Results are applied on a subsequent tick, and promotions are dispatched on the following tick. Blocked/cancelled tasks do not prevent planning when the active queue is drained.

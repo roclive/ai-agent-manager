@@ -5,9 +5,9 @@ import { alive, killGroup, type Runner, runner } from "./process.js";
 import { withLock } from "./lock.js";
 import { finalize, read } from "./finalize.js";
 import { dispatch, dependenciesDone } from "./dispatch.js";
-import { claudeReview } from "./review.js";
+import { collectAutopilot, promoteIdle, startAutopilot } from "./autopilot.js";
 import { exportViews } from "../views/index.js";
-export function tick(repo: Repo, reviewRunner: Runner = runner) {
+export function tick(repo: Repo, _reviewRunner: Runner = runner) {
   return withLock(repo, () => {
     repo.setSetting("last_tick_at", new Date().toISOString());
     for (const r of repo.runs().filter((r) => r.status === "running")) {
@@ -46,14 +46,9 @@ export function tick(repo: Repo, reviewRunner: Runner = runner) {
           repo.event("dispatch_error", String(e), t.id);
         }
       }
-    if (repo.getSetting("review_mode") === "claude")
-      for (const t of repo.tasks({ status: "in_review" })) {
-        try {
-          claudeReview(repo, t.identifier, reviewRunner);
-        } catch (e) {
-          repo.event("review_error", String(e), t.id);
-        }
-      }
+    collectAutopilot(repo);
+    promoteIdle(repo);
+    startAutopilot(repo);
     exportViews(repo);
     return true;
   });

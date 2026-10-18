@@ -1,3 +1,4 @@
+import { keepAwake } from "./core/keep-awake.js";
 import { Cron } from "croner";
 import { Repo, type Routine } from "./db/index.js";
 import { tick } from "./core/tick.js";
@@ -53,9 +54,11 @@ export function daemon(repo: Repo, interval = 60) {
   if (!Number.isFinite(interval) || interval <= 0)
     throw new Error("Interval must be positive");
   return new Promise<void>((resolve) => {
+    const awake = keepAwake(repo);
     const jobs = new Map<number, { signature: string; job: Cron }>();
     const heartbeat = () => {
       try {
+        awake.check();
         tick(repo);
         sync();
       } catch (e) {
@@ -87,6 +90,7 @@ export function daemon(repo: Repo, interval = 60) {
     const timer = setInterval(heartbeat, interval * 1000);
     const stop = () => {
       clearInterval(timer);
+      awake.stop();
       for (const { job } of jobs.values()) job.stop();
       process.off("SIGINT", stop);
       process.off("SIGTERM", stop);

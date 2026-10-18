@@ -87,6 +87,28 @@ export function Settings() {
                 <option value="claude">Claude 自动审查</option>
               </NativeSelect>
             </label>
+            {[
+              ["auto_review_daily_max", "每日自动审查上限"],
+              ["planner_daily_max", "每日规划上限"],
+            ].map(([key, label]) => (
+              <label key={key}>
+                {label}
+                <Input
+                  name={key}
+                  type="number"
+                  min="0"
+                  required
+                  defaultValue={q.data![key!]}
+                />
+              </label>
+            ))}
+            <label>
+              保持唤醒
+              <NativeSelect name="keep_awake" defaultValue={q.data.keep_awake}>
+                <option value="1">开启</option>
+                <option value="0">关闭</option>
+              </NativeSelect>
+            </label>
             <p>冷却截止时间：{q.data.cooldown_until || "无冷却"}</p>
             <Button
               type="button"
@@ -125,7 +147,13 @@ export function Settings() {
               <tbody>
                 {projects.data?.map((p) => (
                   <tr key={p.id}>
-                    <td>{p.key}</td>
+                    <td>
+                      {p.key}{" "}
+                      {!!p.auto_review && (
+                        <span className="badge">自动审查</span>
+                      )}{" "}
+                      {!!p.autopilot && <span className="badge">自动驾驶</span>}
+                    </td>
                     <td>{p.repo_path}</td>
                     <td>{p.base_branch}</td>
                     <td>{p.test_cmd || "—"}</td>
@@ -175,7 +203,15 @@ function ProjectEditor({
               {
                 path: `/projects/${encodeURIComponent(project.key)}`,
                 method: "PATCH",
-                body: Object.fromEntries(new FormData(e.currentTarget)),
+                body: (() => {
+                  const f = new FormData(e.currentTarget);
+                  return {
+                    ...Object.fromEntries(f),
+                    auto_review: f.has("auto_review") ? 1 : 0,
+                    autopilot: f.has("autopilot") ? 1 : 0,
+                    autopilot_rank: Number(f.get("autopilot_rank")),
+                  };
+                })(),
               },
               { onSuccess: onClose },
             );
@@ -199,6 +235,42 @@ function ProjectEditor({
               />
             </label>
           ))}
+          <label>
+            <input
+              type="checkbox"
+              name="auto_review"
+              defaultChecked={!!project.auto_review}
+            />
+            自动审查
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              name="autopilot"
+              defaultChecked={!!project.autopilot}
+            />
+            自动驾驶
+          </label>
+          <label>
+            项目目标
+            <textarea name="goal" defaultValue={project.goal || ""} />
+          </label>
+          <label>
+            优先级
+            <Input
+              name="autopilot_rank"
+              type="number"
+              required
+              defaultValue={project.autopilot_rank ?? 100}
+            />
+          </label>
+          <label>
+            共享上下文文件
+            <Input
+              name="context_file"
+              defaultValue={project.context_file || ""}
+            />
+          </label>
           <ActionError error={action.error} />
           <Button disabled={action.isPending}>保存项目</Button>
         </form>

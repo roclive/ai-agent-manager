@@ -2,6 +2,7 @@ import { Command } from "commander";
 import { readFileSync } from "node:fs";
 import { tail } from "./core/logs.js";
 import { Repo } from "./db/index.js";
+import { autopilotStatus } from "./core/autopilot.js";
 import { review } from "./core/review.js";
 import { merge, prune } from "./core/worktree.js";
 export const output = (v: unknown) =>
@@ -37,6 +38,38 @@ export function cli(repo: Repo) {
       ),
     );
   project.command("list").action(() => output(repo.projects()));
+  project
+    .command("edit <key>")
+    .option("--auto-review <on|off>")
+    .option("--autopilot <on|off>")
+    .option("--goal-file <path>")
+    .option("--goal <text>")
+    .option("--rank <n>")
+    .option("--context-file <path>")
+    .action((key, o) => {
+      if (o.goalFile !== undefined && o.goal !== undefined)
+        throw new Error("Use --goal or --goal-file");
+      const patch: Record<string, unknown> = {};
+      for (const [arg, col] of [
+        ["autoReview", "auto_review"],
+        ["autopilot", "autopilot"],
+      ])
+        if (o[arg!] !== undefined) {
+          if (!["on", "off"].includes(o[arg!]))
+            throw new Error("Expected on or off");
+          patch[col!] = o[arg!] === "on" ? 1 : 0;
+        }
+      if (o.goalFile !== undefined || o.goal !== undefined)
+        patch.goal =
+          o.goalFile !== undefined ? readFileSync(o.goalFile, "utf8") : o.goal;
+      if (o.rank !== undefined) patch.autopilot_rank = Number(o.rank);
+      if (o.contextFile !== undefined) patch.context_file = o.contextFile;
+      output(repo.updateProject(key, patch));
+    });
+  app
+    .command("autopilot")
+    .command("status")
+    .action(() => output(autopilotStatus(repo)));
   const task = app.command("task");
   task
     .command("add")

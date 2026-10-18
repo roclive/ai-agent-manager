@@ -175,7 +175,7 @@ it("kills timeout groups and classifies lost runs", async () => {
   tick(f.repo);
   expect(f.repo.runs()[0].status).toBe("lost");
 });
-it("claude mode uses injectable review runner and finalization is idempotent", async () => {
+it("legacy claude mode leaves non-opted-in projects manual and finalization is idempotent", async () => {
   f = fixture();
   f.repo.setSetting("review_mode", "claude");
   const t = f.task();
@@ -191,10 +191,10 @@ it("claude mode uses injectable review runner and finalization is idempotent", a
       stderr: "",
     };
   });
-  expect(calls).toBe(1);
-  expect(f.repo.task(t.id).status).toBe("done");
+  expect(calls).toBe(0);
+  expect(f.repo.task(t.id).status).toBe("in_review");
   finalize(f.repo, old);
-  expect(f.repo.task(t.id).status).toBe("done");
+  expect(f.repo.task(t.id).status).toBe("in_review");
 });
 
 it.each([
