@@ -58,16 +58,22 @@ export function daemon(repo: Repo, interval = 60) {
     const awake = keepAwake(repo);
     let checking: Promise<unknown> | undefined;
     let stopped = false;
-    const health = () => {
-      if (checking || stopped) return;
+    // Healthy: re-check every 30 min. Unhealthy: every 2 min, so one transient failure cannot pause the autopilot for half an hour.
+    const healthDue = () => {
+      const at = Date.parse(repo.getSetting("claude_checked_at") || "") || 0;
+      const gap = repo.getSetting("claude_ok") === "1" ? 30 * 60000 : 2 * 60000;
+      return Date.now() - at >= gap;
+    };
+    const health = (force = false) => {
+      if (checking || stopped || (!force && !healthDue())) return;
       checking = checkClaude(repo)
         .catch((e) => repo.event("daemon_error", String(e)))
         .finally(() => {
           checking = undefined;
         });
     };
-    health();
-    const healthTimer = setInterval(health, 30 * 60000);
+    health(true);
+    const healthTimer = setInterval(() => health(), 30000);
     const jobs = new Map<number, { signature: string; job: Cron }>();
     const heartbeat = () => {
       try {

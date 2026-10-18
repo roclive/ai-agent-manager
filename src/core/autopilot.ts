@@ -530,7 +530,7 @@ export function checkClaude(
     const timer = setTimeout(() => {
       child.kill("SIGKILL");
       finish(null, "Claude health check timed out");
-    }, 30000);
+    }, 60000);
     child.stdout.on("data", (data) => {
       stdout = (stdout + data).slice(-65536);
     });
