@@ -121,6 +121,42 @@ it("imports Codex percentage rate-limit windows as quota and applies scheduling 
   expect(() => dispatch(f.repo, f.task().identifier)).toThrow("Quota exhausted");
 });
 
+it("persists provider percentage usage windows and uses them for warnings and scheduling", async () => {
+  f = fixture();
+  const now = new Date().toISOString();
+  const reset = new Date(Date.now() + 60_000).toISOString();
+  const data = {schema_version:"1",openusage_version:"0.26.1",source:"daemon",snapshots:[
+    {provider_id:"kimi_cli",account_id:"kimi-account",timestamp:now,status:"NEAR_LIMIT",metrics:{
+      usage_five_hour:{unit:"%",window:"5h",used:91,remaining:9,limit:100},
+    },resets:{usage_five_hour:reset}},
+    {provider_id:"ollama",account_id:"local",timestamp:now,status:"LIMITED",metrics:{
+      usage_monthly:{unit:"%",window:"monthly",used:100,remaining:0,limit:100},
+      cache_hit_ratio:{unit:"%",window:"30d",used:100,remaining:0,limit:100},
+    },resets:{usage_monthly:reset}},
+  ]};
+
+  const rows = await collectUsage(f.repo, {
+    name:"fixture",
+    fetch:async () => parseUsage(JSON.stringify(data), "cli:fixture"),
+  });
+  expect(rows).toHaveLength(2);
+  expect(f.repo.usageSnapshots("kimi_cli")[0]).toMatchObject({
+    type:"quota", used:91, remaining:9, reset_at:reset,
+    source:"cli:fixture;openusage:0.26.1;daemon",
+  });
+  expect(checkQuota(f.repo, "kimi_cli")).toMatchObject({
+    ok:true, warning:expect.stringContaining("Low quota"),
+  });
+  expect(f.repo.usageSnapshots("ollama")[0]).toMatchObject({
+    type:"quota", used:100, remaining:0, reset_at:reset,
+  });
+  expect(f.repo.usageSnapshots().some((snapshot) => snapshot.window.includes("cache_hit_ratio"))).toBe(false);
+
+  f.repo.setSetting("ollama_fallback_enabled", "1");
+  f.repo.setSetting("llm_backend", "ollama");
+  expect(() => dispatch(f.repo, f.task().identifier)).toThrow("Quota exhausted");
+});
+
 it("treats OpenUsage limited usage windows and USD balances as quota, including capitalized fields", () => {
   f = fixture();
   const now = new Date().toISOString();
