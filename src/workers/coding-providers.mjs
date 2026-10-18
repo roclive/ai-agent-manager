@@ -84,7 +84,9 @@ export function parseCodingProviders(value) {
       if (
         !["http:", "https:"].includes(url.protocol) ||
         url.username ||
-        url.password
+        url.password ||
+        url.search ||
+        url.hash
       )
         throw new Error(`${at}.baseUrl is invalid`);
     }
@@ -217,4 +219,33 @@ export function openCodeConfig(policy, provider) {
       },
     },
   };
+}
+
+function configObject(value, source) {
+  if (value === undefined) return {};
+  const parsed = typeof value === "string" ? JSON.parse(value) : value;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+    throw new Error(`${source} must be a JSON object`);
+  return parsed;
+}
+
+// Preserve the user's process-local OpenCode configuration when routing does
+// not add anything. When AAM must add a local provider, merge it into that
+// inherited configuration instead of replacing authentication or preferences.
+export function openCodeConfigContent(policy, provider, inherited) {
+  if (policy.config === undefined && provider.kind === "opencode")
+    return inherited;
+  const inheritedConfig = configObject(inherited, "OPENCODE_CONFIG_CONTENT");
+  const routingConfig = configObject(policy.config, "routing config");
+  const merged = {
+    ...inheritedConfig,
+    ...routingConfig,
+    provider: {
+      ...(inheritedConfig.provider || {}),
+      ...(routingConfig.provider || {}),
+    },
+  };
+  return JSON.stringify(
+    openCodeConfig({ ...policy, config: merged }, provider),
+  );
 }

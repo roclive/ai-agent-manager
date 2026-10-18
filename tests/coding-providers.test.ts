@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseCodingProviders,
   openCodeConfig,
+  openCodeConfigContent,
   providerStatuses,
   routedModels,
   routedProviders,
@@ -176,5 +177,35 @@ describe("coding provider policy", () => {
         ),
       }),
     ).toThrow("baseUrl is required for ollama");
+  });
+
+  it("preserves inherited OpenCode config when routing has no config override", () => {
+    const policy = parseCodingProviders({
+      models: ["opencode/glm-5.3-flash-free"],
+    });
+    const inherited = JSON.stringify({
+      provider: { private: { options: { apiKey: "kept-in-process" } } },
+    });
+    expect(
+      openCodeConfigContent(policy, routedProviders(policy)[0], inherited),
+    ).toBe(inherited);
+    expect(
+      openCodeConfigContent(policy, routedProviders(policy)[0], undefined),
+    ).toBeUndefined();
+  });
+
+  it.each([
+    "http://127.0.0.1:4000/v1?api_key=secret",
+    "http://127.0.0.1:4000/v1#secret",
+    "http://user:secret@127.0.0.1:4000/v1",
+  ])("rejects endpoint URLs that could expose credentials: %s", (baseUrl) => {
+    expect(() =>
+      parseCodingProviders({
+        ...base,
+        providers: base.providers.map((provider) =>
+          provider.id === "litellm" ? { ...provider, baseUrl } : provider,
+        ),
+      }),
+    ).toThrow("providers[2].baseUrl is invalid");
   });
 });

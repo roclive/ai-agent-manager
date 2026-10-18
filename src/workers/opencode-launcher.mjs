@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { failover } from "./opencode-failover.mjs";
 import {
   loadCodingProviders,
-  openCodeConfig,
+  openCodeConfigContent,
   routedProviders,
 } from "./coding-providers.mjs";
 const [worktree, promptFile] = process.argv.slice(2);
@@ -38,12 +38,17 @@ const result = await failover(
         ...(policy.auto ? ["--auto"] : []),
         prompt,
       ];
+      const configContent = openCodeConfigContent(
+        policy,
+        provider,
+        process.env.OPENCODE_CONFIG_CONTENT,
+      );
       const child = spawn("opencode", args, {
         env: {
           ...process.env,
-          OPENCODE_CONFIG_CONTENT: JSON.stringify(
-            openCodeConfig(policy, provider),
-          ),
+          ...(configContent !== undefined
+            ? { OPENCODE_CONFIG_CONTENT: configContent }
+            : {}),
         },
         stdio: ["ignore", "pipe", "pipe"],
       });

@@ -34,3 +34,8 @@ export function openCodeConfig(
   policy: CodingPolicy,
   provider: CodingProvider,
 ): Record<string, unknown>;
+export function openCodeConfigContent(
+  policy: CodingPolicy,
+  provider: CodingProvider,
+  inherited?: string,
+): string | undefined;
