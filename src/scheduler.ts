@@ -91,7 +91,7 @@ export function daemon(repo: Repo, interval = 60) {
       return Date.now() - at >= gap;
     };
     const health = (force = false) => {
-      if (checking || stopped || (!force && !healthDue())) return;
+      if (checking || stopped || Date.parse(repo.getSetting("cooldown_until") || "") > Date.now() || (!force && !healthDue())) return;
       checking = checkReviewer(repo)
         .catch((e) => repo.event("daemon_error", String(e)))
         .finally(() => {
