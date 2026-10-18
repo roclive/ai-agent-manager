@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
+import { userInfo } from "node:os";
 import { Repo, type Project } from "../db/index.js";
 import { alive } from "./process.js";
 import { dependenciesDone } from "./dispatch.js";
@@ -21,10 +22,16 @@ const jobs = (repo: Repo) =>
   repo.db
     .prepare("SELECT * FROM autopilot_jobs ORDER BY id DESC")
     .all() as Job[];
-const cleanEnv = () => ({
-  PATH: process.env.PATH || "/usr/bin:/bin",
-  HOME: process.env.HOME || "",
-});
+// Claude's macOS keychain login needs USER/LOGNAME too; with only PATH+HOME it reports "Not logged in".
+export const cleanEnv = () => {
+  const user = process.env.USER || userInfo().username;
+  return {
+    PATH: process.env.PATH || "/usr/bin:/bin",
+    HOME: process.env.HOME || "",
+    USER: user,
+    LOGNAME: process.env.LOGNAME || user,
+  };
+};
 const read = (path: string) => {
   try {
     return readFileSync(path, "utf8");
@@ -81,7 +88,7 @@ function limitedEvent(
 const resultPath = (repo: Repo, id: number) =>
   resolve(repo.home, "autopilot", String(id), "result.json");
 // Constant wrapper code; all prompts travel through files and stdin. Survives one-shot CLI exit.
-const wrapper = `const fs=require('node:fs'), cp=require('node:child_process'); const [cmd,cwd,prompt,out]=process.argv.slice(1); const r=cp.spawnSync(cmd, ['-p','--output-format','json','--permission-mode','plan','--disable-slash-commands','--no-session-persistence','--tools','','--strict-mcp-config','--mcp-config','{"mcpServers":{}}','--setting-sources','','--settings','{"disableAllHooks":true}'], {cwd,input:fs.readFileSync(prompt),env:{PATH:process.env.PATH,HOME:process.env.HOME},encoding:'utf8',timeout:240000,maxBuffer:1048576}); fs.writeFileSync(out+'.tmp',JSON.stringify({status:r.status,stdout:r.stdout||'',stderr:r.stderr||r.error?.message||''})); fs.renameSync(out+'.tmp',out);`;
+const wrapper = `const fs=require('node:fs'), cp=require('node:child_process'); const [cmd,cwd,prompt,out]=process.argv.slice(1); const r=cp.spawnSync(cmd, ['-p','--output-format','json','--permission-mode','plan','--disable-slash-commands','--no-session-persistence','--tools','','--strict-mcp-config','--mcp-config','{"mcpServers":{}}','--setting-sources','','--settings','{"disableAllHooks":true}'], {cwd,input:fs.readFileSync(prompt),env:{PATH:process.env.PATH,HOME:process.env.HOME,USER:process.env.USER,LOGNAME:process.env.LOGNAME},encoding:'utf8',timeout:240000,maxBuffer:1048576}); fs.writeFileSync(out+'.tmp',JSON.stringify({status:r.status,stdout:r.stdout||'',stderr:r.stderr||r.error?.message||''})); fs.renameSync(out+'.tmp',out);`;
 function launch(repo: Repo, job: Job, cwd: string, prompt: string) {
   const dir = dirname(resultPath(repo, job.id));
   mkdirSync(dir, { recursive: true });

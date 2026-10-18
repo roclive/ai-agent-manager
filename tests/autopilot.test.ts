@@ -5,6 +5,7 @@ import { fixture } from "./helpers.js";
 import { Repo } from "../src/db/index.js";
 import {
   autopilotStatus,
+  cleanEnv,
   collectAutopilot,
   promoteIdle,
   startAutopilot,
@@ -301,4 +302,11 @@ it("cancels pending planning results after opting out", () => {
   f.repo.updateProject("T", { autopilot: 0 });
   collectAutopilot(f.repo);
   expect(f.repo.tasks()).toHaveLength(0);
+});
+
+it("gives Claude the minimal env incl. USER/LOGNAME (keychain login fails without them)", () => {
+  const env = cleanEnv();
+  expect(Object.keys(env).sort()).toEqual(["HOME", "LOGNAME", "PATH", "USER"]);
+  expect(env.USER).not.toBe("");
+  expect(env.LOGNAME).not.toBe("");
 });
