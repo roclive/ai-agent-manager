@@ -1,5 +1,11 @@
 # Implementation choices
 
+## AAM-17 coding providers (2026-10-19)
+
+- `opencode-routing.json` now has a versioned provider inventory. Each entry explicitly declares tool execution, context window, JSON support and whether it is a coding worker; a bare chat endpoint is rejected from the execution route. Health and free quota default to `unknown` unless backed by current evidence. `aam providers` and `GET /api/providers` expose the same inventory without credentials.
+- The old private `{models:[...]}` routing file remains readable, but all unverified capabilities are reported as `unknown`. Task prompts still travel from `prompt.md` into direct argv in the Node launcher and never enter shell source. Tests use injected fake probes/runners and make no real model calls.
+- The checked local OpenCode CLI is 1.19.3. `opencode models opencode --verbose` listed `opencode/glm-5.3-flash-free` as active with tool calls, a 200,000-token context and zero catalog price on 2026-10-19, so the example uses those exact facts. Free quota is still `unknown`; catalog price is not remaining quota. Ollama/LiteLLM example model names and context sizes are placeholders that must be replaced with locally verified deployments; no subscription CLI authentication is converted into API credentials.
+
 - Ollama fallback is opt-in (`ollama_fallback_enabled`), with a sticky `llm_backend=primary|ollama`. Primary inherits the user's existing CLI model configuration. The fallback uses Codex's existing authenticated Ollama gateway and an explicit `ollama_model` plus `ollama_base_url`; this installation verified `gemma4:31b:cloud` (the Kimi cloud model was rejected by the current Ollama plan). No global Codex config or credentials are changed. Worker runs and autopilot jobs record their selected backend in their own directories so concurrent primary quota failures cannot cool down a healthy fallback. Worker, review/planner and health-check quota failures switch once without consuming task attempts; actual fallback quota failures retain the existing 30-minute cooldown. A fresh health check gates fallback reviews. The chat heartbeat checks account usage every 15 minutes and switches at 90% used; it may restore primary only below 70% with healthy primary access. The app controls the current chat model; queue fallback does not change it.
 
 - Local manager takeover: Codex worker/reviewer sandbox modes are persisted separately as `codex_worker_sandbox` and `codex_reviewer_sandbox`. Defaults remain workspace-write/read-only; this installation explicitly opts both into danger-full-access at the user's request. Reviewers may create test temporary files/caches, but must not edit tracked source or commit. Merge-resolution prompts override the ordinary no-stage/no-commit rule, require merging the latest integration and original task refs, and require ancestry checks and full tests. This addresses conflicting instructions and stale resolution worktrees without resetting or discarding prior work.
@@ -23,18 +29,21 @@
 - Status daemon liveness: a live `tick.lock` PID, or a heartbeat (`last_tick_at`) within the last 180 s (`last_tick_age_s` is returned). Routine firing history uses routine_fire events keyed by stable routine ID (older name-only events are not backfilled). SSE starts from the latest event ID unless `Last-Event-ID` (resume) or `?replay=K` (last K events) is supplied.
 
 ## AAM-5 UI
+
 - Paperclip components are copied into ui/src and adapted locally; there are no runtime vendor imports.
 - Legacy server rejects fractional `sort` values (it stores them in positive-integer seq). Midpoint reordering uses the AAM-4 contract; legacy fallback rounds to a positive integer so status moves still work. Adjacent legacy positions may tie until AAM-4 adds REAL sort_order. Task identifiers are never edited.
 - Missing legacy status/runs endpoints show unavailable daemon state / no running indicators; SSE failures fall back to polling.
 - Project colour is taken from the API when supplied, with a neutral fallback because AAM-4 does not specify a colour field.
 
 ## AAM-6 UI
+
 - Routines use the local scheduler time zone. A small Chinese cron helper describes the four supported presets; custom expressions are displayed verbatim and validated by the server.
 - Activity uses an event-ID cursor and server-side project/task/kind filters. Project filters include events associated with that project's tasks; workspace settings/routine events remain in the all-projects feed.
 - Bulk task moves are independent requests: successful changes remain if another task is rejected, and an error reports the failed count. Task status protections remain enforced by the API.
 - Task descriptions render through react-markdown without raw HTML. Task/run statuses retain their original values in history; task status and role controls use Chinese labels.
 
 ## AAM-7 UI / launchd
+
 - Backlog keeps the task ID and title together in one sticky column; other columns scroll horizontally. Project chips use a deterministic key colour.
 - Cron input checks only for five or six whitespace-separated fields; the scheduler remains authoritative for syntax and ranges.
 - launchd status keeps the existing top-level daemon fields for compatibility and adds a services array with daemon/UI state, PID and last exit code. The injectable user-home path isolates plist/log paths in tests.
@@ -67,6 +76,7 @@ Persist/read newest provider/type/window separately. Unknown values round-trip a
 GET /api/usage returns versioned snapshots with source, timestamps, freshness state and warnings; Settings shows the same evidence, separate cost/quota and unknown/stale status. No live service restart or main-checkout deployment is part of this task repair.
 
 Real cache-only smoke (outside tests): isolated AAM_HOME `/Users/zhangdapeng/Desktop/ai-agent-manager/.aam/manager-aam16-smoke`, CLI collect/list returned 23 records covering 7 providers, all source daemon, all subscription remaining unknown. Raw cache export and smoke output remain only in .aam; no account secrets or usage data committed. Cost totals do not prove subscription quota. Did not probe providers, run paid requests, or change the active model/backend/cooldown. Existing 30min Ollama rate-limit backoff remains in force.
+
 - Night coding routes can opt in through private `<AAM_HOME>/opencode-routing.json`: each opencode run records the actual model, streams logs, and retries only quota/transport failures through an explicit model list. A zero CLI exit accompanied by an error event is a failure unless a completed stop event was seen. App/code errors do not switch models. Fallback Codex arguments now select a named custom provider explicitly; the previous root openai_base_url flag did not reliably override ChatGPT account routing.
 - Saluki was downloaded through Ollama and passed Chinese JSON and tool-call checks (about 4 tokens/s), plus a real LiteLLM chat request. Full coding-agent integration was not verified. At the user's subsequent request due to system slowdown, its benchmark processes and temporary gateway were stopped, GW-7 was held, resident models were unloaded, and automatic local fallback was disabled. Runtime routing remains free-cloud-only; do not re-enable Saluki without a new explicit request. Model weights remain cached on disk.
 

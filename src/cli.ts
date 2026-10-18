@@ -6,7 +6,17 @@ import { Repo } from "./db/index.js";
 import { autopilotStatus, checkReviewer } from "./core/autopilot.js";
 import { review } from "./core/review.js";
 import { merge, prune } from "./core/worktree.js";
-import { collectUsage, FakeOpenUsageProvider, JsonOpenUsageProvider, CliOpenUsageProvider } from "./workers/openusage.js";
+import {
+  collectUsage,
+  FakeOpenUsageProvider,
+  JsonOpenUsageProvider,
+  CliOpenUsageProvider,
+} from "./workers/openusage.js";
+import {
+  loadCodingProviders,
+  providerStatuses,
+} from "./workers/coding-providers.mjs";
+import { resolve } from "node:path";
 
 export const output = (v: unknown) =>
   console.log(typeof v === "string" ? v : JSON.stringify(v, null, 2));
@@ -186,6 +196,21 @@ export function cli(repo: Repo) {
     output(repo.settings());
   });
   app
+    .command("providers")
+    .description(
+      "List configured coding-provider capabilities and health evidence",
+    )
+    .action(async () => {
+      const policy = loadCodingProviders(
+        resolve(repo.home, "opencode-routing.json"),
+      );
+      output({
+        schema_version: 1,
+        config_version: policy.version,
+        providers: await providerStatuses(policy),
+      });
+    });
+  app
     .command("logs <id>")
     .option("--run <n>", "run ID")
     .option("--tail <n>", "line count", "100")
@@ -217,9 +242,31 @@ export function cli(repo: Repo) {
     .option("--args-json <json>", "Exporter argv as a JSON string array", "[]")
     .action(async (o) => {
       const args: unknown = JSON.parse(o.argsJson);
-      if (!Array.isArray(args) || !args.every(a => typeof a === "string")) throw Error("args-json must be a string array");
+      if (!Array.isArray(args) || !args.every((a) => typeof a === "string"))
+        throw Error("args-json must be a string array");
       if (o.exec && o.json) throw Error("Choose exec or json");
-      const provider = o.exec ? new CliOpenUsageProvider(o.provider, o.exec, args, repo.home) : o.provider === "openusage" && !o.json ? new CliOpenUsageProvider("openusage", "openusage", ["export", "--output", "-", "--format", "json", "--source", "daemon"], repo.home) : o.provider === "fake" ? new FakeOpenUsageProvider() : (o.json ? new JsonOpenUsageProvider(o.provider, o.json) : null);
+      const provider = o.exec
+        ? new CliOpenUsageProvider(o.provider, o.exec, args, repo.home)
+        : o.provider === "openusage" && !o.json
+          ? new CliOpenUsageProvider(
+              "openusage",
+              "openusage",
+              [
+                "export",
+                "--output",
+                "-",
+                "--format",
+                "json",
+                "--source",
+                "daemon",
+              ],
+              repo.home,
+            )
+          : o.provider === "fake"
+            ? new FakeOpenUsageProvider()
+            : o.json
+              ? new JsonOpenUsageProvider(o.provider, o.json)
+              : null;
       if (!provider) throw new Error(`Unknown provider: ${o.provider}`);
       output(await collectUsage(repo, provider));
     });

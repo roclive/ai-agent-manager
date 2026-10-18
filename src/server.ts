@@ -11,6 +11,10 @@ import { Repo } from "./db/index.js";
 import { tick } from "./core/tick.js";
 import { tail } from "./core/logs.js";
 import { validateRoutine } from "./scheduler.js";
+import {
+  loadCodingProviders,
+  providerStatuses,
+} from "./workers/coding-providers.mjs";
 function count(value: string | undefined, fallback: number) {
   const n = Number(value ?? fallback);
   if (!Number.isInteger(n) || n < 0 || n > 10000)
@@ -266,11 +270,26 @@ export function createApp(
         .all(...values, limit),
     );
   });
-  app.get("/api/usage", (c) => c.json({
-    schema_version: 1,
-    snapshots: repo.usageSnapshots(c.req.query("provider")).map(snapshot => ({...snapshot,
-      state: usageState(snapshot), warning: checkQuota(repo, snapshot.provider).warning ?? null})),
-  }));
+  app.get("/api/usage", (c) =>
+    c.json({
+      schema_version: 1,
+      snapshots: repo
+        .usageSnapshots(c.req.query("provider"))
+        .map((snapshot) => ({
+          ...snapshot,
+          state: usageState(snapshot),
+          warning: checkQuota(repo, snapshot.provider).warning ?? null,
+        })),
+    }),
+  );
+  app.get("/api/providers", async (c) =>
+    c.json({
+      schema_version: 1,
+      providers: await providerStatuses(
+        loadCodingProviders(resolve(repo.home, "opencode-routing.json")),
+      ),
+    }),
+  );
   app.get("/api/settings", (c) => c.json(repo.settings()));
   app.put("/api/settings", async (c) => {
     const p = await c.req.json<Record<string, unknown>>();

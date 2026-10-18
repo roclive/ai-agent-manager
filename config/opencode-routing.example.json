@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "providers": [
+    {
+      "id": "opencode-free",
+      "kind": "opencode",
+      "model": "opencode/glm-5.3-flash-free",
+      "codingWorker": true,
+      "tools": true,
+      "contextWindow": 200000,
+      "json": true
+    },
+    {
+      "id": "local-ollama",
+      "kind": "ollama",
+      "model": "ollama/qwen3-coder:30b",
+      "baseUrl": "http://127.0.0.1:11434/v1",
+      "codingWorker": true,
+      "tools": true,
+      "contextWindow": 32768,
+      "json": true
+    },
+    {
+      "id": "local-litellm",
+      "kind": "litellm",
+      "model": "litellm/local-coder",
+      "baseUrl": "http://127.0.0.1:4000/v1",
+      "codingWorker": true,
+      "tools": true,
+      "contextWindow": 32768,
+      "json": true
+    },
+    {
+      "id": "chat-only-example",
+      "kind": "chat",
+      "model": "example/chat-model",
+      "codingWorker": false,
+      "tools": false,
+      "contextWindow": 8192,
+      "json": true
+    }
+  ],
+  "route": ["opencode-free", "local-ollama", "local-litellm"]
+}
