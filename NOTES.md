@@ -2,6 +2,8 @@
 
 ## AAM-17 coding providers (2026-10-19)
 
+- Routed failover entries retain the complete provider record. Ollama and LiteLLM endpoints are injected into each OpenCode child through `OPENCODE_CONFIG_CONTENT` using OpenCode's OpenAI-compatible provider adapter; existing private config is merged and remains process-local. Regression tests use parsed providers as fake adapter inputs and assert both endpoint configurations without starting OpenCode or contacting a model.
+
 - `opencode-routing.json` now has a versioned provider inventory. Each entry explicitly declares tool execution, context window, JSON support and whether it is a coding worker; a bare chat endpoint is rejected from the execution route. Health and free quota default to `unknown` unless backed by current evidence. `aam providers` and `GET /api/providers` expose the same inventory without credentials.
 - The old private `{models:[...]}` routing file remains readable, but all unverified capabilities are reported as `unknown`. Task prompts still travel from `prompt.md` into direct argv in the Node launcher and never enter shell source. Tests use injected fake probes/runners and make no real model calls.
 - The checked local OpenCode CLI is 1.19.3. `opencode models opencode --verbose` listed `opencode/glm-5.3-flash-free` as active with tool calls, a 200,000-token context and zero catalog price on 2026-10-19, so the example uses those exact facts. Free quota is still `unknown`; catalog price is not remaining quota. Ollama/LiteLLM example model names and context sizes are placeholders that must be replaced with locally verified deployments; no subscription CLI authentication is converted into API credentials.

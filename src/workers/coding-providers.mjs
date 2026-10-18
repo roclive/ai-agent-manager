@@ -88,6 +88,8 @@ export function parseCodingProviders(value) {
       )
         throw new Error(`${at}.baseUrl is invalid`);
     }
+    if (["ollama", "litellm"].includes(provider.kind) && !provider.baseUrl)
+      throw new Error(`${at}.baseUrl is required for ${provider.kind}`);
     return {
       id: provider.id,
       kind: provider.kind,
@@ -138,8 +140,81 @@ export async function providerStatuses(
   );
 }
 
-export function routedModels(policy) {
-  return policy.route.map(
-    (id) => policy.providers.find((provider) => provider.id === id).model,
+export function routedProviders(policy) {
+  return policy.route.map((id) =>
+    policy.providers.find((provider) => provider.id === id),
   );
+}
+
+export function routedModels(policy) {
+  return routedProviders(policy).map((provider) => provider.model);
+}
+
+function modelParts(provider) {
+  const slash = provider.model.indexOf("/");
+  if (slash < 1 || slash === provider.model.length - 1)
+    throw new Error(`${provider.id}.model must use provider/model syntax`);
+  return {
+    providerId: provider.model.slice(0, slash),
+    modelId: provider.model.slice(slash + 1),
+  };
+}
+
+// OpenCode custom providers use its OpenAI-compatible adapter. Keep this
+// configuration per child process so local endpoints never alter user config.
+export function openCodeConfig(policy, provider) {
+  const configured =
+    policy.config &&
+    typeof policy.config === "object" &&
+    !Array.isArray(policy.config)
+      ? policy.config
+      : {};
+  if (provider.kind === "opencode") return configured;
+  if (!provider.baseUrl)
+    throw new Error(`${provider.id}.baseUrl is required for ${provider.kind}`);
+  const { providerId, modelId } = modelParts(provider);
+  const existingProviders =
+    configured.provider &&
+    typeof configured.provider === "object" &&
+    !Array.isArray(configured.provider)
+      ? configured.provider
+      : {};
+  const existing =
+    existingProviders[providerId] &&
+    typeof existingProviders[providerId] === "object" &&
+    !Array.isArray(existingProviders[providerId])
+      ? existingProviders[providerId]
+      : {};
+  const existingModels =
+    existing.models &&
+    typeof existing.models === "object" &&
+    !Array.isArray(existing.models)
+      ? existing.models
+      : {};
+  return {
+    ...configured,
+    provider: {
+      ...existingProviders,
+      [providerId]: {
+        ...existing,
+        npm: "@ai-sdk/openai-compatible",
+        name: existing.name || `${provider.kind} (${provider.id})`,
+        options: { ...(existing.options || {}), baseURL: provider.baseUrl },
+        models: {
+          ...existingModels,
+          [modelId]: {
+            ...(existingModels[modelId] || {}),
+            tool_call: provider.tools,
+            limit: {
+              ...(existingModels[modelId]?.limit || {}),
+              context: provider.contextWindow,
+              output:
+                existingModels[modelId]?.limit?.output ||
+                provider.contextWindow,
+            },
+          },
+        },
+      },
+    },
+  };
 }

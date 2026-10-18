@@ -2,20 +2,27 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { failover } from "./opencode-failover.mjs";
-import { loadCodingProviders, routedModels } from "./coding-providers.mjs";
+import {
+  loadCodingProviders,
+  openCodeConfig,
+  routedProviders,
+} from "./coding-providers.mjs";
 const [worktree, promptFile] = process.argv.slice(2);
 const routingPath = resolve(dirname(promptFile), "../../opencode-routing.json");
 const policy = loadCodingProviders(routingPath);
-const models = routedModels(policy);
+const providers = routedProviders(policy);
 const prompt = readFileSync(promptFile, "utf8");
 const result = await failover(
-  models,
-  (model) =>
+  providers,
+  (provider) =>
     new Promise((resolveRun) => {
       writeFileSync(
         resolve(dirname(promptFile), "coding-backend.json"),
         JSON.stringify({
-          model: model || "configured default",
+          provider: provider.id,
+          kind: provider.kind,
+          model: provider.model || "configured default",
+          ...(provider.baseUrl ? { baseUrl: provider.baseUrl } : {}),
           at: new Date().toISOString(),
         }),
       );
@@ -26,7 +33,7 @@ const result = await failover(
         "json",
         "--dir",
         worktree,
-        ...(model ? ["--model", model] : []),
+        ...(provider.model ? ["--model", provider.model] : []),
         ...(policy.agent ? ["--agent", policy.agent] : []),
         ...(policy.auto ? ["--auto"] : []),
         prompt,
@@ -34,9 +41,9 @@ const result = await failover(
       const child = spawn("opencode", args, {
         env: {
           ...process.env,
-          ...(policy.config
-            ? { OPENCODE_CONFIG_CONTENT: JSON.stringify(policy.config) }
-            : {}),
+          OPENCODE_CONFIG_CONTENT: JSON.stringify(
+            openCodeConfig(policy, provider),
+          ),
         },
         stdio: ["ignore", "pipe", "pipe"],
       });
@@ -75,7 +82,11 @@ const result = await failover(
     }),
   (from, to) =>
     process.stdout.write(
-      JSON.stringify({ type: "aam_backend_switch", from, to }) + "\n",
+      JSON.stringify({
+        type: "aam_backend_switch",
+        from: from.id,
+        to: to.id,
+      }) + "\n",
     ),
 );
 process.exit(result.status);

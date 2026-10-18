@@ -29,3 +29,8 @@ export function providerStatuses(
   probe?: (provider: CodingProvider) => Promise<Health>,
 ): Promise<Array<CodingProvider & { selected: boolean }>>;
 export function routedModels(policy: CodingPolicy): string[];
+export function routedProviders(policy: CodingPolicy): CodingProvider[];
+export function openCodeConfig(
+  policy: CodingPolicy,
+  provider: CodingProvider,
+): Record<string, unknown>;
