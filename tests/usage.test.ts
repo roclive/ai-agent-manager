@@ -1,3 +1,4 @@
+import { dispatch } from "../src/core/dispatch.js";
 import { it, expect, afterEach } from "vitest";
 import { fixture } from "./helpers.js";
 import { parseUsage, JsonOpenUsageProvider, CliOpenUsageProvider, collectUsage } from "../src/workers/openusage.js";
@@ -86,4 +87,13 @@ it("imports the documented OpenUsage 0.26 string-version envelope without turnin
   expect(rows.find(s=>s.window.includes("rpm"))).toMatchObject({remaining:7,source:"cli:fixture;openusage:0.26.1;daemon"});
   expect(rows.find(s=>s.window.includes("subscription"))?.remaining).toBe("unknown");
   expect(rows.every(s=>!s.window.includes("account-"))).toBe(true);
+});
+
+it("does not block the selected Ollama backend with a different provider's exhausted quota", () => {
+  f=fixture();
+  f.repo.setSetting("ollama_fallback_enabled","1");f.repo.setSetting("llm_backend","ollama");
+  f.repo.addUsageSnapshot(parseUsage(envelope([row({provider:"codex",remaining:0})]),"fixture")[0]);
+  const task=f.task();expect(()=>dispatch(f.repo,task.identifier)).not.toThrow();
+  f.repo.addUsageSnapshot(parseUsage(envelope([row({provider:"ollama",remaining:0})]),"fixture")[0]);
+  const next=f.task();expect(()=>dispatch(f.repo,next.identifier)).toThrow("Quota exhausted");
 });
