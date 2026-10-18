@@ -90,6 +90,37 @@ it("imports the documented OpenUsage 0.26 string-version envelope without turnin
   expect(rows.every(s=>!s.window.includes("account-"))).toBe(true);
 });
 
+it("imports Codex percentage rate-limit windows as quota and applies scheduling warnings", () => {
+  f = fixture();
+  const now = new Date().toISOString();
+  const primaryReset = new Date(Date.now() + 60_000).toISOString();
+  const data = {schema_version:"1",openusage_version:"0.26.1",source:"daemon",snapshots:[
+    {provider_id:"codex",account_id:"account-a",timestamp:now,status:"OK",metrics:{
+      rate_limit_primary:{unit:"%",window:"5h",used:91,remaining:9,limit:100},
+      cache_hit_ratio:{unit:"%",window:"30d",used:95,remaining:5,limit:100},
+    },resets:{rate_limit_primary:primaryReset}},
+  ]};
+  const rows = parseUsage(JSON.stringify(data), "cli:fixture");
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({
+    provider:"codex", type:"quota", used:91, remaining:9,
+    reset_at:primaryReset, source:"cli:fixture;openusage:0.26.1;daemon",
+  });
+  expect(rows[0].window).toContain("rate_limit_primary[%]/5h");
+  expect(rows[0].window).not.toContain("account-a");
+  f.repo.addUsageSnapshot(rows[0]);
+  expect(checkQuota(f.repo, "codex")).toMatchObject({ok:true,warning:expect.stringContaining("Low quota")});
+
+  const exhausted = parseUsage(JSON.stringify({...data,snapshots:[{
+    ...data.snapshots[0],status:"LIMITED",metrics:{
+      rate_limit_secondary:{unit:"%",window:"7d",used:100,remaining:0,limit:100},
+    },resets:{rate_limit_secondary:primaryReset},
+  }]}), "cli:fixture")[0];
+  f.repo.addUsageSnapshot(exhausted);
+  expect(checkQuota(f.repo, "codex")).toMatchObject({ok:false,warning:expect.stringContaining("rate_limit_secondary")});
+  expect(() => dispatch(f.repo, f.task().identifier)).toThrow("Quota exhausted");
+});
+
 it("treats OpenUsage limited usage windows and USD balances as quota, including capitalized fields", () => {
   f = fixture();
   const now = new Date().toISOString();

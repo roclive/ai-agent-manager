@@ -53,9 +53,10 @@ export function parseUsage(content: string, source: string): UsageInput[] {
         const explicitRemaining = metricValue(metric, "remaining");
         const limit = metricValue(metric, "limit");
         // Percentage analytics are not dispatch quotas even if they expose a scale
-        // as `limit`. OpenUsage quota windows, however, are not consistently named:
-        // prefer their explicit limit and known usage/balance names over the unit.
-        const analytical = unit === "%";
+        // as `limit`. Codex's real OpenUsage export is the important exception:
+        // rate_limit_primary/secondary are quota windows expressed as percentages.
+        const percentageRateLimit = unit === "%" && /^rate_limit(?:_|$)/i.test(name);
+        const analytical = unit === "%" && !percentageRateLimit;
         const quota = !analytical && (
           limit !== undefined ||
           /quota|limit|credit|balance|rolling_usage|weekly_usage|usage_five_hour|^(rpm|tpm|rpd|tpd)$/i.test(name)
