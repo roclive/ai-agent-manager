@@ -504,3 +504,37 @@ it("project editor submits numeric opt-ins and project goal", async () => {
     autopilot_rank: 5,
   });
 });
+
+it("shows Claude login failure on the autopilot dashboard", async () => {
+  const { Dashboard } = await import("./pages/Dashboard");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async (url: string) =>
+        new Response(
+          JSON.stringify(
+            url === "/api/status"
+              ? {
+                  daemon: { running: false },
+                  autopilot: {
+                    claude_ok: false,
+                    claude_error: "Please run /login",
+                    auto_reviews_today: 0,
+                    auto_review_max: 80,
+                    planner_runs_today: 0,
+                    planner_max: 10,
+                    promotions_today: 0,
+                    caffeinate: false,
+                  },
+                }
+              : [],
+          ),
+        ),
+    ),
+  );
+  const client = setup(<Dashboard project="" />, "/");
+  expect(
+    await screen.findByText(/Claude 不可用，自动驾驶已暂停/),
+  ).toHaveTextContent("Please run /login");
+  client.clear();
+});

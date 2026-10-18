@@ -9,8 +9,12 @@ import {
 import { resolve } from "node:path";
 import { Repo } from "../db/index.js";
 import { alive } from "./process.js";
-export function withLock<T>(repo: Repo, fn: () => T): T | undefined {
-  const path = resolve(repo.home, "tick.lock");
+export function withLock<T>(
+  repo: Repo,
+  fn: () => T,
+  name = "tick",
+): T | undefined {
+  const path = resolve(repo.home, `${name}.lock`);
   // Serialize acquisition (including stale-file replacement) across manager processes.
   // The transaction ends before the heartbeat; the file guards the actual work.
   const acquired = repo.db

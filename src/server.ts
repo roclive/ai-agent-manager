@@ -1,3 +1,4 @@
+import { dependencyWaiting } from "./core/dispatch.js";
 import { integrationStatus, integrate } from "./core/integration.js";
 import { cors } from "hono/cors";
 import { resolve, dirname } from "node:path";
@@ -88,7 +89,8 @@ export function createApp(
             a.sort_order - b.sort_order ||
             a.priority.localeCompare(b.priority) ||
             a.id - b.id,
-        ),
+        )
+        .map((t) => ({ ...t, dependency_waiting: dependencyWaiting(repo, t) })),
     ),
   );
   app.post("/api/tasks", async (c) => {

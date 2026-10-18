@@ -1,3 +1,4 @@
+import { checkClaude } from "./core/autopilot.js";
 import { keepAwake } from "./core/keep-awake.js";
 import { Cron } from "croner";
 import { Repo, type Routine } from "./db/index.js";
@@ -55,6 +56,18 @@ export function daemon(repo: Repo, interval = 60) {
     throw new Error("Interval must be positive");
   return new Promise<void>((resolve) => {
     const awake = keepAwake(repo);
+    let checking: Promise<unknown> | undefined;
+    let stopped = false;
+    const health = () => {
+      if (checking || stopped) return;
+      checking = checkClaude(repo)
+        .catch((e) => repo.event("daemon_error", String(e)))
+        .finally(() => {
+          checking = undefined;
+        });
+    };
+    health();
+    const healthTimer = setInterval(health, 30 * 60000);
     const jobs = new Map<number, { signature: string; job: Cron }>();
     const heartbeat = () => {
       try {
@@ -88,12 +101,15 @@ export function daemon(repo: Repo, interval = 60) {
         }
     };
     const timer = setInterval(heartbeat, interval * 1000);
-    const stop = () => {
+    const stop = async () => {
+      stopped = true;
+      clearInterval(healthTimer);
       clearInterval(timer);
       awake.stop();
       for (const { job } of jobs.values()) job.stop();
       process.off("SIGINT", stop);
       process.off("SIGTERM", stop);
+      await checking;
       resolve();
     };
     process.on("SIGINT", stop);

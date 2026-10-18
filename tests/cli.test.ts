@@ -101,3 +101,29 @@ it("stops daemon gracefully while its detached worker continues", async () => {
     child.kill("SIGKILL");
   }
 });
+
+it("reports Claude health and integration backfill summary through CLI", () => {
+  f = fixture();
+  const run = (args: string[]) =>
+    spawnSync(executable, args, {
+      cwd: f.root,
+      env: { ...process.env, AAM_HOME: f.repo.home },
+      encoding: "utf8",
+      timeout: 5000,
+    });
+  expect(run(["autopilot", "check"])).toMatchObject({
+    status: 0,
+    stdout: expect.stringContaining("ok: ok"),
+  });
+  expect(run(["project", "edit", "T", "--integration", "on"]).stdout).toContain(
+    '"pending": 0',
+  );
+  writeFileSync(
+    process.env.AAM_FAKE_CLAUDE!,
+    `#!/bin/sh\ncat >/dev/null\nprintf '{"result":"Please run /login","is_error":true}'\n`,
+  );
+  expect(run(["autopilot", "check"])).toMatchObject({
+    status: 1,
+    stdout: expect.stringContaining("error: Please run /login"),
+  });
+});

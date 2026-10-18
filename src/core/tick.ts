@@ -1,3 +1,4 @@
+import { reconcileIntegration } from "./integration.js";
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { Repo } from "../db/index.js";
@@ -31,6 +32,7 @@ export function tick(repo: Repo, _reviewRunner: Runner = runner) {
         repo.event("reap_error", String(e), r.task_id);
       }
     }
+    reconcileIntegration(repo);
     if (!(Date.parse(repo.getSetting("cooldown_until") || "") > Date.now()))
       for (const t of repo.tasks({ status: "ready" })) {
         if (

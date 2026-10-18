@@ -42,6 +42,7 @@ export interface Task {
   depends_on: string;
   attempts: number;
   integrated: number;
+  integration_attempts: number;
   resolves_task_id: number | null;
   lost_count: number;
   max_attempts: number;
@@ -121,6 +122,7 @@ export class Repo {
       this.db.exec("UPDATE tasks SET sort_order=seq");
     }
     for (const [name, declaration] of Object.entries({
+      integration_attempts: "INTEGER NOT NULL DEFAULT 0",
       integrated: "INTEGER NOT NULL DEFAULT 1",
       resolves_task_id: "INTEGER REFERENCES tasks(id)",
     }))
@@ -141,6 +143,9 @@ export class Repo {
       keep_awake: "1",
       keep_awake_pid: "",
       idle_since: "",
+      claude_ok: "",
+      claude_checked_at: "",
+      claude_error: "",
     }))
       this.db.prepare("INSERT OR IGNORE INTO settings VALUES (?,?)").run(k, v);
   }
@@ -347,6 +352,7 @@ export class Repo {
       "depends_on",
       "attempts",
       "integrated",
+      "integration_attempts",
       "resolves_task_id",
       "lost_count",
       "max_attempts",
