@@ -11,7 +11,7 @@ import { codex, opencode, command, prompt } from "../src/workers/index.js";
 import { parseVerdict, claudeReview } from "../src/core/review.js";
 import { withLock } from "../src/core/lock.js";
 import { plist, nodePath, daemonLogPath } from "../src/launchd.js";
-import { fireRoutine, validateRoutine } from "../src/scheduler.js";
+import { fireRoutine, fireScheduledRoutine, validateRoutine } from "../src/scheduler.js";
 
 let f: ReturnType<typeof fixture>;
 afterEach(() => f?.cleanup());
@@ -294,6 +294,23 @@ it("runs create_task and shell routines and generates launchd plist", () => {
   expect(xml).toContain("RunAtLoad");
   expect(xml).toContain("KeepAlive");
   expect(xml).toContain(f.repo.home);
+});
+
+it("re-reads scheduled routines before firing disabled or edited definitions", async () => {
+  f = fixture();
+  f.repo.addRoutine("mutable", "* * * * *", "create_task", {
+    project: "T",
+    title: "stale",
+  });
+  const id = f.repo.routines()[0].id;
+  f.repo.db
+    .prepare("UPDATE routines SET enabled=0,payload=? WHERE id=?")
+    .run(JSON.stringify({ project: "T", title: "current" }), id);
+  await fireScheduledRoutine(f.repo, id);
+  expect(f.repo.tasks()).toHaveLength(0);
+  f.repo.db.prepare("UPDATE routines SET enabled=1 WHERE id=?").run(id);
+  await fireScheduledRoutine(f.repo, id);
+  expect(f.repo.tasks()).toMatchObject([{ title: "current" }]);
 });
 
 it("keeps identifiers monotonic when the API reorders sequence values", () => {

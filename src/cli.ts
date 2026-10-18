@@ -228,7 +228,7 @@ export function cli(repo: Repo) {
     .option("--provider <name>")
     .action((o) => {
       const p = o.provider;
-      output(p ? repo.latestUsage(p) : repo.usageSnapshots());
+      output(repo.usageSnapshots(p));
     });
 
   return app;

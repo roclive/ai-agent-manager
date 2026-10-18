@@ -8,6 +8,7 @@ import { finalize, read } from "./finalize.js";
 import { dispatch, dependenciesDone, resolutionBusy } from "./dispatch.js";
 import { collectAutopilot, promoteIdle, startAutopilot } from "./autopilot.js";
 import { exportViews } from "../views/index.js";
+import { QuotaUnavailableError } from "./usage.js";
 export function tick(repo: Repo, _reviewRunner: Runner = runner) {
   return withLock(repo, () => {
     repo.setSetting("last_tick_at", new Date().toISOString());
@@ -44,6 +45,7 @@ export function tick(repo: Repo, _reviewRunner: Runner = runner) {
         try {
           dispatch(repo, t.identifier);
         } catch (e) {
+          if (e instanceof QuotaUnavailableError) continue;
           repo.updateTask(t.id, { status: "blocked", blocker: String(e) });
           repo.event("dispatch_error", String(e), t.id);
         }

@@ -98,11 +98,14 @@ it("runs executable CLI management commands and reaps workers after the launchin
   expect(f.repo.task("T-1").status).toBe("backlog");
 });
 
-it("allows collecting usage via JSON provider in CLI", async () => {
+it("lists every current usage window for a selected provider", async () => {
   f = fixture();
   const jsonPath = resolve(f.root, "usage.json");
   writeFileSync(jsonPath, JSON.stringify([
-    { provider: "openai", type: "quota", window: "monthly", used: 100, remaining: 900 }
+    { provider: "openai", type: "quota", window: "monthly", used: 100, remaining: 900 },
+    { provider: "openai", type: "quota", window: "daily", used: 10, remaining: 90 },
+    { provider: "openai", type: "cost", window: "billing", used: 5, remaining: "unknown" },
+    { provider: "other", type: "quota", window: "daily", used: 1, remaining: 2 }
   ]));
   const run = (args: string[]) => {
     const r = spawnSync(executable, args, {
@@ -115,8 +118,10 @@ it("allows collecting usage via JSON provider in CLI", async () => {
     return r.stdout;
   };
   run(["usage", "collect", "--provider", "test", "--json", jsonPath]);
-  expect(f.repo.latestUsage("openai")).toBeDefined();
-  expect(Number(f.repo.latestUsage("openai")?.remaining)).toBe(900);
+  const listed = JSON.parse(run(["usage", "list", "--provider", "openai"]));
+  expect(listed).toHaveLength(3);
+  expect(listed.map((snapshot: {window:string}) => snapshot.window)).toEqual(["billing", "daily", "monthly"]);
+  expect(listed.every((snapshot: {provider:string}) => snapshot.provider === "openai")).toBe(true);
 });
 
 

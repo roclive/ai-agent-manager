@@ -78,6 +78,12 @@ export async function fireRoutine(repo: Repo, r: Routine) {
   }
 }
 
+export async function fireScheduledRoutine(repo: Repo, id: number) {
+  const current = repo.routines().find((routine) => routine.id === id);
+  if (!current?.enabled) return;
+  await fireRoutine(repo, current);
+}
+
 export function daemon(repo: Repo, interval = 60) {
   if (!Number.isFinite(interval) || interval <= 0)
     throw new Error("Interval must be positive");
@@ -114,7 +120,9 @@ export function daemon(repo: Repo, interval = 60) {
         if (!jobs.has(r.id)) {
           try {
             const job = new Cron(r.cron, function() {
-              fireRoutine(repo, r).catch((e) => repo.event("routine_error", String(e)));
+              fireScheduledRoutine(repo, r.id).catch((e) =>
+                repo.event("routine_error", String(e)),
+              );
             });
             jobs.set(r.id, { signature: JSON.stringify(r), job });
           } catch (e) {

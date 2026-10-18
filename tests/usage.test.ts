@@ -7,6 +7,7 @@ import { createApp } from "../src/server.js";
 import { cli } from "../src/cli.js";
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { tick } from "../src/core/tick.js";
 let f: ReturnType<typeof fixture>;
 afterEach(() => f?.cleanup());
 const row = (patch = {}) => ({provider: "test", type: "quota", window: "week", used: 95, remaining: 5, freshness: new Date().toISOString(), ...patch});
@@ -96,4 +97,27 @@ it("does not block the selected Ollama backend with a different provider's exhau
   const task=f.task();expect(()=>dispatch(f.repo,task.identifier)).not.toThrow();
   f.repo.addUsageSnapshot(parseUsage(envelope([row({provider:"ollama",remaining:0})]),"fixture")[0]);
   const next=f.task();expect(()=>dispatch(f.repo,next.identifier)).toThrow("Quota exhausted");
+});
+
+it("keeps quota-deferred tasks ready and recovers legacy quota blocks after a positive collection", async () => {
+  f = fixture();
+  const first = f.task();
+  const second = f.task();
+  f.repo.addUsageSnapshot(parseUsage(envelope([row({provider:"codex",remaining:0})]),"fixture")[0]);
+  tick(f.repo);
+  expect(f.repo.runs()).toHaveLength(0);
+  expect([f.repo.task(first.id).status, f.repo.task(second.id).status]).toEqual(["ready", "ready"]);
+  expect(
+    (f.repo.events() as { kind: string }[]).filter(
+      (event) => event.kind === "quota_deferred",
+    ),
+  ).toHaveLength(2);
+
+  f.repo.updateTask(first.id, {
+    status: "blocked",
+    blocker: "Error: Quota exhausted for codex/week",
+  });
+  await collectUsage(f.repo, {name:"fixture", fetch:async()=>parseUsage(envelope([row({provider:"codex",used:1,remaining:9})]),"fixture")});
+  expect(f.repo.task(first.id)).toMatchObject({status:"ready", blocker:""});
+  expect(f.repo.events()).toEqual(expect.arrayContaining([expect.objectContaining({kind:"quota_recovered",task_id:first.id})]));
 });

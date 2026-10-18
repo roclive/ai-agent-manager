@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { Repo } from "../db/index.js";
 import type { UsageSnapshot } from "../db/usage.js";
 import { runner, type Runner } from "../core/process.js";
+import { checkQuota, usageState } from "../core/usage.js";
+import { llmBackend } from "../core/llm.js";
 
 export type UsageInput = Omit<UsageSnapshot, "id" | "created_at">;
 export interface OpenUsageProvider {
@@ -99,6 +101,25 @@ export async function collectUsage(repo: Repo, provider: OpenUsageProvider) {
   try {
     const snapshots = await provider.fetch();
     repo.db.transaction(() => { for (const s of snapshots) repo.addUsageSnapshot(s); })();
+    for (const task of repo.tasks({ status: "blocked" })) {
+      if (!/^(?:Error: )?Quota exhausted for /.test(task.blocker)) continue;
+      const selected = llmBackend(repo) === "ollama" ? "ollama" : task.worker;
+      const quotas = repo
+        .usageSnapshots(selected)
+        .filter((snapshot) => snapshot.type === "quota");
+      const recoveryEvidence = quotas.some(
+        (snapshot) =>
+          (snapshot.reset_at !== null &&
+            Date.parse(snapshot.reset_at) <= Date.now()) ||
+          (usageState(snapshot) === "fresh" &&
+            snapshot.remaining !== "unknown" &&
+            snapshot.remaining > 0),
+      );
+      if (recoveryEvidence && checkQuota(repo, selected).ok) {
+        repo.updateTask(task.id, { status: "ready", blocker: "" });
+        repo.event("quota_recovered", `Quota available for ${selected}`, task.id);
+      }
+    }
     repo.event("usage_collected", `${provider.name}: ${snapshots.length} snapshots`);
     return snapshots;
   } catch (error) {

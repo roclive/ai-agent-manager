@@ -1,6 +1,8 @@
 import { Repo } from "../db/index.js";
 import type { UsageSnapshot } from "../db/usage.js";
 
+export class QuotaUnavailableError extends Error {}
+
 export function usageState(snapshot: UsageSnapshot, now = Date.now()): "fresh" | "stale" | "unknown" {
   const age = now - Date.parse(snapshot.freshness);
   return !Number.isFinite(age) || age < -60000 ? "unknown" : age > 15 * 60000 ? "stale" : "fresh";

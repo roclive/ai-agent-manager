@@ -4,7 +4,7 @@ import { Repo, type Task } from "../db/index.js";
 import { git } from "./process.js";
 import { ensureWorktree } from "./worktree.js";
 import { prompt, spawnWorker } from "../workers/index.js";
-import { checkQuota } from "./usage.js";
+import { checkQuota, QuotaUnavailableError } from "./usage.js";
 
 import { llmArgs, llmBackend, recordBackend } from "./llm.js";
 export function dependenciesDone(repo: Repo, t: Task) {
@@ -53,9 +53,8 @@ export function dispatch(repo: Repo, id: string, force = false) {
   const quota = checkQuota(repo, llmBackend(repo) === "ollama" ? "ollama" : t.worker);
   if (!quota.ok) {
     const message = quota.warning || `Quota exhausted for ${t.worker}`;
-    repo.updateTask(t.id, { status: "blocked", blocker: message });
-    repo.event("quota_blocked", message, t.id);
-    throw new Error(message);
+    repo.event("quota_deferred", message, t.id);
+    throw new QuotaUnavailableError(message);
   }
   if (quota.warning) {
     repo.event("quota_warning", quota.warning, t.id);
