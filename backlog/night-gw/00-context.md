@@ -1,6 +1,6 @@
 # 本地 LiteLLM 网关与夜间额度
 
-新项目 /Users/zhangdapeng/Desktop/night/local-llm-gateway。本机 M1/16GB，已装 Ollama，ollama list 有 qwen3.5:latest 6.6GB、qwen2.5:1.5b 986MB，其余 :cloud 不是本地兜底。用户指定“7.89GB、27B”，名称仍待确认，不准猜测或静默替代。先建立可运行本地后端与可配置模型，待确切 model ID/量化/来源确认再下载指定权重，记录阻塞而不阻断其他开发。7.89GB 文件不等于总运行内存，须实测 KV cache、峰值 RSS、swap 与延迟。模型最大并发 1，避免与 NPO 生图争抢内存，压力大排队/卸载。
+新项目 /Users/zhangdapeng/Desktop/night/local-llm-gateway。本机 M1/16GB，已装 Ollama，ollama list 有 qwen3.5:latest 6.6GB、qwen2.5:1.5b 986MB，其余 :cloud 不是本地兜底。用户已确认模型：ConwayResearch/Underdog-Saluki-27B-1.0，官方仓库 https://huggingface.co/ConwayResearch/Underdog-Saluki-27B-1.0 。准确文件 Underdog-Saluki-27B-1.0-IQ2-mix.gguf，模型卡标称7.89GB，Apache-2.0。采用 llama.cpp / llama-server，Metal GPU，--jinja；不要照抄 HF 自动生成的 :F16 命令。仅下载这一个文本权重，不下载可选 mmproj。先核对官方文件元数据/哈希与当前 llama.cpp 架构支持，断点续传到用户缓存目录，不放Git。启动先用ctx 2048/单并发，依据实测再提高，不能照搬模型卡32768上下文。验证中文JSON判断、tool calling、非思考直接调用（chat_template_kwargs.enable_thinking=false，temperature=0），记录吞吐/首token/峰值内存/swap/OOM。若版本不兼容先升级独立运行器并复测，不静默换模型。llama-server绑定127.0.0.1，OpenAI兼容API接LiteLLM。下载已授权；不得只做配置不下载/不实测。若网络/磁盘/内存阻塞记录真实结果，不标部署成功。7.89GB 文件不等于总运行内存，须实测 KV cache、峰值 RSS、swap 与延迟。模型最大并发 1，避免与 NPO 生图争抢内存，压力大排队/卸载。
 
 openusage=/opt/homebrew/bin/openusage，支持 export --output <path> --format json --source auto|daemon|direct。先核实输出 schema，仅存脱敏样本。Codex/Claude CLI 订阅额度由 AAM worker 路由处理；LiteLLM 只路由正式支持的 API，不伪造 OAuth 订阅代理。官方参考 https://docs.litellm.ai/docs/proxy/reliability 。只监控已配置且可访问的 provider，逐项显示覆盖与 unknown，不声称掌握全部免费额度。
 

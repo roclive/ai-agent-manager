@@ -6,3 +6,5 @@
 - GW-4: [免费优先路由、本地 fallback 与内存排队](04-task.md)
 - GW-5: [夜间监控面板与 launchd 服务](05-task.md)
 - GW-6: [网关断网与额度耗尽演练及接入说明](06-task.md)
+
+- GW-7: [Saluki llama.cpp 实际部署](07-saluki-deploy.md)，依赖GW-1，GW-2等待此项完成。
