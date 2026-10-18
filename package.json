@@ -12,7 +12,10 @@
   "scripts": {
     "aam": "tsx src/cli.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "ui:install": "cd ui && npm install --cache /tmp/aam-npm-cache",
+    "ui:build": "cd ui && npm run build",
+    "ui:dev": "cd ui && npm run dev"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.0",

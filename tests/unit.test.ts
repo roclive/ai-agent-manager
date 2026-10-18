@@ -69,12 +69,14 @@ describe("repository", () => {
     expect(dependenciesDone(f.repo, second)).toBe(false);
     f.repo.updateTask(first.id, { status: "done" });
     expect(dependenciesDone(f.repo, second)).toBe(true);
-    expect(
-      dependenciesDone(
-        f.repo,
-        f.repo.updateTask(second.id, { depends_on: ["missing"] }),
-      ),
-    ).toBe(false);
+    expect(() =>
+      f.repo.updateTask(second.id, { depends_on: ["missing"] }),
+    ).toThrow("Task not found");
+    // Old databases can contain missing dependencies; dispatch still handles these safely.
+    f.repo.db
+      .prepare("UPDATE tasks SET depends_on=? WHERE id=?")
+      .run('["missing"]', second.id);
+    expect(dependenciesDone(f.repo, f.repo.task(second.id))).toBe(false);
   });
 });
 it("renders status groups, feedback, last 20 done and recent 50 events", () => {

@@ -26,6 +26,7 @@ export interface Task {
   project_id: number;
   identifier: string;
   seq: number;
+  sort_order: number;
   title: string;
   description: string;
   status: string;
@@ -89,6 +90,12 @@ export class Repo {
       this.db.exec(
         "ALTER TABLE tasks ADD COLUMN lost_count INTEGER NOT NULL DEFAULT 0",
       );
+    if (!columns.some((c) => c.name === "sort_order")) {
+      this.db.exec(
+        "ALTER TABLE tasks ADD COLUMN sort_order REAL NOT NULL DEFAULT 0",
+      );
+      this.db.exec("UPDATE tasks SET sort_order=seq");
+    }
     const runColumns = this.db.pragma("table_info(runs)") as { name: string }[];
     if (!runColumns.some((c) => c.name === "start_sha"))
       this.db.exec("ALTER TABLE runs ADD COLUMN start_sha TEXT");
@@ -98,6 +105,7 @@ export class Repo {
       default_worker: "codex",
       review_mode: "manual",
       cooldown_until: "",
+      last_tick_at: "",
     }))
       this.db.prepare("INSERT OR IGNORE INTO settings VALUES (?,?)").run(k, v);
   }
@@ -215,9 +223,17 @@ export class Repo {
       const now = new Date().toISOString();
       const r = this.db
         .prepare(
-          "INSERT INTO tasks(project_id,identifier,seq,title,created_at,updated_at) VALUES (?,?,?,?,?,?)",
+          "INSERT INTO tasks(project_id,identifier,seq,sort_order,title,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
         )
-        .run(p.id, `${p.key}-${seq}`, seq, String(input.title || ""), now, now);
+        .run(
+          p.id,
+          `${p.key}-${seq}`,
+          seq,
+          seq,
+          String(input.title || ""),
+          now,
+          now,
+        );
       return this.updateTask(Number(r.lastInsertRowid), {
         ...input,
         worker: input.worker || this.getSetting("default_worker"),
@@ -242,6 +258,7 @@ export class Repo {
       "feedback",
       "blocker",
       "seq",
+      "sort_order",
     ];
     const data = Object.fromEntries(
       Object.entries(patch).filter(
@@ -272,6 +289,12 @@ export class Repo {
           Number(data[k]) < (["attempts", "lost_count"].includes(k) ? 0 : 1))
       )
         throw new Error(`Invalid ${k}`);
+    if (
+      data.sort_order !== undefined &&
+      (typeof data.sort_order !== "number" || !Number.isFinite(data.sort_order))
+    )
+      throw new Error("Invalid sort_order");
+    if (data.status === "ready" && t.status === "blocked") data.blocker = "";
     if (data.depends_on !== undefined) {
       const deps =
         typeof data.depends_on === "string"
@@ -282,6 +305,15 @@ export class Repo {
         deps.some((x) => typeof x !== "string" || x === t.identifier)
       )
         throw new Error("Invalid dependencies");
+      const visit = (identifier: string, seen = new Set<string>()) => {
+        const dep = this.task(identifier);
+        if (dep.id === t.id) throw new Error("Dependency cycle");
+        if (seen.has(identifier)) return;
+        seen.add(identifier);
+        for (const child of JSON.parse(dep.depends_on) as string[])
+          visit(child, seen);
+      };
+      for (const dep of deps) visit(dep);
       data.depends_on = JSON.stringify(deps);
     }
     data.updated_at = new Date().toISOString();
@@ -332,6 +364,8 @@ export class Repo {
     action: string,
     payload: unknown = {},
   ) {
+    if (typeof name !== "string" || !name.trim())
+      throw new Error("Routine name required");
     if (!["heartbeat", "create_task", "shell"].includes(action))
       throw new Error("Invalid action");
     this.db

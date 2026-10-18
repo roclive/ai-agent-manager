@@ -9,6 +9,7 @@ import { claudeReview } from "./review.js";
 import { exportViews } from "../views/index.js";
 export function tick(repo: Repo, reviewRunner: Runner = runner) {
   return withLock(repo, () => {
+    repo.setSetting("last_tick_at", new Date().toISOString());
     for (const r of repo.runs().filter((r) => r.status === "running")) {
       try {
         const exited = existsSync(resolve(dirname(r.log_path), "exit_code"));
