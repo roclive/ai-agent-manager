@@ -90,6 +90,12 @@ export function BoardPage({ project }: { project: string }) {
               .then(() => client.invalidateQueries({ queryKey: ["executors"] }))
               .catch((e: Error) => setToast(`切换执行器失败：${e.message}`))
           }
+          onEffortChange={(value) =>
+            void api
+              .setExecutors({ worker_effort: value })
+              .then(() => client.invalidateQueries({ queryKey: ["executors"] }))
+              .catch((e: Error) => setToast(`切换思考强度失败：${e.message}`))
+          }
         />
         <Button onClick={() => setCreating("backlog")}>
           <Plus />

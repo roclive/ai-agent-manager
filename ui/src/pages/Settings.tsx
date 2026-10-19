@@ -6,6 +6,7 @@ import { request } from "../lib/api";
 import { useProjects } from "../lib/queries";
 import type { Project } from "../lib/types";
 import { ExecutorSelect } from "../components/ExecutorSelect";
+import { WorkerEffortSelect } from "../components/WorkerEffortSelect";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { NativeSelect } from "../components/ui/select";
@@ -96,6 +97,14 @@ export function Settings() {
               <Input
                 name="executor_fallback"
                 defaultValue={q.data.executor_fallback ?? ""}
+              />
+            </label>
+            <label>
+              工作执行器思考强度（不影响审查）
+              <WorkerEffortSelect
+                name="worker_effort"
+                value={q.data.worker_effort || "default"}
+                executor={q.data.coding_executor || "auto"}
               />
             </label>
             <label>

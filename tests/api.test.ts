@@ -245,12 +245,18 @@ it("exposes executor settings, validates them and reports the effective executor
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
   const t = f.task();
-  const put = await req("executors", "PUT", { coding_executor: "claude" });
+  const put = await req("executors", "PUT", {
+    coding_executor: "claude",
+    worker_effort: "medium",
+  });
   expect(put.status).toBe(200);
   const view = await put.json();
   expect(view.coding_executor).toBe("claude");
+  expect(view.worker_effort).toBe("medium");
   expect(view.executors.map((e: { id: string }) => e.id)).toContain("hermes");
   expect((await req("executors", "PUT", { coding_executor: "x" })).status).toBe(400);
+  expect((await req("executors", "PUT", { worker_effort: "max" })).status).toBe(400);
+  expect((await (await req("executors")).json()).worker_effort).toBe("medium");
   expect((await req("executors", "PUT", { reviewer: "codex" })).status).toBe(400);
   await req("projects/T", "PATCH", { coding_executor: "pi" });
   expect((await (await req(`tasks/${t.identifier}`)).json()).effective_executor).toEqual({ value: "pi", source: "project" });

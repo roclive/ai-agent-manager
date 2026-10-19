@@ -13,6 +13,7 @@ export interface Context {
   provider?: string;
   // Only set for the low-quota fallback; other opencode runs keep the pinned default model.
   model?: string;
+  effort?: "default" | "low" | "medium" | "high";
 }
 export interface Command {
   cmd: string;
@@ -39,6 +40,9 @@ export const codex: Adapter = {
       "-c",
       "sandbox_workspace_write.network_access=true",
       ...(c.modelArgs || []),
+      ...(c.effort && c.effort !== "default"
+        ? ["-c", `model_reasoning_effort=${JSON.stringify(c.effort)}`]
+        : []),
       "--skip-git-repo-check",
       "-o",
       `${c.runDir}/last.md`,
@@ -62,14 +66,15 @@ export const opencode: Adapter = {
 };
 export const claude: Adapter = {
   name: "claude",
-  // The script reads the prompt itself and takes the model alias as an optional third argument (default sonnet).
+  // The script reads the prompt itself; model and effort are separate argv entries.
   command: (c) => ({
     cmd: "sh",
     args: [
       fileURLToPath(new URL("../../scripts/claude-worker.sh", import.meta.url)),
       c.worktree,
       c.promptFile,
-      ...(c.model ? [c.model] : []),
+      c.model || "sonnet",
+      c.effort || "default",
     ],
   }),
 };
