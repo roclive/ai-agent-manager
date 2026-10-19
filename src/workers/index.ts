@@ -62,13 +62,14 @@ export const opencode: Adapter = {
 };
 export const claude: Adapter = {
   name: "claude",
-  // The script reads the prompt itself and declares sonnet as its model.
+  // The script reads the prompt itself and takes the model alias as an optional third argument (default sonnet).
   command: (c) => ({
     cmd: "sh",
     args: [
       fileURLToPath(new URL("../../scripts/claude-worker.sh", import.meta.url)),
       c.worktree,
       c.promptFile,
+      ...(c.model ? [c.model] : []),
     ],
   }),
 };

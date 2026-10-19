@@ -25,7 +25,7 @@ export function ExecutorOptions({
             key={e.id}
             value={e.id}
             disabled={!e.installed}
-            title={e.installed ? undefined : e.install_hint}
+            title={e.installed ? (e.model ? `模型 ${e.model}` : undefined) : e.install_hint}
           >
             {e.label}
             {!e.installed
@@ -98,7 +98,10 @@ export function ExecutorFilter({
 }
 
 export function ExecutorBadge({ effective }: { effective?: EffectiveExecutor }) {
+  const q = useExecutors();
   if (!effective) return null;
+  const name =
+    q.data?.executors?.find((e) => e.id === effective.value)?.label ?? effective.value;
   return (
     <span
       className="executor-badge"
@@ -106,7 +109,7 @@ export function ExecutorBadge({ effective }: { effective?: EffectiveExecutor }) 
       title={`执行器 ${effective.value}（来源：${sourceText[effective.source]}）`}
       style={{ fontSize: 11, borderRadius: 4, padding: "0 6px", border: "1px solid currentColor", whiteSpace: "nowrap" }}
     >
-      {effective.value} · {sourceText[effective.source]}
+      {name} · {sourceText[effective.source]}
     </span>
   );
 }

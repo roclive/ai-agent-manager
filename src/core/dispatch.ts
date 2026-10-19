@@ -129,10 +129,12 @@ export function dispatch(repo: Repo, id: string, force = false) {
     if (current.id === FALLBACK_PROVIDER && localRunActive(repo))
       throw new Error("No provider available (local model run active)");
     identity = detectIdentity(current.worker, {
-      modelArgs: providerLlmArgs(repo, current.id),
+      modelArgs: providerLlmArgs(repo, current.id, current.model),
       ...(current.id === FALLBACK_PROVIDER
         ? { model: fallbackModel(repo) }
-        : {}),
+        : current.model
+          ? { model: current.model }
+          : {}),
     });
     const result = repo.db
       .prepare(
@@ -153,7 +155,7 @@ export function dispatch(repo: Repo, id: string, force = false) {
     const previous = repo.runs(t.id).find((r) => r.id !== runId && r.provider);
     repo.event(
       "route_selected",
-      JSON.stringify({ provider: current.id, reason: current.reason ?? "" }),
+      JSON.stringify({ provider: current.id, ...(current.model ? { model: current.model } : {}), reason: current.reason ?? "" }),
       t.id,
     );
     if (previous && previous.provider !== current.id)
@@ -203,11 +205,13 @@ export function dispatch(repo: Repo, id: string, force = false) {
       // A policy-selected Ollama route is authoritative. It must not depend on
       // the legacy global fallback backend, or the Codex adapter would silently
       // use its default premium provider while accounting the run to Ollama.
-      modelArgs: providerLlmArgs(repo, selected.id),
+      modelArgs: providerLlmArgs(repo, selected.id, selected.model),
       provider: selected.id,
       ...(selected.id === FALLBACK_PROVIDER
         ? { model: fallbackModel(repo) }
-        : {}),
+        : selected.model
+          ? { model: selected.model }
+          : {}),
     });
     repo.db
       .prepare(

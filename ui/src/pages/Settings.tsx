@@ -84,7 +84,7 @@ export function Settings() {
               </NativeSelect>
             </label>
             <label>
-              编码执行器（全局默认，自动审查驳回后重派也使用它）
+              编码执行器（全局默认，自动审查驳回后重派也使用它；具体模型由 AAM 保存的此选项决定，不读取 Codex 桌面应用的模型选择）
               <ExecutorSelect
                 name="coding_executor"
                 label="全局编码执行器"

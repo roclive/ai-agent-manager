@@ -256,5 +256,5 @@ it("exposes executor settings, validates them and reports the effective executor
   expect((await (await req(`tasks/${t.identifier}`)).json()).effective_executor).toEqual({ value: "pi", source: "project" });
   await req(`tasks/${t.identifier}`, "PATCH", { executor: "codex" });
   const list = await (await req("tasks")).json();
-  expect(list[0].effective_executor).toEqual({ value: "codex", source: "task" });
+  expect(list[0].effective_executor).toEqual({ value: "codex-sol", source: "task" });
 });

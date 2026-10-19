@@ -10,6 +10,8 @@ import {
   resolveExecutor,
 } from "../src/core/executors.js";
 import { claude, hermes, pi, command } from "../src/workers/index.js";
+import { providerLlmArgs } from "../src/core/llm.js";
+import { detectIdentity } from "../src/workers/identity.js";
 import { QuotaUnavailableError } from "../src/core/usage.js";
 
 let f: ReturnType<typeof fixture>;
@@ -20,7 +22,7 @@ it("resolves executor task > project > global > auto", () => {
   const t = f.task();
   expect(resolveExecutor(f.repo, t)).toEqual({ value: "auto", source: "global" });
   f.repo.setSetting("coding_executor", "codex");
-  expect(resolveExecutor(f.repo, t)).toEqual({ value: "codex", source: "global" });
+  expect(resolveExecutor(f.repo, t)).toEqual({ value: "codex-sol", source: "global" });
   f.repo.updateProject("T", { coding_executor: "claude" });
   expect(resolveExecutor(f.repo, t)).toEqual({ value: "claude", source: "project" });
   const t2 = f.repo.updateTask(t.id, { executor: "pi" });
@@ -130,4 +132,52 @@ it("builds pi, hermes and claude adapter commands", () => {
   expect(c.args[0]).toMatch(/scripts\/claude-worker\.sh$/);
   expect(command("pi", ctx).cmd).toBe("pi");
   expect(() => command("nope", ctx)).toThrow();
+});
+
+it("model variants build the right command, identity and accounting", () => {
+  f = fixture();
+  const cases = [
+    ["codex-sol", "codex", "codex", "gpt-5.6-sol"],
+    ["codex-luna", "codex", "codex", "gpt-5.6-luna"],
+    ["claude-opus", "claude", "claude", "opus"],
+    ["claude", "claude", "claude", "sonnet"],
+  ] as const;
+  for (const [executor, worker, provider, model] of cases) {
+    const t = f.task({ executor });
+    const id = dispatch(f.repo, t.identifier);
+    const run = f.repo.runs().find((r) => r.id === id)!;
+    expect(run.worker).toBe(worker);
+    expect(run.provider).toBe(provider);
+    const routed = f.repo.db
+      .prepare("SELECT message FROM events WHERE kind='route_selected' AND task_id=?")
+      .get(t.id) as { message: string };
+    expect(JSON.parse(routed.message).model).toBe(model);
+    // The fake worker declares its own identity; the real one reports the selected model.
+    const real = detectIdentity(worker, { model }, "");
+    expect(real.model).toBe(model);
+  }
+  delete process.env.AAM_FAKE_WORKER;
+  const ctx = { worktree: "/w", promptFile: "/p", runDir: "/r" };
+  const luna = command("codex", { ...ctx, modelArgs: providerLlmArgs(f.repo, "codex", "gpt-5.6-luna") });
+  expect(luna.args).toContain("gpt-5.6-luna");
+  const opus = command("claude", { ...ctx, model: "opus" });
+  expect(opus.args.slice(-3)).toEqual(["/w", "/p", "opus"]);
+});
+
+it("legacy codex ids alias to Codex (Sol) and the API lists distinct variants", () => {
+  f = fixture();
+  const t = f.task({ executor: "codex" });
+  expect(resolveExecutor(f.repo, t).value).toBe("codex-sol");
+  f.repo.setSetting("executor_fallback", "codex,claude-opus");
+  const view = executorsView(f.repo);
+  expect(view.executor_fallback).toEqual(["codex-sol", "claude-opus"]);
+  const byId = Object.fromEntries(view.executors.map((e) => [e.id, e]));
+  expect(byId["codex-sol"].label).toBe("Codex (Sol)");
+  expect(byId["codex-luna"].label).toBe("Codex (Luna)");
+  expect(byId["claude-opus"].label).toBe("Claude (Opus)");
+  expect(byId["claude"].label).toBe("Claude (Sonnet)");
+  f.repo.setSetting("coding_executor", "codex-luna");
+  expect(f.repo.getSetting("coding_executor")).toBe("codex-luna");
+  f.repo.updateProject("T", { coding_executor: "claude-opus" });
+  expect(resolveExecutor(f.repo, t.executor ? { ...t, executor: "" } : t)).toEqual({ value: "claude-opus", source: "project" });
 });

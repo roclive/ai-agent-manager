@@ -199,10 +199,13 @@ export interface ExecutorInfo {
   installed: boolean;
   install_hint: string;
   cooldown_until: string | null;
+  model?: string | null;
+  provider?: string;
 }
 export interface ExecutorsView {
   coding_executor: string;
   executor_fallback: string[];
   reviewer: string;
+  model_note?: string;
   executors: ExecutorInfo[];
 }
