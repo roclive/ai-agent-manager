@@ -143,13 +143,30 @@ function codexOutput(output: string) {
 
 function recordCall(repo: Repo) {
   const day = new Date().toISOString().slice(0, 10);
-  const currentDay = repo.getSetting("manager_call_day");
-  const count =
-    currentDay === day ? Number(repo.getSetting("manager_call_count")) || 0 : 0;
-  const cap = Number(repo.getSetting("manager_daily_max")) || 0;
-  if (count >= cap) throw new Error(`daily manager call cap reached (${cap})`);
-  repo.setSetting("manager_call_day", day);
-  repo.setSetting("manager_call_count", String(count + 1));
+  // BEGIN IMMEDIATE serializes callers from separate processes before reading
+  // the shared daily counter, so only callers within the cap may proceed.
+  const claim = repo.db.transaction(() => {
+    const get = (key: string) =>
+      (
+        repo.db.prepare("SELECT value FROM settings WHERE key=?").get(key) as
+          | { value: string }
+          | undefined
+      )?.value;
+    const count =
+      get("manager_call_day") === day
+        ? Number(get("manager_call_count")) || 0
+        : 0;
+    const cap = Number(get("manager_daily_max")) || 0;
+    if (count >= cap)
+      throw new Error(`daily manager call cap reached (${cap})`);
+    repo.db
+      .prepare("UPDATE settings SET value=? WHERE key='manager_call_day'")
+      .run(day);
+    repo.db
+      .prepare("UPDATE settings SET value=? WHERE key='manager_call_count'")
+      .run(String(count + 1));
+  });
+  claim.immediate();
 }
 
 function promptFor(candidates: readonly Task[]) {

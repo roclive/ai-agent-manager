@@ -254,6 +254,40 @@ describe("manager decision backends", () => {
     ).toThrow("Invalid setting value");
   });
 
+  it("enforces the daily cap across separate database connections", async () => {
+    f = fixture();
+    const task = f.task();
+    f.repo.setSetting("manager_daily_max", "1");
+    const { Repo } = await import("../src/db/index.js");
+    const secondRepo = new Repo(f.repo.home);
+    let calls = 0;
+    const runner = () => {
+      calls += 1;
+      return {
+        status: 0,
+        stdout: JSON.stringify({
+          task_id: task.identifier,
+          worker: "codex",
+          reason: "selected",
+        }),
+        stderr: "",
+      };
+    };
+
+    try {
+      const first = new LlmManagerBackend("claude", runner);
+      const second = new LlmManagerBackend("claude", runner);
+      first.decide([task], { repo: f.repo });
+      const capped = second.decide([task], { repo: secondRepo });
+
+      expect(calls).toBe(1);
+      expect(capped.reason).toContain("daily manager call cap reached (1)");
+      expect(secondRepo.getSetting("manager_call_count")).toBe("1");
+    } finally {
+      secondRepo.close();
+    }
+  });
+
   it("uses the OpenAI-compatible local endpoint through stdin", () => {
     f = fixture();
     const task = f.task();
