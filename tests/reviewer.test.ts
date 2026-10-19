@@ -18,6 +18,7 @@ let f: ReturnType<typeof fixture>;
 afterEach(() => {
   f?.cleanup();
   delete process.env.AAM_FAKE_CODEX;
+  delete process.env.AAM_FAKE_CLAUDE;
 });
 
 it("routes each persisted reviewer model without changing the coding executor", () => {
@@ -34,6 +35,54 @@ it("routes each persisted reviewer model without changing the coding executor", 
   expect(command.args[command.args.indexOf("--model") + 1]).toBe("gpt-5.6-sol");
   expect(f.repo.getSetting("coding_executor")).toBe("codex-luna");
 });
+it.each([
+  ["claude-opus", "claude", "codex"],
+  ["codex-luna", "codex", "claude"],
+] as const)(
+  "keeps the %s reviewer on its selected provider when policy ranks another provider first",
+  async (reviewer, expectedProvider, firstProvider) => {
+    f = fixture();
+    const fakeCodex = resolve(f.root, "codex-policy.sh");
+    writeFileSync(
+      fakeCodex,
+      '#!/bin/sh\nwhile [ "$#" -gt 0 ]; do if [ "$1" = "-o" ]; then shift; out="$1"; fi; shift; done\ncat >/dev/null\nprintf ok > "$out"\n',
+      { mode: 0o755 },
+    );
+    const fakeClaude = resolve(f.root, "claude-policy.sh");
+    writeFileSync(
+      fakeClaude,
+      '#!/bin/sh\ncat >/dev/null\nprintf \'%s\' \'{"is_error":false,"result":"ok"}\'\n',
+      { mode: 0o755 },
+    );
+    process.env.AAM_FAKE_CODEX = fakeCodex;
+    process.env.AAM_FAKE_CLAUDE = fakeClaude;
+    const rule = (id: "codex" | "claude") => ({
+      id,
+      worker: id,
+      class: "premium",
+      legal: true,
+      roles: ["any"],
+      max_complexity: "high",
+      reserve_remaining: 0,
+      reservation: { low: 0, medium: 0, high: 0 },
+    });
+    f.repo.setSetting(
+      "provider_policy",
+      JSON.stringify({
+        version: 1,
+        providers: [rule(firstProvider), rule(expectedProvider)],
+      }),
+    );
+    f.repo.setSetting("reviewer", reviewer);
+
+    expect(await checkReviewer(f.repo)).toEqual({ ok: true, result: "ok" });
+    expect(
+      f.repo.db
+        .prepare("SELECT provider FROM autopilot_jobs WHERE kind='health'")
+        .get(),
+    ).toEqual({ provider: expectedProvider });
+  },
+);
 function setup() {
   f = fixture();
   f.repo.setSetting("reviewer", "codex");

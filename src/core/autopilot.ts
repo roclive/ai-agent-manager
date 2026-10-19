@@ -28,7 +28,11 @@ import {
   parseStrictJson,
   parseStrictVerdict,
 } from "./review-gate.js";
-import { normalizeReviewer, reviewerMeta } from "./reviewers.js";
+import {
+  normalizeReviewer,
+  reviewerHealthSetting,
+  reviewerMeta,
+} from "./reviewers.js";
 
 type Job = {
   id: number;
@@ -151,12 +155,7 @@ export const claudeArgs: string[] = [
   "--append-system-prompt",
   "You have no tools. Never emit tool calls or <invoke> blocks. Answer in one turn using only the task, diff and test output in the prompt, and reply with the final JSON object only.",
 ];
-export const healthSetting = (repo: Repo, key: string) =>
-  repo.getSetting(`reviewer_${key}`) ||
-  (normalizeReviewer(repo.getSetting("reviewer")).startsWith("claude") && llmBackend(repo) === "primary"
-    ? repo.getSetting(`claude_${key}`)
-    : "") ||
-  "";
+export const healthSetting = reviewerHealthSetting;
 export function reviewerCommand(
   repo: Repo,
   cwd: string,
@@ -321,10 +320,12 @@ function reserve(repo: Repo, kind: string, p: Project, taskId: number | null) {
         normalizeReviewer(repo.getSetting("reviewer")) !== "gw" &&
         providerPolicyConfigured(repo.getSetting("provider_policy"))
       ) {
+        const provider = reviewerMeta(repo.getSetting("reviewer")).provider;
         selected = selectProviderFor(
           repo,
           { role: "any", complexity: "high", worker: "codex" },
-          ["codex", "claude"],
+          [provider === "claude" ? "claude" : "codex"],
+          [provider],
         );
       } else {
         const provider =

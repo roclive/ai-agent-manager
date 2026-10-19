@@ -311,3 +311,21 @@ it("persists and validates reviewer variants independently from the coding execu
   expect((await req("reviewers", "PUT", { reviewer: "opencode" })).status).toBe(400);
   expect((await req("reviewers", "PUT", { reviewer: "codex-sol", review_mode: "manual" })).status).toBe(400);
 });
+
+it("reloads legacy Claude reviewer health through the reviewers API", async () => {
+  f = fixture();
+  f.repo.setSetting("reviewer", "claude-opus");
+  f.repo.setSetting("claude_ok", "0");
+  f.repo.setSetting("claude_checked_at", "2026-10-19T12:00:00.000Z");
+  f.repo.setSetting("claude_error", "legacy health failure");
+  const app = createApp(f.repo);
+  const response = await app.request("/api/reviewers");
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    reviewer: "claude-opus",
+    reviewer_ok: false,
+    reviewer_checked_at: "2026-10-19T12:00:00.000Z",
+    reviewer_error: "legacy health failure",
+  });
+});

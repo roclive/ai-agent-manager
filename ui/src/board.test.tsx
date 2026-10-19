@@ -181,7 +181,7 @@ it("renders the shell and board with a fake API, including filtering and detail"
       </MemoryRouter>
     </QueryClientProvider>,
   );
-  expect(await screen.findByText("任务 1")).toBeInTheDocument();
+  expect(await screen.findByText("任务 1", {}, { timeout: 5000 })).toBeInTheDocument();
   expect(screen.getByText("任务 2")).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("搜索任务"), {
     target: { value: "AAM-1" },

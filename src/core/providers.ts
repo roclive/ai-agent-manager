@@ -91,6 +91,7 @@ export function selectProviderFor(
   repo: Repo,
   task: ProviderWork,
   requiredWorkers?: ProviderRule["worker"][],
+  requiredProviders?: string[],
 ): ProviderSelection {
   const configured = providerRules(repo);
   const overrides = parseOverrides(repo.getSetting("routing_overrides"));
@@ -130,6 +131,10 @@ export function selectProviderFor(
       return rank(a.rule) - rank(b.rule) || a.index - b.index;
     });
   for (const { rule } of ordered) {
+    if (requiredProviders && !requiredProviders.includes(rule.id)) {
+      failures.push(`${rule.id}: provider mismatch`);
+      continue;
+    }
     if (requiredWorkers && !requiredWorkers.includes(rule.worker)) {
       failures.push(`${rule.id}: worker mismatch`);
       continue;
