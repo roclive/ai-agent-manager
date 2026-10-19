@@ -210,7 +210,16 @@ export class LlmManagerBackend extends RulesBackend {
       else if (this.name === "codex")
         result = run(
           "codex",
-          ["exec", "--json", "-", "--skip-git-repo-check"],
+          [
+            "exec",
+            "--json",
+            "-",
+            "-s",
+            "read-only",
+            "-c",
+            'approval_policy="never"',
+            "--skip-git-repo-check",
+          ],
           repo.home,
           input,
           30_000,
