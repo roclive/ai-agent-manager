@@ -115,3 +115,11 @@ Validation so far: merged core suite 121 passed before the final provider-isolat
 
 - `tests/overnight-drill.test.ts`: fake-worker end-to-end failover drill (cloud exhausted → opencode free → local → cooldown recovery) asserting no lost tasks/reviews and no duplicate runs after repeated ticks.
 - `scripts/gw-health-smoke.mjs` + `docs/overnight-rollout.md`: read-only GW smoke and install/restart/rollback commands. Real smoke: gateway on 127.0.0.1:4000 is alive but `/v1/models` returned 500 without a key, so real model identity and limits remain unverified/unknown. No real provider was called and no running service or main checkout was touched. `launchd uninstall/install` commands in the runbook were not executed.
+
+## AAM-45
+
+- `deploy-runtime --dry-run` is deliberately read-only and reports the full plan without running
+  validation commands. The real deploy always validates the exact detached `aam/integration`
+  worktree before changing the database or launchd services.
+- The existing daemon-guard plist is retained and its immutable runtime path is replaced, because
+  daemon-guard is locally installed policy and has no canonical generator in this repository.

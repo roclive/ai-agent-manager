@@ -173,7 +173,10 @@ export function cli(repo: Repo) {
     .option("--desc <text>")
     .option("--priority <priority>")
     .option("--worker <worker>")
-    .option("--executor <executor>", "task coding executor override (auto, codex, claude, ...; \"\" inherits)")
+    .option(
+      "--executor <executor>",
+      'task coding executor override (auto, codex, claude, ...; "" inherits)',
+    )
     .option("--depends <ids>")
     .action((id, o) =>
       output(
@@ -309,6 +312,22 @@ async function register(app: Command, repo: Repo) {
     });
   const { daemon, validateRoutine } = await import("./scheduler.js");
   const { launchd } = await import("./launchd.js");
+  const { deployRuntime } = await import("./core/deploy-runtime.js");
+  app
+    .command("deploy-runtime")
+    .description("Safely deploy aam/integration to the launchd runtime")
+    .option("--dry-run", "print the deployment plan without changing anything")
+    .option("--force", "deploy even when detached workers are active")
+    .option("--name <name>", "runtime directory prefix", "integration")
+    .action(async (o) =>
+      output(
+        await deployRuntime(repo, {
+          dryRun: Boolean(o.dryRun),
+          force: Boolean(o.force),
+          name: o.name,
+        }),
+      ),
+    );
   app
     .command("daemon")
     .option("--interval <seconds>", "heartbeat interval", "60")

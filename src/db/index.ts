@@ -213,7 +213,7 @@ export class Repo {
       this.db.prepare("INSERT OR IGNORE INTO settings VALUES (?,?)").run(k, v);
   }
   close() {
-    this.db.close();
+    if (this.db.open) this.db.close();
   }
   getSetting(key: string) {
     return (
@@ -258,10 +258,7 @@ export class Repo {
       throw new Error("Expected none or opencode");
     if (key === "fallback_active" && !["0", "1"].includes(value))
       throw new Error("Expected 0 or 1");
-    if (
-      key === "opencode_fallback_model" &&
-      !/^[\w.-]+\/[\w.:-]+$/.test(value)
-    )
+    if (key === "opencode_fallback_model" && !/^[\w.-]+\/[\w.:-]+$/.test(value))
       throw new Error("Expected provider/model");
     if (
       key === "local_model_min_free_gb" &&
@@ -656,7 +653,10 @@ export class Repo {
       "UPDATE runs SET worker_kind=?,worker_model=?,worker_label=? WHERE id=?",
     );
     for (const r of rows) {
-      const i = inferIdentity(r.worker, resolve(this.home, "runs", String(r.id)));
+      const i = inferIdentity(
+        r.worker,
+        resolve(this.home, "runs", String(r.id)),
+      );
       update.run(i.kind, i.model, i.label, r.id);
     }
   }
