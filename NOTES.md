@@ -125,3 +125,16 @@ Validation so far: merged core suite 121 passed before the final provider-isolat
   daemon-guard is locally installed policy and has no canonical generator in this repository.
 
 - Reviewer/planner subprocess stdout and stderr now stream directly to private log files, removing the former 1 MiB pipe buffer cap. Result collection permits responses up to 64 MiB and bounds diagnostic tails to 256 KiB. Oversized final responses retain logs and pause automatic retries for the unchanged task with a visible review_stalled event; no task attempt is consumed. Task updates after remediation resume review.
+
+## AAM-39 native MLX preflight
+
+The supplied prior feedback has no actionable defect, only passing test logs. Added pinned
+HF metadata evidence and offline regressions for discovered metadata discrepancies.
+Runtime evaluation remains incomplete: the worker may write only in its worktree, whereas
+weights must go to the user cache; 8B also exceeds the 4GB cap and needs an explicit decision.
+Observed existing external LFM download processes were not touched. No real model/worker
+was invoked, no package upgraded, no routing changed. No AAM-60 evidence exists in this
+checkout; comparison stays pending rather than importing historical GGUF numbers.
+Validation: core 242/242 and UI 45/45 passed with maxWorkers=1; both typechecks
+passed. Core retry used 60-second test/hook deadlines after default-parallel resource
+contention; no production code or existing test assertions were changed.

@@ -1,0 +1,462 @@
+{
+  "LFM2.5-8B-A1B-MLX-4bit": {
+    "id": "mlx-community/LFM2.5-8B-A1B-MLX-4bit",
+    "revision": "146590a491db88581884033023f51f6b49a27b89",
+    "files": [
+      {
+        "path": ".gitattributes",
+        "bytes": 1570
+      },
+      {
+        "path": "README.md",
+        "bytes": 1313
+      },
+      {
+        "path": "chat_template.jinja",
+        "bytes": 4674
+      },
+      {
+        "path": "config.json",
+        "bytes": 6405
+      },
+      {
+        "path": "generation_config.json",
+        "bytes": 230
+      },
+      {
+        "path": "model.safetensors",
+        "bytes": 4764265165
+      },
+      {
+        "path": "model.safetensors.index.json",
+        "bytes": 43344
+      },
+      {
+        "path": "tokenizer.json",
+        "bytes": 17905598
+      },
+      {
+        "path": "tokenizer_config.json",
+        "bytes": 315
+      }
+    ],
+    "config.json": {
+      "architectures": [
+        "Lfm2MoeForCausalLM"
+      ],
+      "bos_token_id": 124894,
+      "conv_L_cache": 3,
+      "conv_bias": false,
+      "dtype": "bfloat16",
+      "eos_token_id": 124900,
+      "hidden_size": 2048,
+      "initializer_range": 0.02,
+      "intermediate_size": 7168,
+      "layer_types": [
+        "conv",
+        "conv",
+        "full_attention",
+        "conv",
+        "conv",
+        "conv",
+        "full_attention",
+        "conv",
+        "conv",
+        "conv",
+        "full_attention",
+        "conv",
+        "conv",
+        "conv",
+        "full_attention",
+        "conv",
+        "conv",
+        "conv",
+        "full_attention",
+        "conv",
+        "conv",
+        "full_attention",
+        "conv",
+        "conv"
+      ],
+      "max_position_embeddings": 128000,
+      "model_type": "lfm2_moe",
+      "moe_intermediate_size": 1792,
+      "norm_eps": 1e-05,
+      "norm_topk_prob": true,
+      "num_attention_heads": 32,
+      "num_dense_layers": 2,
+      "num_experts": 32,
+      "num_experts_per_tok": 4,
+      "num_hidden_layers": 24,
+      "num_key_value_heads": 8,
+      "pad_token_id": 124893,
+      "quantization": {
+        "group_size": 64,
+        "bits": 4,
+        "mode": "affine",
+        "model.layers.2.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.3.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.4.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.5.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.6.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.7.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.8.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.9.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.10.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.11.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.12.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.13.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.14.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.15.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.16.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.17.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.18.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.19.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.20.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.21.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.22.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.23.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        }
+      },
+      "quantization_config": {
+        "group_size": 64,
+        "bits": 4,
+        "mode": "affine",
+        "model.layers.2.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.3.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.4.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.5.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.6.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.7.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.8.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.9.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.10.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.11.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.12.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.13.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.14.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.15.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.16.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.17.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.18.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.19.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.20.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.21.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.22.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        },
+        "model.layers.23.feed_forward.gate": {
+          "group_size": 64,
+          "bits": 8
+        }
+      },
+      "rope_parameters": {
+        "rope_theta": 5000000,
+        "rope_type": "default"
+      },
+      "routed_scaling_factor": 1.0,
+      "tie_word_embeddings": true,
+      "transformers_version": "5.9.0",
+      "use_cache": true,
+      "use_expert_bias": true,
+      "vocab_size": 128000
+    },
+    "chat_template": "{# <|tool_list_start|> detection hint for mlx_lm #}\n\n{{- bos_token -}}\n{%- set preserve_thinking = preserve_thinking | default(false) -%}\n\n{%- macro format_arg_value(arg_value) -%}\n    {%- if arg_value is string -%}\n        {{- \"'\" + arg_value + \"'\" -}}\n    {%- elif arg_value is mapping -%}\n        {{- arg_value | tojson -}}\n    {%- else -%}\n        {{- arg_value | string -}}\n    {%- endif -%}\n{%- endmacro -%}\n\n{%- macro parse_content(content) -%}\n    {%- if content is string -%}\n        {{- content -}}\n    {%- else -%}\n        {%- set _ns = namespace(result=\"\") -%}\n        {%- for item in content -%}\n            {%- if item[\"type\"] == \"image\" -%}\n                {%- set _ns.result = _ns.result + \"<image>\" -%}\n            {%- elif item[\"type\"] == \"text\" -%}\n                {%- set _ns.result = _ns.result + item[\"text\"] -%}\n            {%- else -%}\n                {%- set _ns.result = _ns.result + item | tojson -%}\n            {%- endif -%}\n        {%- endfor -%}\n        {{- _ns.result -}}\n    {%- endif -%}\n{%- endmacro -%}\n\n{%- macro render_tool_calls(tool_calls) -%}\n    {%- set tool_calls_ns = namespace(tool_calls=[]) -%}\n    {%- for tool_call in tool_calls -%}\n        {%- set func_name = tool_call[\"function\"][\"name\"] -%}\n        {%- set func_args = tool_call[\"function\"][\"arguments\"] -%}\n        {%- set args_ns = namespace(arg_strings=[]) -%}\n        {%- for arg_name, arg_value in func_args.items() -%}\n            {%- set args_ns.arg_strings = args_ns.arg_strings + [arg_name + \"=\" + format_arg_value(arg_value)] -%}\n        {%- endfor -%}\n        {%- set tool_calls_ns.tool_calls = tool_calls_ns.tool_calls + [func_name + \"(\" + (args_ns.arg_strings | join(\", \")) + \")\"] -%}\n    {%- endfor -%}\n    {{- \"<|tool_call_start|>[\" + (tool_calls_ns.tool_calls | join(\", \")) + \"]<|tool_call_end|>\" -}}\n{%- endmacro -%}\n\n{%- set ns = namespace(system_prompt=\"\", last_user_index=-1) -%}\n{%- if messages[0][\"role\"] == \"system\" -%}\n    {%- if messages[0].get(\"content\") -%}\n        {%- set ns.system_prompt = parse_content(messages[0][\"content\"]) -%}\n    {%- endif -%}\n    {%- set messages = messages[1:] -%}\n{%- endif -%}\n{%- if tools -%}\n    {%- set ns.system_prompt = ns.system_prompt + (\"\\n\" if ns.system_prompt else \"\") + \"List of tools: [\" -%}\n    {%- for tool in tools -%}\n        {%- if tool is not string -%}\n            {%- set tool = tool | tojson -%}\n        {%- endif -%}\n        {%- set ns.system_prompt = ns.system_prompt + tool -%}\n        {%- if not loop.last -%}\n            {%- set ns.system_prompt = ns.system_prompt + \", \" -%}\n        {%- endif -%}\n    {%- endfor -%}\n    {%- set ns.system_prompt = ns.system_prompt + \"]\" -%}\n{%- endif -%}\n{%- if ns.system_prompt -%}\n    {{- \"<|im_start|>system\\n\" + ns.system_prompt + \"<|im_end|>\\n\" -}}\n{%- endif -%}\n{%- for message in messages -%}\n    {%- if message[\"role\"] == \"user\" -%}\n        {%- set ns.last_user_index = loop.index0 -%}\n    {%- endif -%}\n{%- endfor -%}\n{%- for message in messages -%}\n    {{- \"<|im_start|>\" + message.role + \"\\n\" -}}\n    {%- if message.role == \"assistant\" -%}\n        {%- generation -%}\n        {%- if message.thinking is defined and (preserve_thinking or loop.index0 > ns.last_user_index) -%}\n            {{- \"<think>\" + message.thinking + \"</think>\" -}}\n        {%- endif -%}\n        {%- set _cfm_tag = \"CONTINUE_FINAL_MESSAGE_TAG \" -%}\n        {%- set _has_cfm = false -%}\n        {%- if message.content is defined -%}\n            {%- set content = parse_content(message.content) -%}\n            {%- if not (preserve_thinking or loop.index0 > ns.last_user_index) -%}\n                {%- if \"</think>\" in content -%}\n                    {%- set content = content.split(\"</think>\")[-1] | trim -%}\n                {%- endif -%}\n            {%- endif -%}\n            {%- if message.tool_calls is defined and content.endswith(_cfm_tag) -%}\n                {%- set _has_cfm = true -%}\n                {%- set _trunc_len = (content | length) - (_cfm_tag | length) -%}\n                {{- content[:_trunc_len] -}}\n            {%- else -%}\n                {{- content -}}\n            {%- endif -%}\n        {%- endif -%}\n        {%- if message.tool_calls is defined -%}\n            {{- render_tool_calls(message.tool_calls) -}}\n        {%- endif -%}\n        {%- if _has_cfm -%}\n            {{- _cfm_tag -}}\n        {%- endif -%}\n        {{- \"<|im_end|>\\n\" -}}\n        {%- endgeneration -%}\n    {%- else %}\n        {%- if message.get(\"content\") -%}\n            {{- parse_content(message[\"content\"]) -}}\n        {%- endif -%}\n        {{- \"<|im_end|>\\n\" -}}\n    {%- endif %}\n{%- endfor -%}\n{%- if add_generation_prompt -%}\n    {{- \"<|im_start|>assistant\\n\" -}}\n{%- endif -%}",
+    "eos_token": "<|im_end|>",
+    "model_card": {
+      "url": "https://huggingface.co/mlx-community/LFM2.5-8B-A1B-MLX-4bit/resolve/146590a491db88581884033023f51f6b49a27b89/README.md",
+      "sha256": "c83951024ca370557a38eff9a1bf8923958326001ceff35a5bc1883def8accf1",
+      "conversion_runner": "mlx-lm 0.31.1"
+    },
+    "observed_at": "2026-10-19",
+    "weight_bytes": 4764265165,
+    "repository_bytes": 4782228614,
+    "runtime_status": "not_run",
+    "backend": null,
+    "chat_template_source": "https://huggingface.co/mlx-community/LFM2.5-8B-A1B-MLX-4bit/resolve/146590a491db88581884033023f51f6b49a27b89/chat_template.jinja"
+  },
+  "LFM2.5-2.6B-4bit": {
+    "id": "mlx-community/LFM2.5-2.6B-4bit",
+    "revision": "72a08228cf703cd7dc0187abf4edbbd8e935f864",
+    "files": [
+      {
+        "path": ".gitattributes",
+        "bytes": 1570
+      },
+      {
+        "path": "README.md",
+        "bytes": 791
+      },
+      {
+        "path": "chat_template.jinja",
+        "bytes": 5496
+      },
+      {
+        "path": "config.json",
+        "bytes": 2377
+      },
+      {
+        "path": "generation_config.json",
+        "bytes": 306
+      },
+      {
+        "path": "model.safetensors",
+        "bytes": 1517625850
+      },
+      {
+        "path": "model.safetensors.index.json",
+        "bytes": 50943
+      },
+      {
+        "path": "tokenizer.json",
+        "bytes": 17905598
+      },
+      {
+        "path": "tokenizer_config.json",
+        "bytes": 363
+      }
+    ],
+    "config.json": {
+      "architectures": [
+        "Lfm2ForCausalLM"
+      ],
+      "block_auto_adjust_ff_dim": false,
+      "block_dim": 2048,
+      "block_ffn_dim_multiplier": 1.0,
+      "block_mlp_init_scale": 1.0,
+      "block_multiple_of": 256,
+      "block_norm_eps": 1e-05,
+      "block_out_init_scale": 1.0,
+      "block_use_swiglu": true,
+      "block_use_xavier_init": true,
+      "bos_token_id": 124894,
+      "conv_L_cache": 3,
+      "conv_bias": false,
+      "conv_dim": 2048,
+      "conv_use_xavier_init": true,
+      "dtype": "bfloat16",
+      "eos_token_id": [
+        124900
+      ],
+      "generation_config": {
+        "_from_model_config": true,
+        "bos_token_id": 124894,
+        "eos_token_id": [
+          124900
+        ],
+        "output_attentions": false,
+        "output_hidden_states": false,
+        "pad_token_id": 124893,
+        "temperature": 0.1,
+        "top_k": 50,
+        "repetition_penalty": 1.1,
+        "transformers_version": "5.2.0",
+        "use_cache": true
+      },
+      "hidden_size": 2048,
+      "initializer_range": 0.02,
+      "intermediate_size": 10752,
+      "layer_types": [
+        "conv",
+        "conv",
+        "full_attention",
+        "conv",
+        "conv",
+        "full_attention",
+        "conv",
+        "conv",
+        "conv",
+        "full_attention",
+        "conv",
+        "conv",
+        "conv",
+        "full_attention",
+        "conv",
+        "conv",
+        "conv",
+        "full_attention",
+        "conv",
+        "conv",
+        "conv",
+        "full_attention",
+        "conv",
+        "conv",
+        "full_attention",
+        "conv",
+        "conv",
+        "full_attention",
+        "conv",
+        "conv"
+      ],
+      "max_position_embeddings": 128000,
+      "model_type": "lfm2",
+      "norm_eps": 1e-05,
+      "num_attention_heads": 32,
+      "num_heads": 32,
+      "num_hidden_layers": 30,
+      "num_key_value_heads": 8,
+      "pad_token_id": 124893,
+      "quantization": {
+        "group_size": 64,
+        "bits": 4,
+        "mode": "affine"
+      },
+      "quantization_config": {
+        "group_size": 64,
+        "bits": 4,
+        "mode": "affine"
+      },
+      "rope_parameters": {
+        "rope_theta": 10000000.0,
+        "rope_type": "default"
+      },
+      "temperature": 0.1,
+      "tie_word_embeddings": true,
+      "top_k": 50,
+      "transformers_version": "5.2.0",
+      "use_cache": true,
+      "use_pos_enc": true,
+      "vision_config": {},
+      "vocab_size": 128000
+    },
+    "chat_template": "{# <|tool_list_start|> detection hint for mlx_lm #}\n\n{{- bos_token -}}\n{%- set preserve_thinking = preserve_thinking | default(false) -%}\n\n{%- macro format_arg_value(arg_value) -%}\n    {%- if arg_value is string -%}\n        {{- \"'\" + (arg_value | replace(\"\\\\\", \"\\\\\\\\\") | replace(\"'\", \"\\\\'\") | replace(\"\\n\", \"\\\\n\") | replace(\"\\r\", \"\\\\r\")) + \"'\" -}}\n    {%- elif arg_value is mapping or arg_value is iterable -%}\n        {{- arg_value | tojson -}}\n    {%- else -%}\n        {{- arg_value | string -}}\n    {%- endif -%}\n{%- endmacro -%}\n\n{%- macro parse_content(content) -%}\n    {%- if content is string -%}\n        {{- content -}}\n    {%- elif content is mapping -%}\n        {{- content | tojson -}}\n    {%- elif content is iterable -%}\n        {%- set _ns = namespace(result=\"\") -%}\n        {%- for item in content -%}\n            {%- if item is string -%}\n                {%- set _ns.result = _ns.result + item -%}\n            {%- elif item is mapping and item.get(\"type\") == \"image\" -%}\n                {%- set _ns.result = _ns.result + \"<image>\" -%}\n            {%- elif item is mapping and item.get(\"type\") == \"text\" -%}\n                {%- set _ns.result = _ns.result + ((item.get(\"text\") or \"\") | string) -%}\n            {%- else -%}\n                {%- set _ns.result = _ns.result + (item | tojson) -%}\n            {%- endif -%}\n        {%- endfor -%}\n        {{- _ns.result -}}\n    {%- endif -%}\n{%- endmacro -%}\n\n{%- macro render_tool_calls(tool_calls) -%}\n    {%- set tool_calls_ns = namespace(tool_calls=[]) -%}\n    {%- for tool_call in tool_calls -%}\n        {%- set func = tool_call[\"function\"] if \"function\" in tool_call else tool_call -%}\n        {%- set func_name = func[\"name\"] -%}\n        {%- set func_args = func.get(\"arguments\") -%}\n        {%- set args_ns = namespace(arg_strings=[]) -%}\n        {%- if func_args is mapping -%}\n            {%- for arg_name, arg_value in func_args.items() -%}\n                {%- set args_ns.arg_strings = args_ns.arg_strings + [arg_name + \"=\" + format_arg_value(arg_value)] -%}\n            {%- endfor -%}\n        {%- elif func_args is string and (func_args | trim) not in [\"\", \"{}\", \"null\"] -%}\n            {{- raise_exception(\"Tool call arguments must be a mapping, got a JSON-encoded string: parse arguments with json.loads() before applying the chat template\") -}}\n        {%- endif -%}\n        {%- set tool_calls_ns.tool_calls = tool_calls_ns.tool_calls + [func_name + \"(\" + (args_ns.arg_strings | join(\", \")) + \")\"] -%}\n    {%- endfor -%}\n    {{- \"<|tool_call_start|>[\" + (tool_calls_ns.tool_calls | join(\", \")) + \"]<|tool_call_end|>\" -}}\n{%- endmacro -%}\n\n{%- set ns = namespace(system_prompt=\"\", last_user_index=-1) -%}\n{%- if messages and messages[0][\"role\"] == \"system\" -%}\n    {%- if messages[0].get(\"content\") -%}\n        {%- set ns.system_prompt = parse_content(messages[0][\"content\"]) -%}\n    {%- endif -%}\n    {%- set messages = messages[1:] -%}\n{%- endif -%}\n{%- if tools -%}\n    {%- set ns.system_prompt = ns.system_prompt + (\"\\n\" if ns.system_prompt else \"\") + \"List of tools: [\" -%}\n    {%- for tool in tools -%}\n        {%- if tool is not string -%}\n            {%- set tool = tool | tojson -%}\n        {%- endif -%}\n        {%- set ns.system_prompt = ns.system_prompt + tool -%}\n        {%- if not loop.last -%}\n            {%- set ns.system_prompt = ns.system_prompt + \", \" -%}\n        {%- endif -%}\n    {%- endfor -%}\n    {%- set ns.system_prompt = ns.system_prompt + \"]\" -%}\n{%- endif -%}\n{%- if ns.system_prompt -%}\n    {{- \"<|im_start|>system\\n\" + ns.system_prompt + \"<|im_end|>\\n\" -}}\n{%- endif -%}\n{%- for message in messages -%}\n    {%- if message[\"role\"] == \"user\" -%}\n        {%- set ns.last_user_index = loop.index0 -%}\n    {%- endif -%}\n{%- endfor -%}\n{%- for message in messages -%}\n    {{- \"<|im_start|>\" + message.role + \"\\n\" -}}\n    {%- if message.role == \"assistant\" -%}\n        {%- generation -%}\n        {%- set keep_thinking = preserve_thinking or loop.index0 > ns.last_user_index -%}\n        {%- set thinking = message.thinking or message.reasoning or message.reasoning_content -%}\n        {%- set thinking = thinking if thinking is string else \"\" -%}\n        {%- if thinking and keep_thinking -%}\n            {{- \"<think>\" + thinking + \"</think>\" -}}\n        {%- endif -%}\n        {%- set _cfm_tag = \"CONTINUE_FINAL_MESSAGE_TAG \" -%}\n        {%- set _has_cfm = false -%}\n        {%- set content = \"\" -%}\n        {%- if message.get(\"content\") -%}\n            {%- set content = parse_content(message.content) -%}\n        {%- endif -%}\n        {%- if not keep_thinking and \"</think>\" in content -%}\n            {%- set content = content.split(\"</think>\")[-1] | trim -%}\n        {%- endif -%}\n        {%- if content.endswith(_cfm_tag) -%}\n            {%- set _has_cfm = true -%}\n            {%- set _trunc_len = (content | length) - (_cfm_tag | length) -%}\n            {%- set content = content[:_trunc_len] -%}\n        {%- endif -%}\n        {{- content -}}\n        {%- if message.tool_calls -%}\n            {{- render_tool_calls(message.tool_calls) -}}\n        {%- endif -%}\n        {%- if _has_cfm -%}\n            {{- _cfm_tag -}}\n        {%- endif -%}\n        {{- \"<|im_end|>\\n\" -}}\n        {%- endgeneration -%}\n    {%- else %}\n        {%- if message.get(\"content\") -%}\n            {{- parse_content(message[\"content\"]) -}}\n        {%- endif -%}\n        {{- \"<|im_end|>\\n\" -}}\n    {%- endif %}\n{%- endfor -%}\n{%- if add_generation_prompt -%}\n    {{- \"<|im_start|>assistant\\n<think>\" -}}\n{%- endif -%}\n",
+    "eos_token": "<|im_end|>",
+    "model_card": {
+      "url": "https://huggingface.co/mlx-community/LFM2.5-2.6B-4bit/resolve/72a08228cf703cd7dc0187abf4edbbd8e935f864/README.md",
+      "sha256": "7b6d97155428fc466312294ddd20470d3e6c06adab0220dc27aa155d1f0950a1",
+      "conversion_runner": "mlx-vlm 0.6.10"
+    },
+    "observed_at": "2026-10-19",
+    "weight_bytes": 1517625850,
+    "repository_bytes": 1535593294,
+    "runtime_status": "not_run",
+    "backend": null,
+    "chat_template_source": "https://huggingface.co/mlx-community/LFM2.5-2.6B-4bit/resolve/72a08228cf703cd7dc0187abf4edbbd8e935f864/chat_template.jinja"
+  }
+}
