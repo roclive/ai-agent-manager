@@ -7,7 +7,7 @@ import { fixture } from "./helpers.js";
 import { dependenciesDone } from "../src/core/dispatch.js";
 import { backlog, progress } from "../src/views/index.js";
 import { rateLimited } from "../src/core/finalize.js";
-import { codex, opencode, command, prompt } from "../src/workers/index.js";
+import { codex, opencode, command, prompt, promptPrefix, promptPrefixHash } from "../src/workers/index.js";
 import { parseVerdict, claudeReview } from "../src/core/review.js";
 import { withLock } from "../src/core/lock.js";
 import { plist, nodePath, daemonLogPath } from "../src/launchd.js";
@@ -453,4 +453,17 @@ it("includes review feedback and a regression test requirement in worker prompts
   expect(prompt(f.repo.project("T"), { ...task, feedback: "" })).not.toContain(
     "上一轮审查意见",
   );
+});
+
+it("worker prompts of one project share a byte-identical prefix", () => {
+  f = fixture();
+  const project = f.repo.project("T");
+  const a = prompt(project, f.task({ description: "alpha", feedback: "x" }));
+  const b = prompt(project, f.task({ description: "beta" }));
+  const prefix = promptPrefix(project);
+  expect(a.startsWith(prefix)).toBe(true);
+  expect(b.startsWith(prefix)).toBe(true);
+  expect(prefix).not.toContain("alpha");
+  expect(promptPrefixHash(project)).toMatch(/^[0-9a-f]{64}$/);
+  expect(promptPrefixHash(project)).toBe(promptPrefixHash(project));
 });
