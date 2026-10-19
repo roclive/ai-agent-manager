@@ -16,7 +16,10 @@ class GuardTests(unittest.TestCase):
             if argv[0].endswith("launchctl"):
                 return "service = {\n pid = " + owner + "\n}"
             if argv[0].endswith("lsof"):
-                return owners
+                selected = set(argv[argv.index("-p") + 1].split(","))
+                return "\n".join("p" + pid + "\nn/manager/.aam/aam.db" for pid in owners.split() if pid in selected)
+            if "-axo" in argv:
+                return "\n".join(str(pid) + " " + command for pid, command in commands.items())
             return commands[int(argv[2])]
         return run
 
@@ -33,6 +36,28 @@ class GuardTests(unittest.TestCase):
                 raise module.subprocess.TimeoutExpired(argv, 5)
             return base(argv)
         self.assertEqual(module.guard("/manager/.aam", 501, inspect)["stopped_duplicate_pids"], [])
+
+    def test_lsof_never_stats_database_path_or_scans_unrelated_processes(self):
+        base = self.inspect()
+        def inspect(argv):
+            if argv[0].endswith("lsof"):
+                self.assertNotIn("/manager/.aam/aam.db", argv)
+                self.assertEqual(argv[argv.index("-p") + 1], "100,200")
+                self.assertIn("-Fpn", argv)
+            return base(argv)
+        stopped = []
+        module.guard("/manager/.aam", 501, inspect, stopped.append)
+        self.assertEqual(stopped, [200])
+
+    def test_descriptor_names_must_match_database_exactly(self):
+        base = self.inspect()
+        def inspect(argv):
+            if argv[0].endswith("lsof"):
+                return "p100\nn/manager/.aam/aam.db\np200\nn/manager/.aam/aam.db-wal"
+            return base(argv)
+        stopped = []
+        module.guard("/manager/.aam", 501, inspect, stopped.append)
+        self.assertEqual(stopped, [])
 
     def test_keeps_unrelated_daemon_without_this_database(self):
         stopped = []

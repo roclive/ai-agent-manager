@@ -39,7 +39,25 @@ def guard(home, uid, inspect=run, stop=lambda pid: os.kill(pid, signal.SIGTERM))
         return int(ids.pop())
 
     def owners():
-        return {int(pid) for pid in inspect(["/usr/sbin/lsof", "-nP", "-t", database]).split()}
+        # File-name selection asks lsof to stat a protected Desktop path under
+        # launchd, which can block on macOS privacy checks. Inspect only actual
+        # scheduler processes, then match their already-open descriptor names.
+        candidates = set()
+        for line in inspect(["/bin/ps", "-axo", "pid=,command="]).splitlines():
+            fields = line.strip().split(None, 1)
+            if len(fields) == 2 and fields[0].isdigit() and daemon_command(fields[1]):
+                candidates.add(int(fields[0]))
+        if not candidates:
+            return set()
+        output = inspect(["/usr/sbin/lsof", "-nP", "-a", "-p",
+                          ",".join(str(pid) for pid in sorted(candidates)), "-Fpn"])
+        found, pid = set(), None
+        for line in output.splitlines():
+            if line.startswith("p"):
+                pid = int(line[1:]) if line[1:].isdigit() else None
+            elif line == "n" + database and pid in candidates:
+                found.add(pid)
+        return found
 
     def command(pid):
         return inspect(["/bin/ps", "-p", str(pid), "-o", "command="]).strip()
