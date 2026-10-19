@@ -9,6 +9,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 STATE=${OMLX_STATE_DIR:-$HOME/.omlx/aam}
 PIDFILE=$STATE/omlx.pid
 LOG=$STATE/omlx.log
+ACTIVE_RUN_FILE=${OMLX_ACTIVE_RUN_FILE:-$STATE/local-run.active}
 DRY=0
 while [ $# -gt 0 ]; do
   case $1 in
@@ -72,12 +73,13 @@ set -m
 PID=$!
 echo "$PID" >"$PIDFILE"
 
-# Idle watchdog: stop the server (unloading the model) when the log is quiet for OMLX_IDLE_MINUTES.
+# Idle watchdog: log quietness alone is insufficient—a long request may produce no log output.
+# Only unload after the timeout when AAM has no active local-model run/request marker.
 (
   while kill -0 "$PID" 2>/dev/null; do
     sleep 60
     NOW=$(date +%s); M=$(stat -f %m "$LOG" 2>/dev/null || echo "$NOW")
-    if [ $((NOW - M)) -ge $((OMLX_IDLE_MINUTES * 60)) ]; then
+    if [ ! -f "$ACTIVE_RUN_FILE" ] && [ $((NOW - M)) -ge $((OMLX_IDLE_MINUTES * 60)) ]; then
       OMLX_STATE_DIR=$STATE "$ROOT/scripts/omlx-stop.sh" >/dev/null 2>&1
       break
     fi

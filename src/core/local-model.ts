@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -101,19 +101,47 @@ export function localLlmHealth(repo: Repo) {
 // code/test failures do not make the next attempt run with a weaker profile.
 const RESOURCE_FAILURE = /out of memory|\boom\b|memory pressure|swap|thrash|killed|jetsam|memory guard/i;
 
+export function localFallbackResourceFailure(
+  provider: string | null,
+  status: string,
+  summary: string,
+) {
+  return (
+    provider === FALLBACK_PROVIDER &&
+    (["timeout", "lost"].includes(status) ||
+      (status === "failed" && RESOURCE_FAILURE.test(summary)))
+  );
+}
+
 function previousLocalFailures(repo: Repo, taskId: number) {
   return repo
     .runs(taskId)
     .filter(
       (run) =>
-        run.provider === FALLBACK_PROVIDER &&
-        (["timeout", "lost"].includes(run.status) ||
-          (run.status === "failed" && RESOURCE_FAILURE.test(run.summary || ""))),
+        localFallbackResourceFailure(
+          run.provider,
+          run.status,
+          run.summary || "",
+        ),
     ).length;
 }
 
 export function localLlmProfile(repo: Repo, taskId: number): LocalLlmProfile {
   return Math.min(previousLocalFailures(repo, taskId), 3) as LocalLlmProfile;
+}
+
+/** A resource failure must reach profile 3 even when the task's normal attempt budget is 3. */
+export function localFallbackNeedsFinalProfile(
+  repo: Repo,
+  taskId: number,
+  provider: string | null,
+  status: string,
+  summary: string,
+) {
+  return (
+    localFallbackResourceFailure(provider, status, summary) &&
+    localLlmProfile(repo, taskId) < 3
+  );
 }
 
 const PROFILE_LABEL = [
@@ -176,6 +204,7 @@ export function startLocalLlm(repo: Repo, taskId: number) {
       ...process.env,
       ...command.env,
       OMLX_IDLE_MINUTES: repo.getSetting("local_llm_idle_timeout_min") || "10",
+      OMLX_ACTIVE_RUN_FILE: resolve(repo.home, "local-model.active"),
     });
     if (result.status === 0 && waitHealthy(repo))
       return record(Math.max(required, attempt) as LocalLlmProfile, "started");
@@ -185,6 +214,29 @@ export function startLocalLlm(repo: Repo, taskId: number) {
   stopOmlx();
   repo.setSetting("local_llm_active_profile", "");
   throw new Error(`omlx start failed at every profile: ${failure}`);
+}
+
+export function markLocalModelActive(repo: Repo, taskId: number) {
+  writeFileSync(resolve(repo.home, "local-model.active"), `${taskId}\n`);
+}
+
+function clearLocalModelActive(repo: Repo) {
+  rmSync(resolve(repo.home, "local-model.active"), { force: true });
+}
+
+/** Record the profile that completed the model task, rather than merely starting the server. */
+export function recordLocalModelSuccess(repo: Repo, taskId: number) {
+  const required = localLlmProfile(repo, taskId);
+  const active =
+    localLlmServer(repo) === "omlx"
+      ? Number(repo.getSetting("local_llm_active_profile"))
+      : 0;
+  const succeeded = Math.max(required, Number.isFinite(active) ? active : 0) as LocalLlmProfile;
+  repo.event(
+    "local_llm_success",
+    `local model task completed at profile ${succeeded} (${PROFILE_LABEL[succeeded]})`,
+    taskId,
+  );
 }
 
 export function isLocalModel(model: string) {
@@ -309,5 +361,6 @@ export function stopLocalModelIfIdle(repo: Repo) {
 }
 
 export function stopLocalModelAfterTask(repo: Repo) {
+  clearLocalModelActive(repo);
   if (repo.getSetting("keep_warm") !== "1") stopLocalModelIfIdle(repo);
 }

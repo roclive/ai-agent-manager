@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { fixture } from "./helpers.js";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { dispatch } from "../src/core/dispatch.js";
+import { finalize } from "../src/core/finalize.js";
+import { waitExit } from "./helpers.js";
 import { opencode } from "../src/workers/index.js";
 import {
   localLlmHealth,
@@ -163,6 +165,23 @@ it("only resource failures escalate the profile, not ordinary code failures", ()
   expect(localLlmProfile(f.repo, task.id)).toBe(3);
 });
 
+it("allows all four resource fallback profiles despite max_attempts=3", async () => {
+  f = fixture("echo 'Out of memory while running model' >&2\nexit 7");
+  enableOmlx();
+  const task = f.task({ max_attempts: 3 });
+  const profiles: number[] = [];
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const runId = dispatch(f.repo, task.identifier, true);
+    profiles.push(Number(f.repo.getSetting("local_llm_active_profile")));
+    await waitExit(f.repo, runId);
+    finalize(f.repo, f.repo.runs(task.id).find((r) => r.id === runId)!);
+    stopLocalModelAfterTask(f.repo);
+    expect(f.repo.task(task.id).status).toBe(attempt < 3 ? "ready" : "blocked");
+  }
+  expect(profiles).toEqual([0, 1, 2, 3]);
+  expect(f.repo.task(task.id).attempts).toBe(4);
+});
+
 it("dispatch starts omlx only after the single-run guard and passes URL + context argv", () => {
   f = fixture("sleep 1");
   enableOmlx();
@@ -172,6 +191,7 @@ it("dispatch starts omlx only after the single-run guard and passes URL + contex
   expect(runs).toHaveLength(0);
   f.repo.db.prepare("UPDATE runs SET status='done'").run();
   dispatch(f.repo, t.identifier, true);
+  expect(existsSync(resolve(f.repo.home, "local-model.active"))).toBe(true);
   expect(starts()).toHaveLength(1);
   const cmd = opencode.command({
     worktree: "/w",
@@ -185,6 +205,19 @@ it("dispatch starts omlx only after the single-run guard and passes URL + contex
     localContext: 8192,
   } as any);
   expect(cmd.args.slice(-2)).toEqual(["http://127.0.0.1:8000/v1", "8192"]);
+});
+
+it("records the fallback level that successfully completed the model task", async () => {
+  f = fixture();
+  enableOmlx();
+  const task = f.task();
+  failRun(task.id, "failed", "Out of memory");
+  failRun(task.id, "timeout", "");
+  const runId = dispatch(f.repo, task.identifier, true);
+  await waitExit(f.repo, runId);
+  finalize(f.repo, f.repo.runs(task.id).find((r) => r.id === runId)!);
+  const event: any = f.repo.events(100).find((e: any) => e.kind === "local_llm_success");
+  expect(event?.message).toContain("profile 2 (8192 context)");
 });
 
 it("all-profile start failure fails the run and releases the single-run lock", () => {
@@ -215,8 +248,10 @@ it("stops omlx after a task unless keep_warm is set", () => {
   f = fixture();
   f.repo.setSetting("local_llm_server", "omlx");
   f.repo.setSetting("keep_warm", "1");
+  writeFileSync(resolve(f.repo.home, "local-model.active"), "123\n");
   stopLocalModelAfterTask(f.repo);
   expect(runs).toHaveLength(0);
+  expect(existsSync(resolve(f.repo.home, "local-model.active"))).toBe(false);
   f.repo.setSetting("keep_warm", "0");
   stopLocalModelAfterTask(f.repo);
   expect(runs).toHaveLength(1);

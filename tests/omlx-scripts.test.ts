@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { expect, it } from "vitest";
@@ -32,6 +32,12 @@ it("real start refuses when weights are missing", () => {
   const r = spawnSync(start, [], { env: env(false), encoding: "utf8" });
   expect(r.status).toBe(1);
   expect(r.stderr).toContain("never downloads");
+});
+
+it("idle watchdog requires absence of an active local run", () => {
+  const source = readFileSync(start, "utf8");
+  expect(source).toContain('ACTIVE_RUN_FILE=${OMLX_ACTIVE_RUN_FILE:-$STATE/local-run.active}');
+  expect(source).toMatch(/\[ ! -f "\$ACTIVE_RUN_FILE" \].*OMLX_IDLE_MINUTES/);
 });
 
 it("stop is idempotent without pid file", () => {

@@ -24,6 +24,7 @@ import {
   startLocalLlm,
   stopLocalModelAfterTask,
   localLlmBaseUrl,
+  markLocalModelActive,
 } from "./local-model.js";
 
 import { resolveExecutor, selectExecutor } from "./executors.js";
@@ -199,6 +200,7 @@ export function dispatch(repo: Repo, id: string, force = false) {
       promptPrefixHash(repo.project(t.project_id)),
       t.id,
     );
+    if (fallback) markLocalModelActive(repo, t.id);
     const localProfile = fallback ? startLocalLlm(repo, t.id) : 0;
     const pid = spawnWorker(worker, {
       worktree,
