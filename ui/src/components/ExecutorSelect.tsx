@@ -1,7 +1,9 @@
+import { useEffect, useState } from "react";
 import { useExecutors } from "../lib/queries";
 import { NativeSelect } from "./ui/select";
 import type { EffectiveExecutor, ExecutorInfo } from "../lib/types";
 import { WorkerEffortSelect } from "./WorkerEffortSelect";
+import { normalizeExecutor } from "../lib/executor";
 
 export const sourceText = { task: "任务", project: "项目", global: "全局" };
 
@@ -26,7 +28,7 @@ export function ExecutorOptions({
             key={e.id}
             value={e.id}
             disabled={!e.installed}
-            title={e.installed ? undefined : e.install_hint}
+            title={e.installed ? (e.model ? `模型 ${e.model}` : undefined) : e.install_hint}
           >
             {e.label}
             {!e.installed
@@ -55,13 +57,19 @@ export function ExecutorSelect({
   inheritLabel?: string;
 }) {
   const q = useExecutors();
+  // Keep persisted pre-variant values visibly selected. Without this, a legacy
+  // `codex` override is rendered as the first (inherit) option and an unrelated
+  // form save silently clears the override.
+  const normalizedValue = normalizeExecutor(value);
+  const [formValue, setFormValue] = useState(normalizedValue);
+  useEffect(() => setFormValue(normalizedValue), [normalizedValue]);
+  const selectedValue = onChange ? normalizedValue : formValue;
   return (
     <NativeSelect
       aria-label={label}
       name={name}
-      {...(onChange
-        ? { value, onChange: (e) => onChange(e.target.value) }
-        : { defaultValue: value })}
+      value={selectedValue}
+      onChange={(e) => onChange ? onChange(e.target.value) : setFormValue(e.target.value)}
     >
       <ExecutorOptions executors={q.data?.executors ?? []} inheritLabel={inheritLabel} />
     </NativeSelect>
@@ -99,7 +107,10 @@ export function ExecutorFilter({
 }
 
 export function ExecutorBadge({ effective }: { effective?: EffectiveExecutor }) {
+  const q = useExecutors();
   if (!effective) return null;
+  const name =
+    q.data?.executors?.find((e) => e.id === effective.value)?.label ?? effective.value;
   return (
     <span
       className="executor-badge"
@@ -107,7 +118,7 @@ export function ExecutorBadge({ effective }: { effective?: EffectiveExecutor }) 
       title={`执行器 ${effective.value}（来源：${sourceText[effective.source]}）`}
       style={{ fontSize: 11, borderRadius: 4, padding: "0 6px", border: "1px solid currentColor", whiteSpace: "nowrap" }}
     >
-      {effective.value} · {sourceText[effective.source]}
+      {name} · {sourceText[effective.source]}
     </span>
   );
 }

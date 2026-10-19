@@ -16,6 +16,8 @@ export type {
 export interface ProviderSelection extends ProviderRule {
   amount: number;
   reason?: string;
+  // CLI model the selected executor variant must launch with (e.g. codex-luna).
+  model?: string;
 }
 type ProviderWork = Pick<Task, "role" | "complexity" | "worker">;
 

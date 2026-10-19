@@ -10,9 +10,11 @@ const view = {
   executor_fallback: [],
   reviewer: "codex",
   executors: [
-    { id: "codex", label: "Codex", installed: true, install_hint: "npm i -g @openai/codex", cooldown_until: new Date(Date.now() + 600000).toISOString(), effort_supported: true },
-    { id: "claude", label: "Claude (sonnet)", installed: true, install_hint: "", cooldown_until: null, effort_supported: true },
-    { id: "hermes", label: "Hermes Agent (Nous)", installed: false, install_hint: "curl install.sh | bash", cooldown_until: null, effort_supported: false },
+    { id: "codex-sol", label: "Codex (Sol)", installed: true, install_hint: "npm i -g @openai/codex", effort_supported: true, cooldown_until: new Date(Date.now() + 600000).toISOString(), model: "gpt-5.6-sol" },
+    { id: "claude", label: "Claude (Sonnet)", installed: true, install_hint: "", effort_supported: true, cooldown_until: null },
+    { id: "claude-opus", label: "Claude (Opus)", installed: true, install_hint: "", effort_supported: true, cooldown_until: null, model: "opus" },
+    { id: "codex-luna", label: "Codex (Luna)", installed: true, install_hint: "", effort_supported: true, cooldown_until: null, model: "gpt-5.6-luna" },
+    { id: "hermes", label: "Hermes Agent (Nous)", installed: false, install_hint: "curl install.sh | bash", effort_supported: true, cooldown_until: null },
   ],
 };
 function wrap(ui: React.ReactElement) {
@@ -60,9 +62,9 @@ it("lists executors, disables uninstalled ones with hint, and reports changes", 
   const hermes = screen.getByRole("option", { name: /Hermes.*not installed/ }) as HTMLOptionElement;
   expect(hermes.disabled).toBe(true);
   expect(hermes.textContent).toContain("curl install.sh");
-  expect(screen.getByText("Codex 冷却中")).toBeInTheDocument();
-  fireEvent.change(select, { target: { value: "codex" } });
-  expect(onChange).toHaveBeenCalledWith("codex");
+  expect(screen.getByText("Codex (Sol) 冷却中")).toBeInTheDocument();
+  fireEvent.change(select, { target: { value: "codex-sol" } });
+  expect(onChange).toHaveBeenCalledWith("codex-sol");
 });
 
 it("offers an inherit option and shows effective executor with source", async () => {
@@ -73,7 +75,7 @@ it("offers an inherit option and shows effective executor with source", async ()
     </>,
   );
   await screen.findByRole("option", { name: "继承" });
-  expect(screen.getByText("claude · 项目")).toHaveAttribute("data-source", "project");
+  expect(await screen.findByText("Claude (Sonnet) · 项目")).toHaveAttribute("data-source", "project");
 });
 
 import { effectiveExecutor } from "./lib/executor";
@@ -91,7 +93,7 @@ it("resolves effective executor as task > project > global, ignoring legacy work
   expect(effectiveExecutor(t({}), projects, g)).toEqual({ value: "hermes", source: "project" });
   expect(effectiveExecutor(t({ project_id: 2 }), projects, g)).toEqual({ value: "claude", source: "global" });
   expect(effectiveExecutor(t({ project_id: 2 }), projects, { coding_executor: "" })).toEqual({ value: "auto", source: "global" });
-  const server = { value: "codex", source: "global" as const };
+  const server = { value: "codex-sol", source: "global" as const };
   expect(effectiveExecutor(t({ project_id: 2, effective_executor: server }), undefined, undefined)).toBe(server);
 });
 
@@ -115,7 +117,7 @@ it("backlog filter options follow API, labels/filter use effective executor and 
   );
   await screen.findByRole("option", { name: "pi" });
   expect(screen.getByRole("option", { name: "Hermes Agent (Nous)" })).toBeInTheDocument();
-  await waitFor(() => expect(screen.getByTestId("executor-AAM-1")).toHaveTextContent("claude · 全局"));
+  await waitFor(() => expect(screen.getByTestId("executor-AAM-1")).toHaveTextContent("Claude (Sonnet) · 全局"));
   expect(screen.getByTestId("executor-AAM-2")).toHaveTextContent("pi · 任务");
   fireEvent.change(screen.getByLabelText("筛选执行器"), { target: { value: "pi" } });
   expect(screen.queryByTestId("executor-AAM-1")).toBeNull();
@@ -160,11 +162,21 @@ it("kanban pending cards use effective executor, keep historical worker on activ
       <MemoryRouter><BoardPage project="" /></MemoryRouter>
     </QueryClientProvider>,
   );
-  await waitFor(() => expect(screen.getByTestId("card-executor-AAM-1")).toHaveTextContent("claude · 全局"));
-  expect(screen.getByTestId("card-executor-AAM-2")).toHaveTextContent("hermes · 任务");
+  await waitFor(() => expect(screen.getByTestId("card-executor-AAM-1")).toHaveTextContent("Claude (Sonnet) · 全局"));
+  expect(screen.getByTestId("card-executor-AAM-2")).toHaveTextContent("Hermes Agent (Nous) · 任务");
   expect(screen.queryByTestId("card-executor-AAM-3")).toBeNull();
   expect(screen.getAllByText("OLDWORKER").length).toBe(1);
   current = { ...current, coding_executor: "opencode" };
   listener?.();
   await waitFor(() => expect(screen.getByTestId("card-executor-AAM-1")).toHaveTextContent("opencode · 全局"));
+});
+
+it("shows model variants and maps legacy codex to Codex (Sol)", async () => {
+  wrap(<form aria-label="settings"><ExecutorSelect label="x" inheritLabel="inherit" value="codex" name="e" /></form>);
+  await screen.findByRole("option", { name: "Claude (Opus)" });
+  expect(screen.getByRole("option", { name: "Codex (Luna)" })).toBeInTheDocument();
+  const select = screen.getByLabelText("x") as HTMLSelectElement;
+  expect(select.value).toBe("codex-sol");
+  expect(new FormData(select.form!).get("e")).toBe("codex-sol");
+  expect(effectiveExecutor({ executor: "codex", project_id: 1 } as never, [], undefined)).toEqual({ value: "codex-sol", source: "task" });
 });

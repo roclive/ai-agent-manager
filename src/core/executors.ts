@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { homedir } from "node:os";
 import type { Repo, Task } from "../db/index.js";
-import { EXECUTORS, parseFallback, type Executor } from "./executor-names.js";
+import { EXECUTORS, normalizeExecutor, parseFallback, type Executor } from "./executor-names.js";
 import { FALLBACK_PROVIDER, fallbackModel } from "./local-model.js";
 import { parseOverrides } from "./routing-overrides.js";
 import { providerCooldown, type ProviderSelection } from "./providers.js";
@@ -23,11 +23,17 @@ interface Meta {
   bin: string;
   worker: ProviderSelection["worker"];
   hint: string;
+  // Quota/cooldown account when it differs from the executor id (variants share their CLI's account).
+  provider?: string;
+  // Model passed to the CLI for this variant.
+  model?: string;
 }
 // Install hints are shown in the UI; aam never installs anything itself.
 export const EXECUTOR_META: Record<Executor, Meta> = {
-  codex: { label: "Codex", bin: "codex", worker: "codex", hint: "npm i -g @openai/codex" },
-  claude: { label: "Claude (sonnet)", bin: "claude", worker: "claude", hint: "npm i -g @anthropic-ai/claude-code" },
+  "codex-sol": { label: "Codex (Sol)", bin: "codex", worker: "codex", hint: "npm i -g @openai/codex", provider: "codex", model: "gpt-5.6-sol" },
+  "codex-luna": { label: "Codex (Luna)", bin: "codex", worker: "codex", hint: "npm i -g @openai/codex", provider: "codex", model: "gpt-5.6-luna" },
+  claude: { label: "Claude (Sonnet)", bin: "claude", worker: "claude", hint: "npm i -g @anthropic-ai/claude-code", model: "sonnet" },
+  "claude-opus": { label: "Claude (Opus)", bin: "claude", worker: "claude", hint: "npm i -g @anthropic-ai/claude-code", provider: "claude", model: "opus" },
   opencode: { label: "opencode", bin: "opencode", worker: "opencode", hint: "brew install sst/tap/opencode" },
   "opencode-local": { label: "opencode (local gemma4)", bin: "opencode", worker: "opencode", hint: "brew install sst/tap/opencode; start omlx/Ollama (docs/omlx-server.md)" },
   pi: { label: "pi", bin: "pi", worker: "pi", hint: "npm i -g @mariozechner/pi-coding-agent" },
@@ -53,7 +59,7 @@ export function executorInstalled(id: Executor) {
 
 // The cooldown/quota/provider id an executor is accounted to.
 export function executorProvider(id: Executor) {
-  return id === "opencode-local" ? FALLBACK_PROVIDER : id;
+  return id === "opencode-local" ? FALLBACK_PROVIDER : EXECUTOR_META[id].provider ?? id;
 }
 
 // task > project > global > auto. Empty string means "inherit".
@@ -62,15 +68,15 @@ export function resolveExecutor(
   task: Pick<Task, "executor" | "project_id">,
 ): EffectiveExecutor {
   if (task.executor)
-    return { value: task.executor as EffectiveExecutor["value"], source: "task" };
+    return { value: normalizeExecutor(task.executor) as EffectiveExecutor["value"], source: "task" };
   const project = repo.project(task.project_id);
   if (project.coding_executor)
     return {
-      value: project.coding_executor as EffectiveExecutor["value"],
+      value: normalizeExecutor(project.coding_executor) as EffectiveExecutor["value"],
       source: "project",
     };
   return {
-    value: (repo.getSetting("coding_executor") || "auto") as EffectiveExecutor["value"],
+    value: normalizeExecutor(repo.getSetting("coding_executor") || "auto") as EffectiveExecutor["value"],
     source: "global",
   };
 }
@@ -86,6 +92,9 @@ function selection(repo: Repo, id: Executor, reason: string): ProviderSelection 
     reserve_remaining: 0,
     reservation: { low: 0, medium: 0, high: 0 },
     amount: 0,
+    ...(EXECUTOR_META[id].model && id !== "opencode-local"
+      ? { model: EXECUTOR_META[id].model }
+      : {}),
     reason: id === "opencode-local" ? `${reason}; model ${fallbackModel(repo)}` : reason,
   };
 }
@@ -127,7 +136,9 @@ export function selectExecutor(
 
 export function executorsView(repo: Repo) {
   return {
-    coding_executor: repo.getSetting("coding_executor") || "auto",
+    coding_executor: normalizeExecutor(repo.getSetting("coding_executor") || "auto"),
+    model_note:
+      "AAM's persisted executor selection (task > project > global) sets the CLI model; the Codex desktop app's model picker is not consulted.",
     worker_effort: workerEffort(repo),
     effort_choices: WORKER_EFFORTS,
     executor_fallback: parseFallback(repo.getSetting("executor_fallback")),
@@ -135,6 +146,8 @@ export function executorsView(repo: Repo) {
     executors: EXECUTORS.map((id) => ({
       id,
       label: EXECUTOR_META[id].label,
+      model: EXECUTOR_META[id].model ?? null,
+      provider: executorProvider(id),
       installed: executorInstalled(id),
       install_hint: EXECUTOR_META[id].hint,
       cooldown_until: providerCooldown(repo, executorProvider(id)),

@@ -200,6 +200,8 @@ export interface ExecutorInfo {
   install_hint: string;
   cooldown_until: string | null;
   effort_supported?: boolean;
+  model?: string | null;
+  provider?: string;
 }
 export interface ExecutorsView {
   coding_executor: string;
@@ -207,5 +209,6 @@ export interface ExecutorsView {
   effort_choices: string[];
   executor_fallback: string[];
   reviewer: string;
+  model_note?: string;
   executors: ExecutorInfo[];
 }

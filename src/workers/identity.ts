@@ -74,7 +74,7 @@ export function detectIdentity(
   const model = opts.model || (i >= 0 ? args[i + 1] : "") || "default";
   if (worker === "codex") return makeIdentity("codex", model);
   if (worker === "opencode") return makeIdentity("opencode", model);
-  if (worker === "claude") return makeIdentity("claude", "sonnet");
+  if (worker === "claude") return makeIdentity("claude", opts.model || "sonnet");
   if (worker === "pi" || worker === "hermes")
     return makeIdentity(worker, opts.model ?? "");
   return { kind: "other", model: "", label: worker };

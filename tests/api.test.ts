@@ -262,5 +262,31 @@ it("exposes executor settings, validates them and reports the effective executor
   expect((await (await req(`tasks/${t.identifier}`)).json()).effective_executor).toEqual({ value: "pi", source: "project" });
   await req(`tasks/${t.identifier}`, "PATCH", { executor: "codex" });
   const list = await (await req("tasks")).json();
-  expect(list[0].effective_executor).toEqual({ value: "codex", source: "task" });
+  expect(list[0].effective_executor).toEqual({ value: "codex-sol", source: "task" });
+});
+
+it("round-trips every model variant through global, project and task APIs", async () => {
+  f = fixture();
+  const app = createApp(f.repo);
+  const req = (path: string, method = "GET", body?: unknown) =>
+    app.request(`/api/${path}`, {
+      method,
+      headers: { "Content-Type": "application/json", "X-AAM": "1" },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  const task = f.task();
+  for (const executor of ["codex-sol", "codex-luna", "claude-opus"]) {
+    const global = await req("executors", "PUT", { coding_executor: executor });
+    expect(global.status).toBe(200);
+    expect((await global.json()).coding_executor).toBe(executor);
+    expect((await (await req("executors")).json()).coding_executor).toBe(executor);
+
+    await req("projects/T", "PATCH", { coding_executor: executor });
+    expect((await (await req("projects")).json())[0].coding_executor).toBe(executor);
+
+    await req(`tasks/${task.identifier}`, "PATCH", { executor });
+    const persisted = await (await req(`tasks/${task.identifier}`)).json();
+    expect(persisted.executor).toBe(executor);
+    expect(persisted.effective_executor).toEqual({ value: executor, source: "task" });
+  }
 });

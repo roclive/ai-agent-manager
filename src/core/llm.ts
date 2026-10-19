@@ -32,18 +32,18 @@ export function llmArgs(
     : [];
 }
 
-export function primaryCodexArgs(repo: Repo): string[] {
-  return [
-    "--ignore-user-config",
-    ...(repo.getSetting("primary_model")
-      ? ["--model", repo.getSetting("primary_model")!]
-      : []),
-  ];
+export function primaryCodexArgs(repo: Repo, model?: string): string[] {
+  const chosen = model || repo.getSetting("primary_model");
+  return ["--ignore-user-config", ...(chosen ? ["--model", chosen] : [])];
 }
 
-export function providerLlmArgs(repo: Repo, provider: string): string[] {
+export function providerLlmArgs(
+  repo: Repo,
+  provider: string,
+  model?: string,
+): string[] {
   if (provider === "ollama") return llmArgs(repo, "ollama");
-  return provider === "codex" ? primaryCodexArgs(repo) : [];
+  return provider === "codex" ? primaryCodexArgs(repo, model) : [];
 }
 
 export function recordBackend(

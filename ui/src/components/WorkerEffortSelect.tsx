@@ -21,7 +21,7 @@ export function WorkerEffortSelect({
 }) {
   const q = useExecutors();
   const selected = executor ?? q.data?.coding_executor ?? "auto";
-  const meta = q.data?.executors.find((item) => item.id === selected);
+  const meta = q.data?.executors?.find((item) => item.id === selected);
   const unavailable = selected !== "auto" && meta?.effort_supported !== true;
   const help = unavailable
     ? `${meta?.label ?? selected} 不支持思考强度；运行时不会传递参数。`
