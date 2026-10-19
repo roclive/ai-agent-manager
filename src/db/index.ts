@@ -183,6 +183,7 @@ export class Repo {
       reviewer_fast_mode: this.getSetting("claude_fast_mode") || "1",
       default_worker: "codex",
       coding_executor: "auto",
+      manager_backend: "rules",
       executor_fallback: "",
       review_mode: "manual",
       cooldown_until: "",
@@ -389,6 +390,8 @@ export class Repo {
       (key === "reviewer" && !validReviewer(value)) ||
       (key === "default_worker" && !["codex", "opencode"].includes(value)) ||
       (key === "review_mode" && !["manual", "claude"].includes(value)) ||
+      (key === "manager_backend" &&
+        !["rules", "claude", "codex", "local-small"].includes(value)) ||
       (key === "cooldown_until" &&
         value !== "" &&
         !Number.isFinite(Date.parse(value)))

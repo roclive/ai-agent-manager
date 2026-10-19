@@ -24,6 +24,7 @@ describe("repository", () => {
       max_parallel: "2",
       worker_timeout_min: "45",
       default_worker: "codex",
+      manager_backend: "rules",
       review_mode: "manual",
       cooldown_until: "",
     });

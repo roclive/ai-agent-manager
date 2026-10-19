@@ -144,3 +144,11 @@ Codex Luna mapping now uses gpt-6-luna for both worker and reviewer. Executor se
 
 - Follow-up: automatic jobs snapshot the actual command provider/model at launch; the board displays this identity and the stored pending/running status. Legacy jobs without a snapshot show only their recorded provider rather than guessing from current reviewer settings.
 - This worktree predates AAM-69. No worker/reviewer model defaults or global routing were changed here. Integration must retain AAM-69’s shared model-defaults.ts and migration and run the combined regressions before deployment. No deployment is performed by this worker.
+
+## AAM-49 manager backend
+
+- `ManagerBackend.decide(candidates, context)` separates manager task/worker decisions from dispatch. Rules retains database priority/sequence ordering and existing executor, fallback and provider routing. Dispatch still reserves provider capacity in an immediate transaction.
+- `manager_backend` defaults to `rules`. `claude`, `codex`, and `local-small` are extension slots using rules until model adapters are implemented; selecting them does not call a model. This task specifies only the RulesBackend implementation.
+- Regression coverage includes unavailable routing continuing to other tasks and resolution eligibility changing after a dispatch. The supplied previous review contained passing logs without individual findings.
+
+- Validation: core 247/247 passed with `npm test -- --maxWorkers=1 --testTimeout=60000`; core typecheck passed. UI 45/45 passed with `npm test -- --maxWorkers=1`; UI typecheck passed. Default parallel runs hit subprocess/UI wait timeouts under concurrent machine load; the single-worker default-timeout run passed 246/247 with one 15.8-second test exceeding 15 seconds. No assertions or repository timeout settings were changed.

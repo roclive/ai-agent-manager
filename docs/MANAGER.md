@@ -148,3 +148,14 @@ and the task stays `in_review`. Retries use bounded backoff: 1 min after the fir
 review stops, a `review_stalled` event is raised (at most hourly) and the task id appears in
 `/api/status` `autopilot.stalled_reviews`. Recover with `aam review <ID> approve|reject`, or change the
 task state (e.g. move to ready and back) — any task update resets the count.
+
+## Manager backend extraction (AAM-49)
+
+`manager_backend` defaults to `rules`. Dispatch now calls `ManagerBackend.decide`
+through `choose()`; the executor/provider policy described in this historical audit
+lives in `RulesBackend` in `src/core/manager-backend.ts`. Tick supplies eligible
+candidates in database priority/sequence order and rechecks eligibility after each
+launch. Routing failures leave candidates ready and allow other tasks to proceed.
+Provider reservation still rechecks selection in an immediate transaction.
+The `claude`, `codex`, and `local-small` names currently delegate to rules as
+extension slots; no model decision adapter is implemented by AAM-49.
