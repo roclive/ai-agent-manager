@@ -10,18 +10,26 @@ const META: Record<Reviewer, { label: string; provider: string; model?: string }
   gw: { label: "Gateway reviewer", provider: "gw" },
 };
 
-export function reviewerMeta(value: string) {
-  return META[normalizeReviewer(value) as Reviewer];
+export function reviewerMeta(value: string | undefined) {
+  return META[normalizeReviewer(value) as Reviewer]!;
 }
 
+export const reviewerHealthSetting = (repo: Repo, key: string) =>
+  repo.getSetting(`reviewer_${key}`) ||
+  (normalizeReviewer(repo.getSetting("reviewer")).startsWith("claude") &&
+  !(repo.getSetting("ollama_fallback_enabled") === "1" &&
+    repo.getSetting("llm_backend") === "ollama")
+    ? repo.getSetting(`claude_${key}`)
+    : "") ||
+  "";
+
 export function reviewersView(repo: Repo) {
-  const health = (key: string) => repo.getSetting(`reviewer_${key}`) || "";
-  const ok = health("ok");
+  const ok = reviewerHealthSetting(repo, "ok");
   return {
     reviewer: normalizeReviewer(repo.getSetting("reviewer") || "codex-sol"),
     reviewer_ok: ok === "" ? null : ok === "1",
-    reviewer_checked_at: health("checked_at") || null,
-    reviewer_error: health("error"),
+    reviewer_checked_at: reviewerHealthSetting(repo, "checked_at") || null,
+    reviewer_error: reviewerHealthSetting(repo, "error"),
     reviewers: REVIEWERS.map((id) => ({
       id,
       ...META[id],
