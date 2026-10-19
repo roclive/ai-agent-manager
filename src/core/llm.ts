@@ -47,9 +47,11 @@ export function recordBackend(repo: Repo, dir: string, provider?: string) {
       backend,
       provider: provider || (backend === "ollama" ? "ollama" : "codex"),
       model:
-        backend === "ollama"
-          ? repo.getSetting("ollama_model")
-          : "configured default",
+        provider === "gw"
+          ? repo.getSetting("gw_model")
+          : backend === "ollama"
+            ? repo.getSetting("ollama_model")
+            : "configured default",
     }),
   );
 }

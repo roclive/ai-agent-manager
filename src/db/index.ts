@@ -171,6 +171,10 @@ export class Repo {
       keep_awake_pid: "",
       idle_since: "",
       reviewer: "codex",
+      gw_base_url: "http://127.0.0.1:4000/v1",
+      gw_model: "",
+      gw_min_confidence: "0.8",
+      gw_context_bytes: "24000",
       codex_worker_sandbox: "workspace-write",
       codex_reviewer_sandbox: "read-only",
       ollama_fallback_enabled: "0",
@@ -227,6 +231,43 @@ export class Repo {
       throw new Error("Expected 0 or 1");
     if (key === "llm_backend" && !["primary", "ollama"].includes(value))
       throw new Error("Invalid LLM backend");
+    if (key === "gw_base_url") {
+      const url = new URL(value);
+      if (
+        !["http:", "https:"].includes(url.protocol) ||
+        url.username ||
+        url.password
+      )
+        throw new Error("Invalid GW URL");
+    }
+    if (
+      key === "gw_model" &&
+      (value.length > 200 || /[\s\x00-\x1f]/.test(value))
+    )
+      throw new Error("Invalid GW model");
+    if (
+      key === "gw_min_confidence" &&
+      !(Number(value) >= 0.5 && Number(value) <= 1)
+    )
+      throw new Error("Expected number from 0.5 to 1");
+    if (
+      key === "gw_context_bytes" &&
+      !(
+        Number.isInteger(Number(value)) &&
+        Number(value) >= 2000 &&
+        Number(value) <= 200000
+      )
+    )
+      throw new Error("Expected integer from 2000 to 200000");
+    if (
+      ["gw_base_url", "gw_model"].includes(key) &&
+      this.getSetting(key) !== value
+    )
+      this.db
+        .prepare(
+          "UPDATE settings SET value='' WHERE key IN ('reviewer_ok','reviewer_checked_at','reviewer_error')",
+        )
+        .run();
     if (key === "provider_policy" && value) {
       parseProviderPolicy(value);
     }
@@ -272,7 +313,7 @@ export class Repo {
     )
       throw new Error("Expected positive number");
     if (
-      (key === "reviewer" && !["codex", "claude"].includes(value)) ||
+      (key === "reviewer" && !["codex", "claude", "gw"].includes(value)) ||
       (key === "default_worker" && !["codex", "opencode"].includes(value)) ||
       (key === "review_mode" && !["manual", "claude"].includes(value)) ||
       (key === "cooldown_until" &&
