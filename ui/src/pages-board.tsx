@@ -2,7 +2,14 @@ import { TaskDrawer } from "./components/TaskDrawer";
 import { useState, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Search, Plus } from "lucide-react";
-import { useTasks, useRuns, useEventStream, useProjects } from "./lib/queries";
+import {
+  useTasks,
+  useRuns,
+  useEventStream,
+  useProjects,
+  useExecutors,
+} from "./lib/queries";
+import { effectiveExecutor } from "./lib/executor";
 import { api } from "./lib/api";
 import { applyDrop } from "./lib/board";
 import type { Task, TaskStatus } from "./lib/types";
@@ -11,13 +18,17 @@ import { NewTaskDialog } from "./components/NewTaskDialog";
 import { Button } from "./components/ui/button";
 import { Skeleton } from "./components/ui/skeleton";
 import { Input } from "./components/ui/input";
-import { GlobalExecutorSwitch } from "./components/ExecutorSelect";
+import {
+  ExecutorFilter,
+  GlobalExecutorSwitch,
+} from "./components/ExecutorSelect";
 import { NativeSelect } from "./components/ui/select";
 export function BoardPage({ project }: { project: string }) {
   const live = useEventStream();
   const tasks = useTasks(live),
     runs = useRuns(live),
-    projects = useProjects();
+    projects = useProjects(),
+    executors = useExecutors();
   const client = useQueryClient();
   const [search, setSearch] = useState(""),
     [worker, setWorker] = useState(""),
@@ -58,7 +69,8 @@ export function BoardPage({ project }: { project: string }) {
   const filtered = (tasks.data ?? []).filter(
     (t) =>
       (!project || t.project_id === projectId) &&
-      (!worker || t.worker === worker) &&
+      (!worker ||
+        effectiveExecutor(t, projects.data, executors.data)?.value === worker) &&
       (!priority || t.priority === priority) &&
       `${t.identifier} ${t.title} ${t.description}`
         .toLowerCase()
@@ -94,15 +106,7 @@ export function BoardPage({ project }: { project: string }) {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <NativeSelect
-          aria-label="筛选执行器"
-          value={worker}
-          onChange={(e) => setWorker(e.target.value)}
-        >
-          <option value="">全部执行器</option>
-          <option>codex</option>
-          <option>opencode</option>
-        </NativeSelect>
+        <ExecutorFilter value={worker} onChange={setWorker} />
         <NativeSelect
           aria-label="筛选优先级"
           value={priority}

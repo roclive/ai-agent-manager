@@ -3,7 +3,9 @@ import { ProjectChip } from "../components/ProjectChip";
 import { priorityLabels, workerLabels } from "../lib/types";
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useTasks, useProjects } from "../lib/queries";
+import { useTasks, useProjects, useExecutors } from "../lib/queries";
+import { effectiveExecutor } from "../lib/executor";
+import { ExecutorBadge, ExecutorFilter } from "../components/ExecutorSelect";
 import { statuses, statusLabels, roleLabels, type Task } from "../lib/types";
 import { deps } from "../lib/page-utils";
 import { request } from "../lib/api";
@@ -33,10 +35,12 @@ export async function bulkMove(ids: number[], status: string) {
 export function Backlog({ project }: { project: string }) {
   const tasks = useTasks(),
     projects = useProjects(),
+    executors = useExecutors(),
     action = useAction(),
     client = useQueryClient();
   const [text, setText] = useState(""),
     [status, setStatus] = useState(""),
+    [executor, setExecutor] = useState(""),
     [sort, setSort] = useState("priority"),
     [selected, setSelected] = useState<number[]>([]),
     [creating, setCreating] = useState(false);
@@ -53,6 +57,8 @@ export function Backlog({ project }: { project: string }) {
       (t) =>
         (!project || t.project_id === projectId) &&
         (!status || t.status === status) &&
+        (!executor ||
+          effectiveExecutor(t, projects.data, executors.data)?.value === executor) &&
         `${t.identifier} ${t.title}`.toLowerCase().includes(text.toLowerCase()),
     )
     .sort(
@@ -89,6 +95,7 @@ export function Backlog({ project }: { project: string }) {
             </option>
           ))}
         </NativeSelect>
+        <ExecutorFilter value={executor} onChange={setExecutor} />
         <NativeSelect
           aria-label="排序"
           value={sort}
@@ -138,8 +145,9 @@ export function Backlog({ project }: { project: string }) {
                         "项目",
                         "优先级",
                         "角色",
-                        "执行器",
+                        "Worker",
                         "状态",
+                        "编码执行器",
                         "依赖",
                         "更新时间",
                       ].map((h) => (
@@ -233,6 +241,15 @@ export function Backlog({ project }: { project: string }) {
                               )}
                             </td>
                           ))}
+                          <td data-testid={`executor-${t.identifier}`}>
+                            <ExecutorBadge
+                              effective={effectiveExecutor(
+                                t,
+                                projects.data,
+                                executors.data,
+                              )}
+                            />
+                          </td>
                           <td>{deps(t.depends_on).join(", ") || "—"}</td>
                           <td>
                             {new Date(t.updated_at).toLocaleString("zh-CN")}
