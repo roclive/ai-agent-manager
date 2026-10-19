@@ -10,6 +10,7 @@ import {
   collectAutopilot,
   reviewerCommand,
   startAutopilot,
+  stalledReviews,
   validatePlan,
 } from "../src/core/autopilot.js";
 import { parseVerdict } from "../src/core/review.js";
@@ -261,4 +262,68 @@ it("reads Codex planner results from last.md and creates tasks", async () => {
   expect(JSON.parse(f.repo.tasks()[1]!.depends_on)).toEqual([
     f.repo.tasks()[0]!.identifier,
   ]);
+});
+it("parses verdicts from Claude's outer JSON and rejects tool transcripts and junk", () => {
+  const wrap = (result: string) => JSON.stringify({ type: "result", is_error: false, result });
+  expect(parseVerdict(wrap('{"verdict":"approve","notes":"ok"}'))).toMatchObject({ verdict: "approve" });
+  expect(parseVerdict(wrap('```json\n{"verdict":"reject","notes":"bad"}\n```'))).toMatchObject({ verdict: "reject" });
+  expect(parseVerdict(wrap('<invoke name="Read"><parameter name="file_path">a.ts</parameter></invoke>'))).toBeNull();
+  expect(parseVerdict("not json {oops")).toBeNull();
+  expect(parseVerdict(wrap('{"verdict":"maybe","notes":"x"}'))).toBeNull();
+});
+it("tells Claude it has no tools and backs off then surfaces repeated unparseable reviews", async () => {
+  f = fixture();
+  f.repo.setSetting("claude_ok", "1");
+  f.repo.setSetting("reviewer", "claude");
+  f.repo.updateProject("T", { auto_review: 1 });
+  const fake = resolve(f.root, "claude.sh");
+  const seen = resolve(f.root, "prompt-seen.txt");
+  writeFileSync(
+    fake,
+    `#!/bin/sh\ncat > ${seen}\nprintf '%s' '{"is_error":false,"result":"<invoke name=\\"Read\\"></invoke>"}'\n`,
+    { mode: 0o755 },
+  );
+  process.env.AAM_FAKE_CLAUDE = fake;
+  const t = f.task({ status: "in_review", worktree_path: f.path, branch: "main" });
+  const count = () =>
+    (f.repo.db.prepare("SELECT COUNT(*) n FROM autopilot_jobs WHERE task_id=?").get(t.id) as { n: number }).n;
+  const drain = async () => {
+    for (let i = 0; i < 100; i++) {
+      await new Promise((r) => setTimeout(r, 20));
+      collectAutopilot(f.repo);
+      if (!f.repo.db.prepare("SELECT 1 FROM autopilot_jobs WHERE status='pending'").get()) break;
+    }
+  };
+  startAutopilot(f.repo);
+  await drain();
+  expect(readFileSync(seen, "utf8")).toContain("You have no tools");
+  expect(readFileSync(seen, "utf8")).not.toContain("You may read files");
+  expect(f.repo.task(t.id).status).toBe("in_review");
+  const age = (min: number) =>
+    f.repo.db
+      .prepare("UPDATE autopilot_jobs SET finished_at=? WHERE task_id=?")
+      .run(new Date(Date.now() - min * 60000).toISOString(), t.id);
+  // 1st failure: retried after the short delay.
+  age(2);
+  startAutopilot(f.repo);
+  await drain();
+  expect(count()).toBe(2);
+  // 2nd failure: now a long backoff, not an indefinite skip.
+  startAutopilot(f.repo);
+  expect(count()).toBe(2);
+  age(31);
+  startAutopilot(f.repo);
+  await drain();
+  expect(count()).toBe(3);
+  age(61);
+  startAutopilot(f.repo);
+  await drain();
+  expect(count()).toBe(4);
+  // Attempt cap reached: surfaced for manual review.
+  age(600);
+  startAutopilot(f.repo);
+  expect(count()).toBe(4);
+  expect(stalledReviews(f.repo)).toEqual([t.identifier]);
+  expect(autopilotStatus(f.repo).stalled_reviews).toEqual([t.identifier]);
+  expect(f.repo.db.prepare("SELECT 1 FROM events WHERE kind='review_stalled'").get()).toBeTruthy();
 });

@@ -110,6 +110,7 @@ export function autopilotStatus(repo: Repo) {
     claude_ok: healthSetting(repo, "ok") === "1",
     claude_checked_at: healthSetting(repo, "checked_at") || null,
     claude_error: healthSetting(repo, "error") || "",
+    stalled_reviews: stalledReviews(repo),
     caffeinate: alive(Number(repo.getSetting("keep_awake_pid")) || null),
   };
 }
@@ -145,6 +146,8 @@ export const claudeArgs: string[] = [
   "",
   "--settings",
   '{"disableAllHooks":true}',
+  "--append-system-prompt",
+  "You have no tools. Never emit tool calls or <invoke> blocks. Answer in one turn using only the task, diff and test output in the prompt, and reply with the final JSON object only.",
 ];
 export const healthSetting = (repo: Repo, key: string) =>
   repo.getSetting(`reviewer_${key}`) ||
@@ -213,14 +216,42 @@ export function reviewerCommand(
 }
 const contextRule =
   "\nYou may read files in this repository for context; you must not modify anything in tracked source files or commit changes. You may run the full test suite, creating temporary files and test caches as needed. Never push.";
+// Claude runs with every tool disabled, so inviting it to read files or run tests makes it emit
+// unusable tool-call transcripts instead of a verdict.
+const claudeContextRule =
+  "\nYou have no tools and cannot read files or run commands. Use only the context above. Your entire reply must be the single final JSON object, with no tool calls and no prose.";
+export const MAX_UNPARSEABLE = 4;
+const unparseableDelay = (n: number) => (n >= 2 ? 30 * 60000 * (n - 1) : 60000);
+// In-review tasks whose reviewer output was unparseable too many times; they need a human or a
+// state change (any task update resets the count, e.g. reject/move to ready and back).
+export function stalledReviews(repo: Repo) {
+  const rows = jobs(repo);
+  return repo
+    .tasks({ status: "in_review" })
+    .filter((t) => repo.project(t.project_id).auto_review)
+    .filter(
+      (t) =>
+        rows.filter(
+          (j) =>
+            j.kind === "review" &&
+            j.task_id === t.id &&
+            j.status === "unparseable" &&
+            Date.parse(j.started_at) >= Date.parse(t.updated_at),
+        ).length >= MAX_UNPARSEABLE,
+    )
+    .map((t) => t.identifier);
+}
 const wrapper = `const fs=require('node:fs'), cp=require('node:child_process'); const [cmd,cwd,prompt,out,flags,last]=process.argv.slice(1); const r=cp.spawnSync(cmd, JSON.parse(flags), {cwd,input:fs.readFileSync(prompt),env:process.env,encoding:'utf8',timeout:300000,killSignal:'SIGKILL',maxBuffer:1048576}); let answer=r.stdout||''; if(last){try{answer=fs.readFileSync(last,'utf8')}catch{answer=''}} fs.writeFileSync(out+'.tmp',JSON.stringify({status:r.status,stdout:answer,output:r.stdout||'',stderr:r.stderr||r.error?.message||'',code:r.error?.code})); fs.renameSync(out+'.tmp',out);`;
 function launch(repo: Repo, job: Job, cwd: string, prompt: string) {
   const dir = dirname(resultPath(repo, job.id));
   mkdirSync(dir, { recursive: true });
   recordBackend(repo, dir, job.provider || undefined);
   const file = resolve(dir, "prompt.txt");
-  writeFileSync(file, prompt + contextRule, { mode: 0o600 });
   const command = reviewerCommand(repo, cwd, dir, job.provider || undefined);
+  writeFileSync(
+    file,
+    prompt + (!command.codex && !command.gw ? claudeContextRule : contextRule), { mode: 0o600 },
+  );
   const child = spawn(
     process.execPath,
     [
@@ -767,7 +798,16 @@ export function startAutopilot(repo: Repo) {
     const prior = history.filter(
       (j) => Date.parse(j.started_at) >= Date.parse(t.updated_at),
     );
-    if (prior.filter((j) => j.status === "unparseable").length >= 2) continue;
+    const unparseable = prior.filter((j) => j.status === "unparseable").length;
+    if (unparseable >= MAX_UNPARSEABLE) {
+      limitedEvent(
+        repo,
+        "review_stalled",
+        `${t.identifier}: ${unparseable} unparseable auto-reviews; needs manual review (aam review ${t.identifier} approve|reject) or a task state change to retry`,
+        60,
+      );
+      continue;
+    }
     if (
       repo.getSetting("reviewer") === "gw" &&
       prior.some((j) => j.status === "deferred")
@@ -783,7 +823,13 @@ export function startAutopilot(repo: Repo) {
       break;
     }
     const latest = history[0];
-    if (latest) {
+    if (latest?.status === "unparseable") {
+      if (
+        Date.now() - Date.parse(latest.finished_at || latest.started_at) <
+        unparseableDelay(unparseable)
+      )
+        continue;
+    } else if (latest) {
       const timeouts = history.findIndex((j) => j.status !== "timeout");
       const streak = timeouts < 0 ? history.length : timeouts;
       const delay =

@@ -129,3 +129,14 @@ The defaults installed for new databases are different only for
 `llm_backend=primary`, and `planner_daily_max=10`
 (`src/db/index.ts:173-213`). The live values above describe this manager, not
 those initialization defaults.
+
+## Unparseable auto-review results (AAM-54)
+
+The headless Claude reviewer runs with all tools disabled, so its prompt now says it has no tools
+(`claudeContextRule` plus `--append-system-prompt`) and must reply with the final JSON verdict only.
+If a result is still unparseable (tool-call transcript, prose, malformed JSON) the job is `unparseable`
+and the task stays `in_review`. Retries use bounded backoff: 1 min after the first failure, then
+30 min × (n−1) after the n-th. After `MAX_UNPARSEABLE` (4) failures since the task last changed, auto
+review stops, a `review_stalled` event is raised (at most hourly) and the task id appears in
+`/api/status` `autopilot.stalled_reviews`. Recover with `aam review <ID> approve|reject`, or change the
+task state (e.g. move to ready and back) — any task update resets the count.
