@@ -105,6 +105,24 @@ it("honors the legacy Claude reviewer fast-mode opt-out when the new setting is 
   expect(setting(claudeReviewerArgs(f.repo)).fastMode).toBe(true);
 });
 
+it("migrates a preexisting legacy fast-mode opt-out without overriding an explicit reviewer value", () => {
+  f = fixture();
+  f.repo.setSetting("reviewer", "claude-opus");
+  f.repo.db.prepare("DELETE FROM settings WHERE key='reviewer_fast_mode'").run();
+  f.repo.db.prepare("INSERT INTO settings (key, value) VALUES ('claude_fast_mode', '0')").run();
+  const home = f.repo.home;
+  f.repo.close();
+  const migrated = new Repo(home);
+  expect(migrated.getSetting("reviewer_fast_mode")).toBe("0");
+  expect(setting(claudeReviewerArgs(migrated)).fastMode).toBe(false);
+  migrated.setSetting("reviewer_fast_mode", "1");
+  migrated.close();
+  const explicit = new Repo(home);
+  expect(explicit.getSetting("reviewer_fast_mode")).toBe("1");
+  expect(setting(claudeReviewerArgs(explicit)).fastMode).toBe(true);
+  explicit.close();
+});
+
 it("environment overrides both commands and the recorded identity", () => {
   f = fixture();
   vi.stubEnv("AAM_CLAUDE_MODEL", "haiku");

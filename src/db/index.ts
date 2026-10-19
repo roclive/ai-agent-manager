@@ -179,7 +179,7 @@ export class Repo {
       worker_fast_mode: "1",
       reviewer_model: "opus",
       reviewer_effort: "max",
-      reviewer_fast_mode: "1",
+      reviewer_fast_mode: this.getSetting("claude_fast_mode") || "1",
       default_worker: "codex",
       coding_executor: "auto",
       executor_fallback: "",
