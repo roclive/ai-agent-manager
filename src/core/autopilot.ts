@@ -230,19 +230,46 @@ export function stalledReviews(repo: Repo) {
   return repo
     .tasks({ status: "in_review" })
     .filter((t) => repo.project(t.project_id).auto_review)
-    .filter(
-      (t) =>
-        rows.filter(
-          (j) =>
-            j.kind === "review" &&
-            j.task_id === t.id &&
-            j.status === "unparseable" &&
-            Date.parse(j.started_at) >= Date.parse(t.updated_at),
-        ).length >= MAX_UNPARSEABLE,
-    )
+    .filter((t) => {
+      const prior = rows.filter(
+        (j) =>
+          j.kind === "review" &&
+          j.task_id === t.id &&
+          Date.parse(j.started_at) >= Date.parse(t.updated_at),
+      );
+      return (
+        prior.some((j) => j.status === "output_limit") ||
+        prior.filter((j) => j.status === "unparseable").length >=
+          MAX_UNPARSEABLE
+      );
+    })
     .map((t) => t.identifier);
 }
-const wrapper = `const fs=require('node:fs'), cp=require('node:child_process'); const [cmd,cwd,prompt,out,flags,last]=process.argv.slice(1); const r=cp.spawnSync(cmd, JSON.parse(flags), {cwd,input:fs.readFileSync(prompt),env:process.env,encoding:'utf8',timeout:300000,killSignal:'SIGKILL',maxBuffer:1048576}); let answer=r.stdout||''; if(last){try{answer=fs.readFileSync(last,'utf8')}catch{answer=''}} fs.writeFileSync(out+'.tmp',JSON.stringify({status:r.status,stdout:answer,output:r.stdout||'',stderr:r.stderr||r.error?.message||'',code:r.error?.code})); fs.renameSync(out+'.tmp',out);`;
+export const wrapper = `
+const fs=require('node:fs'), cp=require('node:child_process'), path=require('node:path');
+const [cmd,cwd,prompt,out,flags,last]=process.argv.slice(1);
+const dir=path.dirname(out), limit=64*1024*1024;
+const log=path.join(dir,'stdout.log'), err=path.join(dir,'stderr.log');
+function readBounded(file,tail=false){
+  const fd=fs.openSync(file,'r');
+  try { const size=fs.fstatSync(fd).size;
+    if(size>limit&&!tail) throw Object.assign(new Error('Final reviewer response exceeds 64 MiB; inspect retained logs'),{code:'AAM_OUTPUT_TOO_LARGE'});
+    const bound=tail?256*1024:limit;
+    const buf=Buffer.alloc(Math.min(size,bound));
+    fs.readSync(fd,buf,0,buf.length,tail?Math.max(0,size-bound):0);
+    return buf.toString('utf8');
+  } finally {fs.closeSync(fd)}
+}
+let result;
+const input=fs.openSync(prompt,'r'), stdout=fs.openSync(log,'w',0o600), stderr=fs.openSync(err,'w',0o600);
+try {
+  // File descriptors bypass spawnSync's pipe maxBuffer entirely. Raw logs remain on disk.
+  const r=cp.spawnSync(cmd,JSON.parse(flags),{cwd,env:process.env,stdio:[input,stdout,stderr],timeout:300000,killSignal:'SIGKILL'});
+  result={status:r.status,stdout:last?(fs.existsSync(last)?readBounded(last):''):readBounded(log),output:readBounded(log,true),stderr:readBounded(err,true)||r.error?.message||'',code:r.error?.code};
+} catch(e) {result={status:-1,stdout:'',output:'',stderr:e.message,code:e.code};}
+finally {for(const fd of [input,stdout,stderr])fs.closeSync(fd);}
+fs.writeFileSync(out+'.tmp',JSON.stringify(result),{mode:0o600});fs.renameSync(out+'.tmp',out);
+`;
 function launch(repo: Repo, job: Job, cwd: string, prompt: string) {
   const dir = dirname(resultPath(repo, job.id));
   mkdirSync(dir, { recursive: true });
@@ -251,7 +278,8 @@ function launch(repo: Repo, job: Job, cwd: string, prompt: string) {
   const command = reviewerCommand(repo, cwd, dir, job.provider || undefined);
   writeFileSync(
     file,
-    prompt + (!command.codex && !command.gw ? claudeContextRule : contextRule), { mode: 0o600 },
+    prompt + (!command.codex && !command.gw ? claudeContextRule : contextRule),
+    { mode: 0o600 },
   );
   const child = spawn(
     process.execPath,
@@ -668,8 +696,14 @@ export function collectAutopilot(repo: Repo) {
         })();
       }
     } catch (e) {
+      const outputLimit = /ENOBUFS|AAM_OUTPUT_TOO_LARGE/.test(String(e));
       const timeout = job.kind === "review" && /ETIMEDOUT/.test(String(e));
-      finish(repo, job, timeout ? "timeout" : "error", String(e));
+      finish(
+        repo,
+        job,
+        outputLimit ? "output_limit" : timeout ? "timeout" : "error",
+        String(e),
+      );
       const streak = jobs(repo).filter(
         (j) => j.kind === "review" && j.task_id === job.task_id,
       );
@@ -799,6 +833,15 @@ export function startAutopilot(repo: Repo) {
     const prior = history.filter(
       (j) => Date.parse(j.started_at) >= Date.parse(t.updated_at),
     );
+    if (prior.some((j) => j.status === "output_limit")) {
+      limitedEvent(
+        repo,
+        "review_stalled",
+        `${t.identifier}: reviewer output limit; inspect retained logs and update task after remediation to resume`,
+        60,
+      );
+      continue;
+    }
     const unparseable = prior.filter((j) => j.status === "unparseable").length;
     if (unparseable >= MAX_UNPARSEABLE) {
       limitedEvent(

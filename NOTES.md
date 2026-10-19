@@ -123,3 +123,5 @@ Validation so far: merged core suite 121 passed before the final provider-isolat
   worktree before changing the database or launchd services.
 - The existing daemon-guard plist is retained and its immutable runtime path is replaced, because
   daemon-guard is locally installed policy and has no canonical generator in this repository.
+
+- Reviewer/planner subprocess stdout and stderr now stream directly to private log files, removing the former 1 MiB pipe buffer cap. Result collection permits responses up to 64 MiB and bounds diagnostic tails to 256 KiB. Oversized final responses retain logs and pause automatic retries for the unchanged task with a visible review_stalled event; no task attempt is consumed. Task updates after remediation resume review.
