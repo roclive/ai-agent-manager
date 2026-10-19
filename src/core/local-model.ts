@@ -208,6 +208,16 @@ export function fallbackModel(repo: Repo) {
   return repo.getSetting("opencode_fallback_model")!;
 }
 
+// omlx serves the model directory name (config/omlx.env OMLX_MODEL_NAME), not the Ollama tag.
+export const OMLX_SERVED_MODEL = "gemma4-e4b-mlx";
+
+/** Model id the worker must send to the active local server. */
+export function localLlmModel(repo: Repo) {
+  const model = fallbackModel(repo);
+  if (localLlmServer(repo) !== "omlx" || !isLocalModel(model)) return model;
+  return `${model.startsWith("ollama/") ? "ollama/" : ""}${OMLX_SERVED_MODEL}`;
+}
+
 export function fallbackSelection(repo: Repo): ProviderSelection {
   return {
     id: FALLBACK_PROVIDER,

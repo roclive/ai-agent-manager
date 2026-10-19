@@ -16,11 +16,13 @@ import {
   FALLBACK_PROVIDER,
   fallbackActive,
   fallbackModel,
+  localLlmModel,
   fallbackSelection,
   localModelWait,
   recordLocalModelMemory,
   localRunActive,
   startLocalLlm,
+  stopLocalModelAfterTask,
   localLlmBaseUrl,
 } from "./local-model.js";
 
@@ -210,7 +212,7 @@ export function dispatch(repo: Repo, id: string, force = false) {
       provider: selected.id,
       ...(selected.id === FALLBACK_PROVIDER
         ? {
-            model: fallbackModel(repo),
+            model: localLlmModel(repo),
             localBaseUrl: localLlmBaseUrl(repo),
             localContext: localProfile >= 2 ? 8192 : 32768,
           }
@@ -240,6 +242,8 @@ export function dispatch(repo: Repo, id: string, force = false) {
       )
       .run(new Date().toISOString(), String(e), idRun);
     releaseProvider(repo, idRun);
+    // omlx may already be up (spawn failed afterwards): honor keep_warm on this task-end path.
+    if (selected.id === FALLBACK_PROVIDER) stopLocalModelAfterTask(repo);
     throw e;
   }
 }

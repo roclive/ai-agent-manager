@@ -37,3 +37,28 @@ it("real start refuses when weights are missing", () => {
 it("stop is idempotent without pid file", () => {
   expect(execFileSync(stop, [], { env: env(true), encoding: "utf8" })).toContain("not running");
 });
+
+it("stop never signals a stale pid that belongs to another process", async () => {
+  const { spawn } = await import("node:child_process");
+  const { existsSync, readFileSync } = await import("node:fs");
+  const e = env(true) as NodeJS.ProcessEnv;
+  const victim = spawn("sleep", ["30"], { stdio: "ignore" });
+  try {
+    mkdirSync(e.OMLX_STATE_DIR!, { recursive: true });
+    writeFileSync(join(e.OMLX_STATE_DIR!, "omlx.pid"), String(victim.pid));
+    const out = execFileSync(stop, [], { env: e, encoding: "utf8" });
+    expect(out).toContain("not signaled");
+    expect(() => process.kill(victim.pid!, 0)).not.toThrow();
+    expect(existsSync(join(e.OMLX_STATE_DIR!, "omlx.pid"))).toBe(false);
+    void readFileSync;
+  } finally {
+    victim.kill("SIGKILL");
+  }
+});
+
+it("stop removes a non-numeric pid file without signaling", () => {
+  const e = env(true) as NodeJS.ProcessEnv;
+  mkdirSync(e.OMLX_STATE_DIR!, { recursive: true });
+  writeFileSync(join(e.OMLX_STATE_DIR!, "omlx.pid"), "-1\n");
+  expect(execFileSync(stop, [], { env: e, encoding: "utf8" })).toContain("stale");
+});

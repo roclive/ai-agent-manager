@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { fixture } from "./helpers.js";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { dispatch } from "../src/core/dispatch.js";
 import { opencode } from "../src/workers/index.js";
 import {
   localLlmHealth,
+  localLlmModel,
   localLlmProfile,
   localModelHost,
   omlxStartCommand,
@@ -234,4 +235,43 @@ it("switching provider away from omlx still unloads a server this module started
   runs = [];
   stopLocalModelIfIdle(f.repo); // nothing started by us any more: omlx untouched
   expect(runs).toHaveLength(0);
+});
+
+it("omlx route sends the served model id, ollama keeps the tag", () => {
+  f = fixture();
+  expect(localLlmModel(f.repo)).toBe("ollama/gemma4:e4b-mlx");
+  f.repo.setSetting("local_llm_server", "omlx");
+  expect(localLlmModel(f.repo)).toBe("ollama/gemma4-e4b-mlx");
+  const env = readFileSync(resolve("config/omlx.env"), "utf8");
+  expect(env).toContain("OMLX_MODEL_NAME=gemma4-e4b-mlx");
+});
+
+it("worker spawn failure after omlx start stops omlx when keep_warm=0", () => {
+  f = fixture("sleep 1");
+  enableOmlx();
+  const t = f.task();
+  f.repo.setSetting("local_llm_idle_timeout_min", "10");
+  const orig = f.repo.updateTask.bind(f.repo);
+  (f.repo as any).updateTask = (id: number, patch: any) => {
+    if (patch?.status === "in_progress") throw new Error("spawn bookkeeping failed");
+    return orig(id, patch);
+  };
+  expect(() => dispatch(f.repo, t.identifier, true)).toThrow(/spawn bookkeeping/);
+  expect(starts()).toHaveLength(1);
+  expect(stopsRun().length).toBeGreaterThanOrEqual(2); // one before start, one on task end
+  expect(runs[runs.length - 1].cmd).toMatch(/omlx-stop\.sh$/);
+});
+
+it("spawn failure keeps omlx warm when keep_warm=1", () => {
+  f = fixture("sleep 1");
+  enableOmlx();
+  f.repo.setSetting("keep_warm", "1");
+  const t = f.task();
+  const orig = f.repo.updateTask.bind(f.repo);
+  (f.repo as any).updateTask = (id: number, patch: any) => {
+    if (patch?.status === "in_progress") throw new Error("spawn bookkeeping failed");
+    return orig(id, patch);
+  };
+  expect(() => dispatch(f.repo, t.identifier, true)).toThrow();
+  expect(runs[runs.length - 1].cmd).toMatch(/omlx-start\.sh$/);
 });
