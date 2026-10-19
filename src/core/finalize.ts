@@ -46,12 +46,14 @@ export function rateLimited(text: string, exitCode: number | null = null) {
       errorish =
         !structured && /\b(error|ERROR|Error)\b/.test(line);
     }
-    if (!structured && /\byou(?:'|’)ve hit your session limit\b/i.test(line)) {
-      // Accept only an unquoted top-level message, not task text or a
-      // historical log line nested in the worker prompt.
-      if (
-        !/^(?:\s|[>*|\[]|Task description:|Previous feedback:)/i.test(line)
-      ) return true;
+    if (
+      !structured &&
+      /^\s*you(?:'|’)ve hit your session limit\b.*$/i.test(line)
+    ) {
+      // Claude emits this as a standalone top-level CLI message. Requiring
+      // the phrase at the start of the whole line rejects quoted/embedded
+      // task text and historical worker logs.
+      return true;
     }
     if (index > 0 && !errorish) return false;
     return (
