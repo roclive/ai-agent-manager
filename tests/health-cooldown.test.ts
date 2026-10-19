@@ -13,7 +13,15 @@ it("does not launch a startup health probe or renew cooldown during backoff", as
   writeFileSync(process.env.AAM_FAKE_CLAUDE!,`#!/bin/sh\ncat >/dev/null\nprintf hit > ${quoted}\nprintf '{"result":"ok","is_error":false}'\n`,{mode:0o755});
   const child=spawn(resolve("bin/aam"),["daemon","--interval","0.05"],{cwd:f.root,env:{...process.env,AAM_HOME:f.repo.home},stdio:"ignore"});
   try {
-    for(let i=0;i<100&&!f.repo.getSetting("last_tick_at");i++)await new Promise(r=>setTimeout(r,20));
+    // Starting tsx can take more than two seconds while the full suite is spawning
+    // other CLI processes. Wait for the observable heartbeat, but fail promptly if
+    // the daemon itself exits instead of obscuring that failure as a timing issue.
+    let exited: number | null | undefined;
+    child.once("exit", (code) => { exited = code; });
+    const deadline = Date.now() + 10_000;
+    while (!f.repo.getSetting("last_tick_at") && exited === undefined && Date.now() < deadline)
+      await new Promise(r=>setTimeout(r,20));
+    expect(exited, "daemon exited before its first heartbeat").toBeUndefined();
     expect(f.repo.getSetting("last_tick_at")).toBeTruthy();
     const ended=new Promise<number|null>(r=>child.once("exit",r));child.kill("SIGTERM");expect(await ended).toBe(0);
     expect(existsSync(marker)).toBe(false);

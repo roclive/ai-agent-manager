@@ -9,7 +9,7 @@ const view = {
   reviewer: "codex",
   executors: [
     { id: "codex", label: "Codex", installed: true, install_hint: "npm i -g @openai/codex", cooldown_until: new Date(Date.now() + 600000).toISOString() },
-    { id: "claude", label: "Claude (sonnet)", installed: true, install_hint: "", cooldown_until: null },
+    { id: "claude", label: "Claude (Sonnet)", installed: true, install_hint: "", cooldown_until: null },
     { id: "claude-opus", label: "Claude (Opus)", installed: true, install_hint: "", cooldown_until: null, model: "opus" },
     { id: "codex-luna", label: "Codex (Luna)", installed: true, install_hint: "", cooldown_until: null, model: "gpt-5.6-luna" },
     { id: "hermes", label: "Hermes Agent (Nous)", installed: false, install_hint: "curl install.sh | bash", cooldown_until: null },
@@ -47,7 +47,7 @@ it("offers an inherit option and shows effective executor with source", async ()
     </>,
   );
   await screen.findByRole("option", { name: "继承" });
-  expect(await screen.findByText("Claude (sonnet) · 项目")).toHaveAttribute("data-source", "project");
+  expect(await screen.findByText("Claude (Sonnet) · 项目")).toHaveAttribute("data-source", "project");
 });
 
 import { effectiveExecutor } from "./lib/executor";
@@ -89,7 +89,7 @@ it("backlog filter options follow API, labels/filter use effective executor and 
   );
   await screen.findByRole("option", { name: "pi" });
   expect(screen.getByRole("option", { name: "Hermes Agent (Nous)" })).toBeInTheDocument();
-  await waitFor(() => expect(screen.getByTestId("executor-AAM-1")).toHaveTextContent("Claude (sonnet) · 全局"));
+  await waitFor(() => expect(screen.getByTestId("executor-AAM-1")).toHaveTextContent("Claude (Sonnet) · 全局"));
   expect(screen.getByTestId("executor-AAM-2")).toHaveTextContent("pi · 任务");
   fireEvent.change(screen.getByLabelText("筛选执行器"), { target: { value: "pi" } });
   expect(screen.queryByTestId("executor-AAM-1")).toBeNull();
@@ -134,8 +134,8 @@ it("kanban pending cards use effective executor, keep historical worker on activ
       <MemoryRouter><BoardPage project="" /></MemoryRouter>
     </QueryClientProvider>,
   );
-  await waitFor(() => expect(screen.getByTestId("card-executor-AAM-1")).toHaveTextContent("Claude (sonnet) · 全局"));
-  expect(screen.getByTestId("card-executor-AAM-2")).toHaveTextContent("hermes · 任务");
+  await waitFor(() => expect(screen.getByTestId("card-executor-AAM-1")).toHaveTextContent("Claude (Sonnet) · 全局"));
+  expect(screen.getByTestId("card-executor-AAM-2")).toHaveTextContent("Hermes Agent (Nous) · 任务");
   expect(screen.queryByTestId("card-executor-AAM-3")).toBeNull();
   expect(screen.getAllByText("OLDWORKER").length).toBe(1);
   current = { ...current, coding_executor: "opencode" };

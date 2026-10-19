@@ -111,7 +111,11 @@ it("runs executable CLI management commands and reaps workers after the launchin
   run(["worktree", "prune", "T-1"]);
   run(["task", "move", "T-1", "backlog", "--note", "Reopen"]);
   expect(f.repo.task("T-1").status).toBe("backlog");
-}, 30_000);
+// This is intentionally one end-to-end scenario: every command opens the same
+// persisted database and later assertions verify their combined effects. The
+// full suite starts many Node/tsx processes concurrently, so give this process-
+// heavy regression its own budget instead of relying on the unit-test default.
+}, 60_000);
 
 it("lists every current usage window for a selected provider", async () => {
   f = fixture();
