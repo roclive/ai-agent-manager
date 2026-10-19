@@ -1,6 +1,7 @@
 import { useExecutors } from "../lib/queries";
 import { NativeSelect } from "./ui/select";
 import type { EffectiveExecutor, ExecutorInfo } from "../lib/types";
+import { WorkerEffortSelect } from "./WorkerEffortSelect";
 
 export const sourceText = { task: "任务", project: "项目", global: "全局" };
 
@@ -114,8 +115,10 @@ export function ExecutorBadge({ effective }: { effective?: EffectiveExecutor }) 
 // Board header: global executor switch + per-executor cooldown state.
 export function GlobalExecutorSwitch({
   onChange,
+  onEffortChange,
 }: {
   onChange: (value: string) => void;
+  onEffortChange: (value: string) => void;
 }) {
   const q = useExecutors();
   if (!q.data) return null;
@@ -129,6 +132,12 @@ export function GlobalExecutorSwitch({
         label="全局编码执行器"
         value={q.data.coding_executor}
         onChange={onChange}
+      />
+      <span>思考强度</span>
+      <WorkerEffortSelect
+        executor={q.data.coding_executor}
+        value={q.data.worker_effort}
+        onChange={onEffortChange}
       />
       {cooling.map((e) => (
         <span key={e.id} role="status" title={`冷却至 ${e.cooldown_until}`}>

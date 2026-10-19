@@ -329,7 +329,7 @@ export function createApp(
   app.put("/api/executors", async (c) => {
     const p = await c.req.json<Record<string, unknown>>();
     const keys = Object.keys(p);
-    if (keys.some((k) => !["coding_executor", "executor_fallback"].includes(k)))
+    if (keys.some((k) => !["coding_executor", "executor_fallback", "worker_effort"].includes(k)))
       throw new Error("Unsupported executor field");
     repo.db.transaction(() => {
       for (const k of keys)

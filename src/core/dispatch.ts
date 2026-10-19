@@ -24,6 +24,7 @@ import {
 
 import { resolveExecutor, selectExecutor } from "./executors.js";
 import { providerLlmArgs, recordBackend } from "./llm.js";
+import { effortSupported, workerEffort } from "./worker-effort.js";
 export function dependenciesDone(repo: Repo, t: Task) {
   return (JSON.parse(t.depends_on) as string[]).every((id) => {
     try {
@@ -205,6 +206,7 @@ export function dispatch(repo: Repo, id: string, force = false) {
       // use its default premium provider while accounting the run to Ollama.
       modelArgs: providerLlmArgs(repo, selected.id),
       provider: selected.id,
+      ...(effortSupported(worker) ? { effort: workerEffort(repo) } : {}),
       ...(selected.id === FALLBACK_PROVIDER
         ? { model: fallbackModel(repo) }
         : {}),

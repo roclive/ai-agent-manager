@@ -199,9 +199,12 @@ export interface ExecutorInfo {
   installed: boolean;
   install_hint: string;
   cooldown_until: string | null;
+  effort_supported?: boolean;
 }
 export interface ExecutorsView {
   coding_executor: string;
+  worker_effort: string;
+  effort_choices: string[];
   executor_fallback: string[];
   reviewer: string;
   executors: ExecutorInfo[];

@@ -7,6 +7,7 @@ import { FALLBACK_PROVIDER, fallbackModel } from "./local-model.js";
 import { parseOverrides } from "./routing-overrides.js";
 import { providerCooldown, type ProviderSelection } from "./providers.js";
 import { checkQuota } from "./usage.js";
+import { WORKER_EFFORTS, workerEffort } from "./worker-effort.js";
 
 export { EXECUTORS, EXECUTOR_VALUES, parseFallback } from "./executor-names.js";
 export type { Executor } from "./executor-names.js";
@@ -127,6 +128,8 @@ export function selectExecutor(
 export function executorsView(repo: Repo) {
   return {
     coding_executor: repo.getSetting("coding_executor") || "auto",
+    worker_effort: workerEffort(repo),
+    effort_choices: WORKER_EFFORTS,
     executor_fallback: parseFallback(repo.getSetting("executor_fallback")),
     reviewer: repo.getSetting("reviewer"),
     executors: EXECUTORS.map((id) => ({
@@ -135,6 +138,7 @@ export function executorsView(repo: Repo) {
       installed: executorInstalled(id),
       install_hint: EXECUTOR_META[id].hint,
       cooldown_until: providerCooldown(repo, executorProvider(id)),
+      effort_supported: ["codex", "claude"].includes(EXECUTOR_META[id].worker),
     })),
   };
 }

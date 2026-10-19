@@ -173,6 +173,7 @@ export class Repo {
     for (const [k, v] of Object.entries({
       max_parallel: "2",
       worker_timeout_min: "45",
+      worker_effort: "default",
       default_worker: "codex",
       coding_executor: "auto",
       executor_fallback: "",
@@ -247,6 +248,11 @@ export class Repo {
         Number(value) > 5)
     )
       throw new Error("Expected integer from 1 to 5");
+    if (
+      key === "worker_effort" &&
+      !["default", "low", "medium", "high"].includes(value)
+    )
+      throw new Error("Invalid worker effort");
     if (key === "coding_executor" && !EXECUTOR_VALUES.includes(value))
       throw new Error("Invalid coding executor");
     if (key === "executor_fallback" && !validFallback(value))
