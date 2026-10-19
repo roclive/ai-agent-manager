@@ -71,6 +71,17 @@ export function globalCooldownBlocks(repo: Repo, t: Task) {
     resolveExecutor(repo, t).value === "auto"
   );
 }
+// Preview the same provider selection as dispatch without reserving or spawning work.
+export function dispatchAvailability(repo: Repo, task: Task): string | null {
+  try {
+    const selected = choose(repo, task);
+    const quota = selected.id === FALLBACK_PROVIDER ? { ok: true } : checkQuota(repo, selected.id);
+    return quota.ok ? null : quota.warning || "执行器额度不可用";
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
 export function dispatch(repo: Repo, id: string, force = false) {
   const t = repo.task(id);
   if (repo.runs(t.id).some((r) => r.status === "running"))

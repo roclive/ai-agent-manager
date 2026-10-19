@@ -125,3 +125,9 @@ Validation so far: merged core suite 121 passed before the final provider-isolat
   daemon-guard is locally installed policy and has no canonical generator in this repository.
 
 - Reviewer/planner subprocess stdout and stderr now stream directly to private log files, removing the former 1 MiB pipe buffer cap. Result collection permits responses up to 64 MiB and bounds diagnostic tails to 256 KiB. Oversized final responses retain logs and pause automatic retries for the unchanged task with a visible review_stalled event; no task attempt is consumed. Task updates after remediation resume review.
+
+## AAM-57
+
+- Activity is based on live coding runs and pending automatic-review jobs, rather than task status alone. API items retain the underlying running/pending status and run/job ID.
+- Idle review guidance mirrors the normal launcher’s cooldown, health, concurrency, daily budget and retry/stall gates. Board review requests only start reviews, without starting unrelated planner work. Provider reservation and quota checks remain authoritative at execution time; rejected actions surface their normal API error without changing settings.
+- Pending coding rows still reserve dispatch capacity until the normal tick reaps them, even if their process is no longer live.

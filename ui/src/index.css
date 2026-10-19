@@ -360,6 +360,24 @@ main {
   align-items: stretch;
   overflow-x: auto;
 }
+.board-activity {
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+}
+.board-activity h2 { margin: 0 0 10px; font-size: 15px; }
+.activity-work, .idle-guidance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  font-size: 13px;
+}
+.activity-work + .activity-work { margin-top: 8px; }
+.activity-work span { color: var(--muted-foreground); overflow-wrap: anywhere; }
+.idle-guidance { color: var(--muted-foreground); }
 .kanban-column {
   width: 260px;
   min-width: 260px;

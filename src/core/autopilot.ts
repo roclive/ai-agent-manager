@@ -809,7 +809,49 @@ export function promoteIdle(repo: Repo) {
     );
   return count;
 }
-export function startAutopilot(repo: Repo) {
+// Read-only counterpart of the automatic launcher gates for board guidance.
+export function reviewWaitReason(repo: Repo, taskId: number): string | null {
+  const t = repo.task(taskId);
+  if (t.status !== "in_review") return "任务不在待审查状态";
+  if (!repo.project(t.project_id).auto_review) return "项目未启用自动审查";
+  if (!providerPolicyConfigured(repo.getSetting("provider_policy")) &&
+      Date.parse(repo.getSetting("cooldown_until") || "") > Date.now())
+    return "自动审查处于冷却期";
+  const status = autopilotStatus(repo);
+  if (!status.reviewer_ok) return status.reviewer_error || "审查器健康状态未通过";
+  if (jobs(repo).filter(j => j.kind === "review" && j.status === "pending").length >= status.auto_review_concurrency)
+    return "自动审查并发槽位不可用";
+  if (status.auto_reviews_today >= status.auto_review_max) return "今日自动审查预算已用尽";
+  const history = jobs(repo).filter(j => j.kind === "review" && j.task_id === t.id);
+  const prior = history.filter(j => Date.parse(j.started_at) >= Date.parse(t.updated_at));
+  if (prior.some(j => j.status === "output_limit")) return "审查输出超限，需要人工处理后更新任务";
+  const unparseable = prior.filter(j => j.status === "unparseable").length;
+  if (unparseable >= MAX_UNPARSEABLE) return "多次审查结果无法解析，需要人工处理";
+  if (normalizeReviewer(repo.getSetting("reviewer")) === "gw" && prior.some(j => j.status === "deferred"))
+    return "GW 审查已延后，需要人工处理";
+  const latest = history[0];
+  if (latest) {
+    const timeouts = history.findIndex(j => j.status !== "timeout");
+    const streak = timeouts < 0 ? history.length : timeouts;
+    const delay = latest.status === "unparseable" ? unparseableDelay(unparseable)
+      : latest.status === "timeout" ? (streak >= 3 ? 1800000 : 20000) : 60000;
+    if (Date.now() - Date.parse(latest.finished_at || latest.started_at) < delay)
+      return "自动审查重试等待中";
+  }
+  if (normalizeReviewer(repo.getSetting("reviewer")) !== "gw" &&
+      providerPolicyConfigured(repo.getSetting("provider_policy"))) {
+    try {
+      const provider = reviewerMeta(repo.getSetting("reviewer")).provider;
+      selectProviderFor(repo, { role: "any", complexity: "high", worker: "codex" },
+        [provider === "claude" ? "claude" : "codex"], [provider]);
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+  }
+  return null;
+}
+
+export function startAutopilot(repo: Repo, options: { reviewOnly?: boolean } = {}) {
   if (
     !providerPolicyConfigured(repo.getSetting("provider_policy")) &&
     Date.parse(repo.getSetting("cooldown_until") || "") > Date.now()
@@ -939,6 +981,7 @@ export function startAutopilot(repo: Repo) {
       repo.event("review_error", String(e), t.id);
     }
   }
+  if (options.reviewOnly) return;
   if (
     !rows.some((j) => j.kind === "plan" && j.status === "pending") &&
     status.planner_runs_today < status.planner_max

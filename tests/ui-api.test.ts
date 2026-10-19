@@ -10,6 +10,9 @@ import { alive } from "../src/core/process.js";
 let f: ReturnType<typeof fixture>;
 afterEach(() => {
   vi.useRealTimers();
+  // Synthetic liveness rows must never make fixture cleanup kill this test worker.
+  if (f?.repo.db.open)
+    f.repo.db.prepare("UPDATE runs SET status='succeeded' WHERE pid=? AND status='running'").run(process.pid);
   f?.cleanup();
 });
 function setup(script?: string) {
@@ -205,6 +208,116 @@ it("dispatches and cancels a real fake process group, exposes runs and logs", as
     status: "blocked",
     blocker: "cancelled",
   });
+});
+it("reports only live coding and pending review work with worktree details", async () => {
+  const { req } = setup();
+  const coding = f.task({ status: "in_progress", branch: "aam/T-1", worktree_path: "/tmp/T-1" });
+  f.repo.db.prepare(
+    "INSERT INTO runs(task_id,worker,status,pid,started_at,log_path,last_message_path,worker_label) VALUES (?,'codex','running',?,?, '', '', 'Codex Sol')",
+  ).run(coding.id, process.pid, new Date().toISOString());
+  const reviewTask = f.task({ status: "in_review", branch: "aam/T-2", worktree_path: "/tmp/T-2" });
+  f.repo.db.prepare(
+    "INSERT INTO autopilot_jobs(kind,project_id,task_id,started_at,status,provider) VALUES ('review',1,?,?,'pending','claude')",
+  ).run(reviewTask.id, new Date().toISOString());
+  f.task({ status: "in_review" });
+  const body = await (await req("/api/board/activity")).json();
+  expect(body.active).toEqual(expect.arrayContaining([
+    expect.objectContaining({ kind: "coding", identifier: coding.identifier, identity: "Codex Sol", worktree_path: "/tmp/T-1" }),
+    expect.objectContaining({ kind: "review", identifier: reviewTask.identifier, identity: "claude", branch: "aam/T-2" }),
+  ]));
+  expect(body.active).toHaveLength(2);
+  expect(body.idle).toBeNull();
+});
+it("does not report dead coding processes or completed review jobs as active", async () => {
+  const { req } = setup();
+  const task = f.task({ status: "in_review" });
+  f.repo.db.prepare("INSERT INTO runs(task_id,worker,status,pid,started_at,log_path,last_message_path) VALUES (?,'codex','running',2147483647,?,'','')")
+    .run(task.id, new Date().toISOString());
+  f.repo.db.prepare("INSERT INTO autopilot_jobs(kind,project_id,task_id,started_at,status) VALUES ('review',1,?,?,'succeeded')")
+    .run(task.id, new Date().toISOString());
+  const body = await (await req("/api/board/activity")).json();
+  expect(body.active).toEqual([]);
+  expect(body.idle.reason).toContain("未启用自动审查");
+});
+it("explains idle state and keeps board actions behind normal eligibility checks", async () => {
+  const { req } = setup("sleep 30");
+  const ready = f.task();
+  let body = await (await req("/api/board/activity")).json();
+  expect(body.idle).toMatchObject({ action: "dispatch" });
+  const dispatched = await req("/api/board/dispatch", "POST");
+  expect(dispatched.status).toBe(200);
+  expect(await dispatched.json()).toMatchObject({ task: ready.identifier });
+
+  const reviewTask = f.task({ status: "in_review" });
+  body = await (await req("/api/board/activity")).json();
+  expect(body.idle).toBeNull();
+  expect((await req("/api/board/review", "POST")).status).toBe(400);
+  f.repo.db.prepare("UPDATE runs SET status='failed',ended_at=?").run(new Date().toISOString());
+  body = await (await req("/api/board/activity")).json();
+  expect(body.idle).toMatchObject({ action: null, control: "projects" });
+  expect(body.idle.reason).toContain("未启用自动审查");
+  expect(f.repo.task(reviewTask.id).status).toBe("in_review");
+});
+it("never bypasses dependencies, capacity or executor pauses when dispatching from the board", async () => {
+  const { req } = setup();
+  const dependency = f.task({ status: "backlog" });
+  const ready = f.task({ depends_on: [dependency.identifier] });
+  expect((await req("/api/board/dispatch", "POST")).status).toBe(400);
+  expect((await (await req("/api/board/activity")).json()).idle.reason).toContain("依赖");
+  f.repo.updateTask(dependency.id, { status: "done" });
+  f.repo.setSetting("routing_overrides", JSON.stringify({ paused: ["codex"] }));
+  expect((await req("/api/board/dispatch", "POST")).status).toBe(400);
+  expect((await (await req("/api/board/activity")).json()).idle).toMatchObject({ action: null, control: "settings" });
+  expect(f.repo.task(ready.id).attempts).toBe(0);
+  expect(f.repo.runs()).toHaveLength(0);
+  f.repo.setSetting("routing_overrides", "{}");
+  f.repo.setSetting("max_parallel", "1");
+  f.repo.db.prepare("INSERT INTO runs(task_id,worker,status,pid,started_at,log_path,last_message_path) VALUES (?,'codex','running',null,?,'','')")
+    .run(dependency.id, new Date().toISOString());
+  expect((await req("/api/board/dispatch", "POST")).status).toBe(400);
+  expect(f.repo.runs()).toHaveLength(1);
+});
+it("starts only eligible fake review work without starting an opted-in planner", async () => {
+  const { req } = setup();
+  f.repo.updateProject("T", { auto_review: 1, autopilot: 1, goal: "Plan more work" });
+  f.repo.setSetting("claude_ok", "1");
+  const task = f.task({ status: "in_review", worktree_path: f.path, branch: "main" });
+  const response = await req("/api/board/review", "POST");
+  expect(response.status).toBe(200);
+  expect((await response.json()).active).toEqual([
+    expect.objectContaining({ kind: "review", status: "pending", task_id: task.id, worktree_path: f.path }),
+  ]);
+  expect(f.repo.db.prepare("SELECT kind FROM autopilot_jobs").all()).toEqual([{ kind: "review" }]);
+  await new Promise(resolve => setTimeout(resolve, 300));
+});
+it.each([
+  ["cooldown_until", new Date(Date.now() + 3600000).toISOString(), "冷却期"],
+  ["auto_review_concurrency", "0", "并发槽位"],
+  ["auto_review_daily_max", "0", "预算"],
+  ["claude_ok", "0", "健康"],
+])("explains review gate %s and rejects safe action without launching", async (setting, value, reason) => {
+  const { req } = setup();
+  f.task({ status: "in_review" });
+  f.repo.db.prepare("UPDATE projects SET auto_review=1").run();
+  f.repo.setSetting("claude_ok", "1");
+  // Defensive guidance also handles a persisted zero-capacity configuration.
+  f.repo.db.prepare("UPDATE settings SET value=? WHERE key=?").run(value, setting);
+  const body = await (await req("/api/board/activity")).json();
+  expect(body.idle).toMatchObject({ action: null, control: "settings" });
+  expect(body.idle.reason).toContain(reason);
+  expect((await req("/api/board/review", "POST")).status).toBe(400);
+  expect(f.repo.db.prepare("SELECT * FROM autopilot_jobs").all()).toHaveLength(0);
+});
+it("explains review retry delay and leaves the existing job untouched", async () => {
+  const { req } = setup();
+  const task = f.task({ status: "in_review" });
+  f.repo.db.prepare("UPDATE projects SET auto_review=1").run();
+  f.repo.setSetting("claude_ok", "1");
+  f.repo.db.prepare("INSERT INTO autopilot_jobs(kind,project_id,task_id,started_at,finished_at,status) VALUES ('review',1,?,?,?,'timeout')")
+    .run(task.id, new Date().toISOString(), new Date().toISOString());
+  expect((await (await req("/api/board/activity")).json()).idle.reason).toContain("重试等待");
+  expect((await req("/api/board/review", "POST")).status).toBe(400);
+  expect(f.repo.db.prepare("SELECT * FROM autopilot_jobs").all()).toHaveLength(1);
 });
 it("validates, updates, fires and deletes routines with firing history", async () => {
   const { req } = setup();

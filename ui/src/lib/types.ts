@@ -152,6 +152,14 @@ export interface Status {
   counts_by_status: Partial<Record<TaskStatus, number>>;
   review_pending: number;
 }
+export interface BoardActivity {
+  active: Array<{
+    kind: "coding" | "review"; status: "running" | "pending"; activity_id: number; task_id: number; identifier: string; title: string;
+    started_at: string; worktree_path: string | null; branch: string | null; identity: string | null;
+  }>;
+  idle: null | { reason: string; action: "dispatch" | "review" | null; control: "projects" | "settings" | null };
+  eligible_ready: string[];
+}
 export type NewTask = {
   project: string;
   title: string;

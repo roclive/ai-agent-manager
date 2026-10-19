@@ -13,6 +13,7 @@ export function useEventStream() {
       void client.invalidateQueries({ queryKey: ["runs"] });
       void client.invalidateQueries({ queryKey: ["projects"] });
       void client.invalidateQueries({ queryKey: ["status"] });
+      void client.invalidateQueries({ queryKey: ["board-activity"] });
       for (const key of ["events", "routines", "settings", "executors", "reviewers"])
         void client.invalidateQueries({ queryKey: [key] });
     };
@@ -37,6 +38,8 @@ export const useRuns = (live = false) =>
     queryFn: api.runs,
     refetchInterval: live ? false : 5000,
   });
+export const useBoardActivity = (live = false) =>
+  useQuery({ queryKey: ["board-activity"], queryFn: api.boardActivity, refetchInterval: live ? false : 5000 });
 export const useProjects = () =>
   useQuery({
     queryKey: ["projects"],
