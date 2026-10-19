@@ -154,6 +154,19 @@ it("detects rate limits and skips dispatch during cooldown without consuming att
   expect(f.repo.runs()).toHaveLength(1);
   expect(() => dispatch(f.repo, t.identifier)).toThrow("cooldown");
 });
+it("classifies Claude's plain-text session limit and freezes only that provider", async () => {
+  f = fixture("printf \"You've hit your session limit · resets 2:40am (Asia/Tokyo)\\n\"; exit 1");
+  f.repo.setSetting("coding_executor", "claude");
+  const t = f.task({ max_attempts: 1 });
+  const id = dispatch(f.repo, t.identifier);
+  await waitExit(f.repo, id);
+  tick(f.repo);
+  expect(f.repo.runs()[0]).toMatchObject({ status: "rate_limited", exit_code: 1 });
+  expect(f.repo.task(t.id)).toMatchObject({ status: "ready", attempts: 0 });
+  expect(f.repo.task(t.id).feedback).toBe("");
+  expect(f.repo.db.prepare("SELECT reason FROM provider_breakers WHERE provider='claude'").get()).toEqual({ reason: "Worker quota exhausted" });
+  expect(f.repo.getSetting("cooldown_until")).toBe("");
+});
 it("respects priority, max_parallel and dependencies; forced runs bypass deps and capacity", async () => {
   f = fixture("sleep 30");
   f.repo.setSetting("max_parallel", "1");

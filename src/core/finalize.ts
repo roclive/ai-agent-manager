@@ -25,20 +25,38 @@ export function logTail(text: string, n = 80) {
 }
 export function rateLimited(text: string, exitCode: number | null = null) {
   if (exitCode === 0) return false;
-  return text.split("\n").some((line) => {
-    let errorish: boolean;
+  const lines = text.split("\n");
+  return lines.some((line, index) => {
+    // JSON output can embed task text and historical logs. Only actual error
+    // event types or explicit error fields qualify; do not search their
+    // arbitrary payload text for limit phrases.
+    let structured = false;
+    let errorish = false;
     try {
       const event = JSON.parse(line);
+      structured = true;
       errorish =
         event?.type === "error" ||
         event?.type === "turn.failed" ||
         /"error"\s*:/.test(line);
     } catch {
-      errorish = /\b(error|ERROR|Error)\b/.test(line);
+      // Claude Code's CLI emits this terminal quota message as plain text,
+      // without an error prefix. Require the specific first-person phrase so
+      // quoted task/log history mentioning limits cannot trip the breaker.
+      errorish =
+        !structured && /\b(error|ERROR|Error)\b/.test(line);
     }
+    if (!structured && /\byou(?:'|’)ve hit your session limit\b/i.test(line)) {
+      // Accept only an unquoted top-level message, not task text or a
+      // historical log line nested in the worker prompt.
+      if (
+        !/^(?:\s|[>*|\[]|Task description:|Previous feedback:)/i.test(line)
+      ) return true;
+    }
+    if (index > 0 && !errorish) return false;
     return (
       errorish &&
-      /usage limit|rate[ _-]?limit(ed)?|\b429\b|quota exceeded|insufficient_quota/i.test(
+      /usage limit|rate[ _-]?limit(ed)?|\b429\b|quota exceeded|insufficient_quota|session limit/i.test(
         line,
       )
     );

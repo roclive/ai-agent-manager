@@ -125,9 +125,20 @@ it("detects rate limit text", () => {
     "Error: quota variable",
     "Error: 14290",
     '{"type":"item.completed","text":"Error: rate limit test"}',
+    "Task description: You’ve hit your session limit · resets 2:40am (Asia/Tokyo)",
     "Error: unrelated failure\n429 rate limit",
   ])
     expect(rateLimited(text, 1)).toBe(false);
+  for (const text of [
+    "You've hit your session limit · resets 2:40am (Asia/Tokyo)",
+    "You’ve hit your session limit · resets 2:40am (Asia/Tokyo)",
+    '{"type":"error","message":"You have hit your session limit"}',
+    '{"type":"turn.failed","error":{"message":"session limit reached"}}',
+  ]) {
+    expect(rateLimited(text, 1)).toBe(true);
+    expect(rateLimited(text, null)).toBe(true);
+    expect(rateLimited(text, 0)).toBe(false);
+  }
 });
 
 it("builds safe adapter commands and full prompt", () => {
