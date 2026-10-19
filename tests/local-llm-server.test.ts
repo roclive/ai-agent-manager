@@ -16,6 +16,7 @@ import {
   stopLocalModelAfterTask,
   stopLocalModelIfIdle,
 } from "../src/core/local-model.js";
+import { cleanupLocalModelOnDaemonStart } from "../src/scheduler.js";
 
 let f: ReturnType<typeof fixture>;
 let runs: { cmd: string; args: string[]; env: NodeJS.ProcessEnv }[];
@@ -252,10 +253,40 @@ it("stops omlx after a task unless keep_warm is set", () => {
   stopLocalModelAfterTask(f.repo);
   expect(runs).toHaveLength(0);
   expect(existsSync(resolve(f.repo.home, "local-model.active"))).toBe(false);
+  const idleSince = resolve(f.repo.home, "local-model.idle-since");
+  expect(Number(readFileSync(idleSince, "utf8"))).toBeGreaterThan(0);
   f.repo.setSetting("keep_warm", "0");
   stopLocalModelAfterTask(f.repo);
   expect(runs).toHaveLength(1);
   expect(runs[0].cmd).toMatch(/omlx-stop\.sh$/);
+  expect(existsSync(idleSince)).toBe(false);
+});
+
+it("passes an explicit task-completion idle timer to the omlx watchdog", () => {
+  f = fixture();
+  f.repo.setSetting("local_llm_server", "omlx");
+  startLocalLlm(f.repo, f.task().id);
+  expect(starts()[0].env.OMLX_IDLE_SINCE_FILE).toBe(
+    resolve(f.repo.home, "local-model.idle-since"),
+  );
+  const script = readFileSync(resolve("scripts/omlx-start.sh"), "utf8");
+  expect(script).toContain('IDLE_MS=$(cat "$IDLE_SINCE_FILE"');
+  expect(script).not.toContain('stat -f %m "$LOG"');
+});
+
+it("daemon startup preserves a deliberately warm omlx server", () => {
+  f = fixture();
+  enableOmlx();
+  f.repo.setSetting("keep_warm", "1");
+  f.repo.setSetting("local_llm_active_profile", "0");
+  cleanupLocalModelOnDaemonStart(f.repo);
+  expect(stopsRun()).toHaveLength(0);
+  expect(f.repo.getSetting("local_llm_active_profile")).toBe("0");
+
+  f.repo.setSetting("keep_warm", "0");
+  cleanupLocalModelOnDaemonStart(f.repo);
+  expect(stopsRun()).toHaveLength(1);
+  expect(f.repo.getSetting("local_llm_active_profile")).toBe("");
 });
 
 it("switching provider away from omlx still unloads a server this module started", () => {

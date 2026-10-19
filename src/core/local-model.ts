@@ -205,6 +205,7 @@ export function startLocalLlm(repo: Repo, taskId: number) {
       ...command.env,
       OMLX_IDLE_MINUTES: repo.getSetting("local_llm_idle_timeout_min") || "10",
       OMLX_ACTIVE_RUN_FILE: resolve(repo.home, "local-model.active"),
+      OMLX_IDLE_SINCE_FILE: resolve(repo.home, "local-model.idle-since"),
     });
     if (result.status === 0 && waitHealthy(repo))
       return record(Math.max(required, attempt) as LocalLlmProfile, "started");
@@ -217,6 +218,7 @@ export function startLocalLlm(repo: Repo, taskId: number) {
 }
 
 export function markLocalModelActive(repo: Repo, taskId: number) {
+  rmSync(resolve(repo.home, "local-model.idle-since"), { force: true });
   writeFileSync(resolve(repo.home, "local-model.active"), `${taskId}\n`);
 }
 
@@ -358,9 +360,14 @@ export function stopLocalModelIfIdle(repo: Repo) {
     stopLocalModel(LOCAL_MODEL, "omlx");
     repo.setSetting("local_llm_active_profile", "");
   }
+  rmSync(resolve(repo.home, "local-model.idle-since"), { force: true });
 }
 
 export function stopLocalModelAfterTask(repo: Repo) {
   clearLocalModelActive(repo);
-  if (repo.getSetting("keep_warm") !== "1") stopLocalModelIfIdle(repo);
+  if (repo.getSetting("keep_warm") === "1") {
+    // The watchdog must measure idleness from task completion, not from the last
+    // server log line (which can be old after a long, quiet request).
+    writeFileSync(resolve(repo.home, "local-model.idle-since"), `${Date.now()}\n`);
+  } else stopLocalModelIfIdle(repo);
 }

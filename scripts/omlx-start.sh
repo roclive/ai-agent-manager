@@ -10,6 +10,7 @@ STATE=${OMLX_STATE_DIR:-$HOME/.omlx/aam}
 PIDFILE=$STATE/omlx.pid
 LOG=$STATE/omlx.log
 ACTIVE_RUN_FILE=${OMLX_ACTIVE_RUN_FILE:-$STATE/local-run.active}
+IDLE_SINCE_FILE=${OMLX_IDLE_SINCE_FILE:-$STATE/idle-since}
 DRY=0
 while [ $# -gt 0 ]; do
   case $1 in
@@ -73,13 +74,15 @@ set -m
 PID=$!
 echo "$PID" >"$PIDFILE"
 
-# Idle watchdog: log quietness alone is insufficient—a long request may produce no log output.
-# Only unload after the timeout when AAM has no active local-model run/request marker.
+# Idle watchdog: task completion writes epoch milliseconds to IDLE_SINCE_FILE. This avoids
+# counting a long quiet request as idle merely because the server log has not changed.
 (
   while kill -0 "$PID" 2>/dev/null; do
     sleep 60
-    NOW=$(date +%s); M=$(stat -f %m "$LOG" 2>/dev/null || echo "$NOW")
-    if [ ! -f "$ACTIVE_RUN_FILE" ] && [ $((NOW - M)) -ge $((OMLX_IDLE_MINUTES * 60)) ]; then
+    NOW_MS=$(($(date +%s) * 1000))
+    IDLE_MS=$(cat "$IDLE_SINCE_FILE" 2>/dev/null || echo "$NOW_MS")
+    case $IDLE_MS in *[!0-9]*|'') IDLE_MS=$NOW_MS ;; esac
+    if [ ! -f "$ACTIVE_RUN_FILE" ] && [ -f "$IDLE_SINCE_FILE" ] && [ $((NOW_MS - IDLE_MS)) -ge $((OMLX_IDLE_MINUTES * 60000)) ]; then
       OMLX_STATE_DIR=$STATE "$ROOT/scripts/omlx-stop.sh" >/dev/null 2>&1
       break
     fi
