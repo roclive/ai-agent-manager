@@ -185,6 +185,7 @@ export class Repo {
       coding_executor: "auto",
       manager_backend: "rules",
       manager_daily_max: "120",
+      manager_fallback_to_rules: "1",
       manager_call_day: "",
       manager_call_count: "0",
       manager_local_model: "qwen2.5:3b",
@@ -409,6 +410,8 @@ export class Repo {
         )) ||
       (key === "manager_local_base_url" &&
         (!/^https?:\/\//i.test(value) || /[\r\n]/.test(value))) ||
+      (key === "manager_fallback_to_rules" && !["0", "1"].includes(value)) ||
+      (key === "manager_daily_max" && (!/^\d+$/.test(value) || Number(value) > 10000)) ||
       (key === "cooldown_until" &&
         value !== "" &&
         !Number.isFinite(Date.parse(value)))

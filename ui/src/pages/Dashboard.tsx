@@ -35,6 +35,7 @@ export function Cooldown({ until }: { until: string | null | undefined }) {
   ) : null;
 }
 export function Dashboard({ project }: { project: string }) {
+  const manager = useQuery({ queryKey: ["manager"], queryFn: () => request<{backend:string;last_decision:{ts:string;message:string}|null}>("/manager"), refetchInterval: 5000 });
   const [review, setReview] = useState<{ id: number; verdict: string } | null>(
     null,
   );
@@ -118,6 +119,10 @@ export function Dashboard({ project }: { project: string }) {
         </section>
       )}
       <Cooldown until={status.data?.cooldown_until} />
+      <section className="page-section" aria-label="Manager status">
+        <h2>Manager · {manager.data?.backend ?? "…"}</h2>
+        <p>最近决策：{manager.data?.last_decision ? `${manager.data.last_decision.message} · ${new Date(manager.data.last_decision.ts).toLocaleString("zh-CN")}` : "暂无决策"}</p>
+      </section>
       <Load
         pending={tasks.isPending || runs.isPending}
         error={tasks.error ?? runs.error ?? status.error}

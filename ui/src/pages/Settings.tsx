@@ -30,6 +30,7 @@ export function Settings() {
   const [reviewerModel, setReviewerModel] = useState<string | null>(null);
   const [promoting, setPromoting] = useState<Project | null>(null);
   const [editing, setEditing] = useState<Project | null>(null);
+  const manager = useQuery({ queryKey: ["manager"], queryFn: () => request<{backend:string;model:string;base_url:string;fallback_to_rules:boolean;daily_cap:string}>('/manager') });
   return (
     <>
       <div className="page-heading">
@@ -41,6 +42,21 @@ export function Settings() {
       <RoutingConsole />
       <UsageSnapshots />
       <ActionError error={action.error} />
+      <section className="page-section">
+        <h2>Manager</h2>
+        <Load pending={manager.isPending} error={manager.error}>
+          {manager.data && <form className="task-form" onSubmit={(e) => { e.preventDefault(); const form = new FormData(e.currentTarget); action.mutate({path:"/manager",method:"PUT",body:{manager_backend:form.get("backend"),manager_local_model:form.get("model"),manager_local_base_url:form.get("base_url"),manager_fallback_to_rules:form.has("fallback") ? "1" : "0",manager_daily_max:form.get("daily_cap")}}); }}>
+            <label>Backend<NativeSelect name="backend" defaultValue={manager.data.backend}><option value="rules">Rules</option><option value="claude">Claude</option><option value="codex">Codex</option><option value="local-small">Local small model</option></NativeSelect></label>
+            <label>Local model name<Input name="model" defaultValue={manager.data.model}/></label>
+            <label>Local model base URL<Input name="base_url" type="url" defaultValue={manager.data.base_url}/></label>
+            <label>Daily cap<Input name="daily_cap" type="number" min="0" required defaultValue={manager.data.daily_cap}/></label>
+            <label><input type="checkbox" name="fallback" defaultChecked={manager.data.fallback_to_rules}/> Fall back to rules if manager call fails</label>
+            <Button disabled={action.isPending}>Save manager settings</Button>
+            <Button type="button" variant="outline" onClick={() => { const f = document.querySelector<HTMLFormElement>(".page-section form"); if (!f) return; const data=new FormData(f); action.mutate({path:"/manager/test-connection",body:{model:data.get("model"),base_url:data.get("base_url")}}); }}>Test local connection</Button>
+            <Button type="button" variant="outline" onClick={() => action.mutate({path:"/manager/switch-to-rules"})}>Switch to rules</Button>
+          </form>}
+        </Load>
+      </section>
       <Load pending={q.isPending} error={q.error}>
         {q.data && (
           <form
