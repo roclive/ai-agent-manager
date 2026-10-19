@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { openSync, closeSync, writeFileSync } from "node:fs";
+import { openSync, closeSync, writeFileSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { createHash } from "node:crypto";
 import type { Project, Task } from "../db/index.js";
 export interface Context {
   worktree: string;
@@ -68,11 +70,41 @@ export function command(worker: string, ctx: Context): Command {
   if (worker === "opencode") return opencode.command(ctx);
   throw new Error("Unknown worker");
 }
+const CONVENTION_FILES = ["CLAUDE.md", "MANAGER.md"];
+const EXCERPT_CHARS = 4000;
+const TOOLS = [
+  "- Shell commands in the worktree (read, search, run tests).",
+  "- File read/edit/write inside the worktree.",
+  "- git for inspection (status, diff, log).",
+].join("\n");
+function conventions(project: Project) {
+  const parts: string[] = [];
+  for (const name of CONVENTION_FILES) {
+    try {
+      const text = readFileSync(join(project.repo_path, name), "utf8")
+        .replace(/\r\n/g, "\n")
+        .trim();
+      if (text)
+        parts.push(`### ${name}\n${text.slice(0, EXCERPT_CHARS)}`);
+    } catch {
+      // Missing convention files are simply omitted.
+    }
+  }
+  return parts.length ? parts.join("\n\n") : "(none)";
+}
+// Byte-stable across tasks of one project: no timestamps, run ids or
+// task-specific text. Task text is appended after this prefix.
+export function promptPrefix(project: Project) {
+  return `You are a coding worker managed by aam.\n\nProject: ${project.name}\nAcceptance: tests via ${project.test_cmd || "(no test command configured)"}\n\nRules:\n- Work only in this worktree. Do not touch files outside it.\n- Do not push.\n- Write a short summary of what changed at the end.\n\nProject conventions:\n${conventions(project)}\n\nTools:\n${TOOLS}\n\n=== TASK ===\n`;
+}
+export function promptPrefixHash(project: Project) {
+  return createHash("sha256").update(promptPrefix(project)).digest("hex");
+}
 export function prompt(project: Project, task: Task, mergeTask?: Task) {
   const mergeRules = mergeTask
     ? `\nIntegration resolution requirements:\n- First merge ${project.integration_branch} into this branch, then merge aam/${mergeTask.identifier}. Resolve every conflict preserving both sides. Do not replace the worktree with a snapshot from another branch.\n- For this merge-resolution task, git add and git commit are REQUIRED to finish resolved merges. This overrides general instructions to leave changes uncommitted.\n- Verify both refs are ancestors of HEAD with git merge-base --is-ancestor. Run the full project tests. Never claim success with missing functionality or an unfinished merge.\n`
     : "";
-  return `Project: ${project.name}\nTask: ${task.identifier}: ${task.title}\nRole: ${task.role}\n\n${task.description}\n\nAcceptance: tests via ${project.test_cmd || "(no test command configured)"}\n\n${task.feedback ? `上一轮审查意见（必须逐条处理）\n${task.feedback}\n请逐条处理每个发现，并为每个发现添加回归测试。` : "Previous feedback:\n(none)"}\n\nRules:\n- Work only in this worktree. Do not touch files outside it.\n${mergeTask ? "- Complete and commit resolved merges as specified below." : "- Do not run git add or git commit; aam commits your changes for you."}\n- Do not push.\n- Write a short summary of what changed at the end.\n${mergeRules}`;
+  return `${promptPrefix(project)}Task: ${task.identifier}: ${task.title}\nRole: ${task.role}\n\n${task.description}\n\n${task.feedback ? `上一轮审查意见（必须逐条处理）\n${task.feedback}\n请逐条处理每个发现，并为每个发现添加回归测试。` : "Previous feedback:\n(none)"}\n\n${mergeTask ? "- Complete and commit resolved merges as specified below." : "- Do not run git add or git commit; aam commits your changes for you."}\n${mergeRules}`;
 }
 export function spawnWorker(worker: string, ctx: Context) {
   const c = command(worker, ctx);

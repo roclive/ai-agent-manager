@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { Repo, type Task } from "../db/index.js";
 import { git } from "./process.js";
 import { ensureWorktree } from "./worktree.js";
-import { prompt, spawnWorker } from "../workers/index.js";
+import { prompt, promptPrefixHash, spawnWorker } from "../workers/index.js";
 import { checkQuota, QuotaUnavailableError } from "./usage.js";
 import {
   reserveProvider,
@@ -159,6 +159,11 @@ export function dispatch(repo: Repo, id: string, force = false) {
         t,
         t.resolves_task_id ? repo.task(t.resolves_task_id) : undefined,
       ),
+    );
+    repo.event(
+      "prompt_prefix",
+      promptPrefixHash(repo.project(t.project_id)),
+      t.id,
     );
     const pid = spawnWorker(worker, {
       worktree,
