@@ -190,6 +190,14 @@ export function reviewerCommand(
       ? [
           "exec",
           "--json",
+          ...(llmBackend(repo) === "ollama"
+            ? []
+            : [
+                "--ignore-user-config",
+                ...(repo.getSetting("primary_model")
+                  ? ["--model", repo.getSetting("primary_model")!]
+                  : []),
+              ]),
           "-s",
           repo.getSetting("codex_reviewer_sandbox") || "read-only",
           "-C",

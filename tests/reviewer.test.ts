@@ -22,6 +22,7 @@ afterEach(() => {
 function setup() {
   f = fixture();
   f.repo.setSetting("reviewer", "codex");
+  f.repo.setSetting("primary_model", "gpt-5.6-sol");
   const fake = resolve(f.root, "codex.sh");
   writeFileSync(
     fake,
@@ -43,6 +44,7 @@ it("defaults new installations to Codex and preserves configured budgets", () =>
   const home = resolve(f.root, "fresh");
   let repo = new Repo(home);
   expect(repo.getSetting("reviewer")).toBe("codex");
+  expect(repo.getSetting("primary_model")).toBe("gpt-5.6-sol");
   expect(repo.getSetting("auto_review_daily_max")).toBe("120");
   expect(repo.getSetting("planner_daily_max")).toBe("10");
   repo.setSetting("auto_review_daily_max", "80");
@@ -58,6 +60,9 @@ it("builds read-only Codex argv and minimal environment, retaining Claude", () =
   expect(command.args).toEqual([
     "exec",
     "--json",
+    "--ignore-user-config",
+    "--model",
+    "gpt-5.6-sol",
     "-s",
     "read-only",
     "-C",

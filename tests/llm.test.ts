@@ -58,9 +58,20 @@ it("switches failed workers without attempts, isolates late primary failures and
     f.repo.db.prepare("SELECT * FROM events WHERE kind='llm_fallback'").all(),
   ).toHaveLength(1);
 });
-it("uses the same backend for workers and Claude-configured reviews, with settings validation", () => {
+it("isolates the primary Codex reviewer from local config and uses fallback only when selected", () => {
   setup();
+  f.repo.setSetting("reviewer", "codex");
+  f.repo.setSetting("primary_model", "gpt-5.6-sol");
   expect(llmArgs(f.repo)).toEqual([]);
+  const primaryReviewer = reviewerCommand(f.repo, f.path, f.root);
+  expect(primaryReviewer.args).toEqual(
+    expect.arrayContaining([
+      "--ignore-user-config",
+      "--model",
+      "gpt-5.6-sol",
+    ]),
+  );
+  expect(primaryReviewer.args).not.toContain("--oss");
   quotaFallback(f.repo, "primary", "test quota");
   const args = llmArgs(f.repo);
   expect(args).toContain("gemma4:31b:cloud");
@@ -76,6 +87,9 @@ it("uses the same backend for workers and Claude-configured reviews, with settin
     codex: true,
     args: expect.arrayContaining(args),
   });
+  expect(reviewerCommand(f.repo, f.path, f.root).args).not.toContain(
+    "--ignore-user-config",
+  );
   for (const [key, value] of [
     ["llm_backend", "bad"],
     ["ollama_model", "bad model"],

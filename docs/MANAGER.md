@@ -110,6 +110,14 @@ and gateway configuration map directly to GW, Ollama/Codex, Claude, or Codex
 `ollama_fallback_enabled=1`; otherwise the effective backend is `primary`
 (`src/core/llm.ts:6-11`).
 
+For the primary Codex reviewer, AAM passes `--ignore-user-config` so a personal
+`~/.codex/config.toml` that points at a local Ollama endpoint cannot silently
+redirect reviews. Authentication still comes from `CODEX_HOME`; when
+`primary_model` is configured AAM passes it explicitly. The Ollama route is
+opt-in through the fallback backend and receives its own local-provider/model
+arguments. Changing `reviewer` does not change `coding_executor`, and changing
+the coding executor does not change reviewer routing.
+
 ## Current requested settings
 
 | Setting | Live value | Meaning in the current code |

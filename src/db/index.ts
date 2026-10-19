@@ -193,6 +193,7 @@ export class Repo {
       gw_context_bytes: "24000",
       codex_worker_sandbox: "workspace-write",
       codex_reviewer_sandbox: "read-only",
+      primary_model: "gpt-5.6-sol",
       ollama_fallback_enabled: "0",
       llm_backend: "primary",
       ollama_model: "gemma4:31b:cloud",
