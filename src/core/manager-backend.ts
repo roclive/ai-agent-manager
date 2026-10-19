@@ -21,12 +21,29 @@ export type ManagerBackendName = (typeof MANAGER_BACKENDS)[number];
 export interface ManagerContext {
   repo: Repo;
   runner?: Runner;
+  dryRun?: boolean;
 }
 
 export interface ManagerDecision {
   task: Task;
   worker: ProviderSelection;
   reason: string;
+}
+
+export function recordManagerDecision(
+  repo: Repo,
+  backend: string,
+  candidates: readonly Task[],
+  decision: ManagerDecision,
+  fallback?: string,
+) {
+  repo.event("manager_decision", JSON.stringify({
+    backend,
+    candidates: candidates.map((task) => task.identifier),
+    choice: { task: decision.task.identifier, worker: decision.worker.id },
+    reason: decision.reason,
+    fallback: fallback ?? null,
+  }), decision.task.id);
 }
 
 export interface ManagerBackend {
@@ -208,9 +225,13 @@ export class LlmManagerBackend extends RulesBackend {
 
   decide(
     candidates: readonly Task[],
-    { repo, runner: injected }: ManagerContext,
+    { repo, runner: injected, dryRun = false }: ManagerContext,
   ): ManagerDecision {
     const rules = new RulesBackend();
+    if (dryRun) {
+        const decision = rules.decide(candidates, { repo });
+        return { ...decision, reason: `dry-run rules preview for ${this.name}: ${decision.reason}` };
+    }
     try {
       if (!candidates.length) throw new Error("No manager candidates");
       recordCall(repo);
@@ -315,18 +336,18 @@ export class LlmManagerBackend extends RulesBackend {
       );
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      repo.event(
-        "manager_fallback",
-        `${this.name} backend failed; using rules: ${reason}`,
-      );
       if (repo.getSetting("manager_fallback_to_rules") === "0") {
+        repo.event("manager_fallback", `${this.name} backend failed; rules fallback disabled: ${reason}`);
         throw new Error(`${this.name} manager backend failed (rules fallback disabled): ${reason}`);
       }
       const decision = rules.decide(candidates, { repo });
-      return {
+      const result = {
         ...decision,
         reason: `rules fallback (${this.name}: ${reason}); ${decision.reason}`,
       };
+      repo.event("manager_fallback", `${this.name} backend failed; using rules: ${reason}`);
+      recordManagerDecision(repo, this.name, candidates, result, reason);
+      return result;
     }
   }
 }

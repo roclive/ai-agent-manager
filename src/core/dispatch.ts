@@ -19,7 +19,7 @@ import {
 
 import { providerLlmArgs, recordBackend } from "./llm.js";
 import { effortSupported, workerEffort } from "./worker-effort.js";
-import { managerBackend, RulesBackend, type ManagerBackend, type ManagerDecision } from "./manager-backend.js";
+import { managerBackend, RulesBackend, recordManagerDecision, type ManagerBackend, type ManagerDecision } from "./manager-backend.js";
 import { resolveExecutor } from "./executors.js";
 import type { ProviderSelection } from "./providers.js";
 export function dependenciesDone(repo: Repo, t: Task) {
@@ -104,7 +104,7 @@ export function dispatch(
     const decision = plannedDecision ?? choose(repo, t, backend);
     if (decision.task.id !== t.id) throw new Error("Manager decision task does not match dispatch task");
     selected = decision.worker;
-    repo.event("manager_decision", decision.reason, t.id);
+    recordManagerDecision(repo, backend.name, [t], decision);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     repo.event("quota_deferred", message, t.id);

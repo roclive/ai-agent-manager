@@ -91,6 +91,18 @@ The plist lives at `~/Library/LaunchAgents/com.aam.daemon.plist`, includes absol
 
 ## Settings, recovery, and files
 
+### Manager decision modes
+
+The manager backend controls which ready task and coding worker the scheduler selects. `rules` is the default deterministic policy. `claude`, `codex`, `local`, and `local-small` ask the configured model backend to choose from the eligible candidates; model output is checked against current task and worker policy. Decisions are stored as `manager_decision` activity events with backend, candidate identifiers, selected task and worker, and reason. When model selection fails and `manager_fallback_to_rules` is enabled (default), the event records the failure and the rules choice. Set it to `0` to keep the task ready and report the error instead of falling back.
+
+```sh
+aam settings set manager_backend rules
+aam manager dry-run
+aam manager dry-run --json
+```
+
+Dry-run previews eligible ready tasks without dispatching a worker. For model-backed modes it uses the deterministic rules preview and does not call a model or spend the manager daily call budget. Switch back to rules at any time with `aam settings set manager_backend rules`; the Activity page shows recorded manager choices and fallback events.
+
 ```sh
 aam settings get
 aam settings set max_parallel 2

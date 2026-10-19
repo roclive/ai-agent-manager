@@ -1,5 +1,7 @@
 export const eventLabels: Record<string, string> = {
   dispatch: "派工",
+  manager_decision: "经理决策",
+  manager_fallback: "经理回退",
   finalize: "完成运行",
   review: "审查",
   move: "状态变更",

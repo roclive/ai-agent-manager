@@ -105,6 +105,7 @@ export function ActivityPage({ project }: { project: string }) {
                       </Link>
                     )}
                     <p>{eventMessage(e.message)}</p>
+                    {e.kind === "manager_decision" && <ManagerDecisionDetails message={e.message} />}
                   </article>
                 );
               })}
@@ -121,4 +122,14 @@ export function ActivityPage({ project }: { project: string }) {
       <TaskDrawer />
     </>
   );
+}
+
+function ManagerDecisionDetails({ message }: { message: string }) {
+  try {
+    const decision = JSON.parse(message) as { backend?: string; candidates?: string[]; choice?: { task?: string; worker?: string }; reason?: string; fallback?: string | null };
+    if (!decision.backend || !decision.choice) return null;
+    return <p className="manager-decision">Manager · {decision.backend} chose {decision.choice.task} ({decision.choice.worker}) from {(decision.candidates ?? []).join(", ")}. {decision.reason}{decision.fallback ? ` Fallback: ${decision.fallback}` : ""}</p>;
+  } catch {
+    return null;
+  }
 }

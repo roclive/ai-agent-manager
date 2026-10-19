@@ -18,6 +18,9 @@ import {
 } from "./workers/coding-providers.mjs";
 import { resolve } from "node:path";
 import { availableMemory, stopService, topProcesses } from "./core/memory.js";
+import { dependenciesDone, globalCooldownBlocks, resolutionBusy } from "./core/dispatch.js";
+import { MANAGER_BACKENDS, RulesBackend } from "./core/manager-backend.js";
+import { managerBackend } from "./core/manager-backend.js";
 
 export const output = (v: unknown) =>
   console.log(typeof v === "string" ? v : JSON.stringify(v, null, 2));
@@ -313,6 +316,22 @@ async function register(app: Command, repo: Repo) {
   const { daemon, validateRoutine } = await import("./scheduler.js");
   const { launchd } = await import("./launchd.js");
   const { deployRuntime } = await import("./core/deploy-runtime.js");
+  const manager = app.command("manager").description("Manager decision tools");
+  manager.command("dry-run")
+    .option("--json", "print machine-readable decision")
+    .action((o) => {
+      const candidates = repo.tasks({ status: "ready" }).filter((candidate) =>
+        dependenciesDone(repo, candidate) && !resolutionBusy(repo, candidate) && !globalCooldownBlocks(repo, candidate));
+      if (!candidates.length) {
+        output({ backend: repo.getSetting("manager_backend"), candidates: [], decision: null, reason: "No eligible ready tasks" });
+        return;
+      }
+      const configured = repo.getSetting("manager_backend");
+      if (!MANAGER_BACKENDS.includes(configured as typeof MANAGER_BACKENDS[number])) throw new Error(`Invalid manager backend: ${configured}`);
+      const backend = managerBackend(repo);
+      const decision = backend.decide(candidates, { repo, dryRun: true });
+      output(o.json ? { backend: backend.name, candidates: candidates.map((t) => t.identifier), choice: { task: decision.task.identifier, worker: decision.worker.id }, reason: decision.reason, preview: true } : `${backend.name}: ${decision.task.identifier} → ${decision.worker.id}\nCandidates: ${candidates.map((t) => t.identifier).join(", ")}\nReason: ${decision.reason}\nPreview only: no dispatch`);
+    });
   app
     .command("deploy-runtime")
     .description("Safely deploy aam/integration to the launchd runtime")

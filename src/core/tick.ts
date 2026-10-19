@@ -19,7 +19,7 @@ import {
   localRunActive,
   stopLocalModelIfIdle,
 } from "./local-model.js";
-import { managerBackend, type ManagerBackend } from "./manager-backend.js";
+import { managerBackend, recordManagerDecision, type ManagerBackend } from "./manager-backend.js";
 export function tick(
   repo: Repo,
   _reviewRunner: Runner = runner,
