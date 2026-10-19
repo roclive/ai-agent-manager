@@ -13,6 +13,8 @@ export interface Context {
   provider?: string;
   // Only set for the low-quota fallback; other opencode runs keep the pinned default model.
   model?: string;
+  localBaseUrl?: string;
+  localContext?: number;
 }
 export interface Command {
   cmd: string;
@@ -57,6 +59,7 @@ export const opencode: Adapter = {
       c.promptFile,
       ...(c.provider || c.model ? [c.provider || ""] : []),
       ...(c.model ? [c.model] : []),
+      ...(c.localBaseUrl ? [c.localBaseUrl, String(c.localContext || 32768)] : []),
     ],
   }),
 };

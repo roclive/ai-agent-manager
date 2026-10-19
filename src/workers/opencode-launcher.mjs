@@ -13,8 +13,10 @@ const routingPath = resolve(dirname(promptFile), "../../opencode-routing.json");
 const policy = loadCodingProviders(routingPath);
 const requested = process.argv[4] || undefined;
 const fallbackModel = process.argv[5] || undefined;
+const fallbackBaseUrl = process.argv[6] || undefined;
+const fallbackContext = Number(process.argv[7]) || undefined;
 const providers = fallbackModel
-  ? [fallbackProvider(requested || "opencode-fallback", fallbackModel)]
+  ? [fallbackProvider(requested || "opencode-fallback", fallbackModel, fallbackBaseUrl, fallbackContext)]
   : requested
     ? routedProviders(policy).filter((provider) => provider.id === requested)
     : routedProviders(policy);

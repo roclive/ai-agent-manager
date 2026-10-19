@@ -3,6 +3,8 @@ export const FALLBACK_CONTEXT: number;
 export function fallbackProvider(
   id: string,
   model: string,
+  baseUrl?: string,
+  contextWindow?: number,
 ): {
   id: string;
   kind: "opencode" | "ollama";

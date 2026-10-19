@@ -17,7 +17,7 @@ import { QuotaUnavailableError } from "./usage.js";
 import {
   FALLBACK_PROVIDER,
   localRunActive,
-  stopLocalModelIfIdle,
+  stopLocalModelAfterTask,
 } from "./local-model.js";
 export function tick(repo: Repo, _reviewRunner: Runner = runner) {
   return withLock(repo, () => {
@@ -47,7 +47,7 @@ export function tick(repo: Repo, _reviewRunner: Runner = runner) {
       }
     }
     // Unload the 9.4 GB model as soon as its run has ended (finished, failed, timed out or lost).
-    if (localBefore && !localRunActive(repo)) stopLocalModelIfIdle(repo);
+    if (localBefore && !localRunActive(repo)) stopLocalModelAfterTask(repo);
     reconcileIntegration(repo);
     {
       for (const t of repo.tasks({ status: "ready" })) {

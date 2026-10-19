@@ -20,6 +20,8 @@ import {
   localModelWait,
   recordLocalModelMemory,
   localRunActive,
+  startLocalLlm,
+  localLlmBaseUrl,
 } from "./local-model.js";
 
 import { resolveExecutor, selectExecutor } from "./executors.js";
@@ -195,6 +197,7 @@ export function dispatch(repo: Repo, id: string, force = false) {
       promptPrefixHash(repo.project(t.project_id)),
       t.id,
     );
+    const localProfile = fallback ? startLocalLlm(repo, t.id) : 0;
     const pid = spawnWorker(worker, {
       worktree,
       promptFile,
@@ -206,7 +209,11 @@ export function dispatch(repo: Repo, id: string, force = false) {
       modelArgs: providerLlmArgs(repo, selected.id),
       provider: selected.id,
       ...(selected.id === FALLBACK_PROVIDER
-        ? { model: fallbackModel(repo) }
+        ? {
+            model: fallbackModel(repo),
+            localBaseUrl: localLlmBaseUrl(repo),
+            localContext: localProfile >= 2 ? 8192 : 32768,
+          }
         : {}),
     });
     repo.db
