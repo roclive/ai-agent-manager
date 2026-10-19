@@ -284,3 +284,24 @@ it("round-trips every model variant through global, project and task APIs", asyn
     expect(persisted.effective_executor).toEqual({ value: executor, source: "task" });
   }
 });
+
+it("persists and validates reviewer variants independently from the coding executor", async () => {
+  f = fixture();
+  const app = createApp(f.repo);
+  const req = (path: string, method = "GET", body?: unknown) =>
+    app.request(`/api/${path}`, {
+      method,
+      headers: { "Content-Type": "application/json", "X-AAM": "1" },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  await req("executors", "PUT", { coding_executor: "codex-luna" });
+  const changed = await req("reviewers", "PUT", { reviewer: "claude-opus" });
+  expect(changed.status).toBe(200);
+  expect(await changed.json()).toMatchObject({ reviewer: "claude-opus" });
+  expect((await (await req("reviewers")).json()).reviewer).toBe("claude-opus");
+  expect((await (await req("executors")).json()).coding_executor).toBe("codex-luna");
+  await req("executors", "PUT", { coding_executor: "claude" });
+  expect((await (await req("reviewers")).json()).reviewer).toBe("claude-opus");
+  expect((await req("reviewers", "PUT", { reviewer: "opencode" })).status).toBe(400);
+  expect((await req("reviewers", "PUT", { reviewer: "codex-sol", review_mode: "manual" })).status).toBe(400);
+});

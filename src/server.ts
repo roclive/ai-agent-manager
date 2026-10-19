@@ -1,5 +1,6 @@
 import { usageState, checkQuota } from "./core/usage.js";
 import { resolveExecutor, executorsView } from "./core/executors.js";
+import { reviewersView } from "./core/reviewers.js";
 import { dependencyWaiting } from "./core/dispatch.js";
 import { integrationStatus, integrate } from "./core/integration.js";
 import { cors } from "hono/cors";
@@ -340,6 +341,16 @@ export function createApp(
     })();
     repo.event("settings", `Updated executors via UI: ${keys.join(", ")}`);
     return c.json(executorsView(repo));
+  });
+  app.get("/api/reviewers", (c) => c.json(reviewersView(repo)));
+  app.put("/api/reviewers", async (c) => {
+    const p = await c.req.json<Record<string, unknown>>();
+    if (Object.keys(p).some((key) => key !== "reviewer"))
+      throw new Error("Unsupported reviewer field");
+    if (!("reviewer" in p)) throw new Error("Missing reviewer");
+    repo.setSetting("reviewer", String(p.reviewer));
+    repo.event("settings", "Updated reviewer via UI: reviewer");
+    return c.json(reviewersView(repo));
   });
   routingRoutes(app, repo);
   uiRoutes(app, repo, options.dist);

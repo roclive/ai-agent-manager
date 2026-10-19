@@ -19,6 +19,21 @@ afterEach(() => {
   f?.cleanup();
   delete process.env.AAM_FAKE_CODEX;
 });
+
+it("routes each persisted reviewer model without changing the coding executor", () => {
+  f = fixture();
+  f.repo.setSetting("coding_executor", "codex-luna");
+  f.repo.setSetting("reviewer", "claude-opus");
+  let command = reviewerCommand(f.repo, f.root, resolve(f.root, "review"));
+  expect(command.cmd).toBe(process.env.AAM_FAKE_CLAUDE || "claude");
+  expect(command.args.slice(-2)).toEqual(["--model", "opus"]);
+  expect(f.repo.getSetting("coding_executor")).toBe("codex-luna");
+  f.repo.setSetting("reviewer", "codex-sol");
+  command = reviewerCommand(f.repo, f.root, resolve(f.root, "review"));
+  expect(command.cmd).toBe(process.env.AAM_FAKE_CODEX || "codex");
+  expect(command.args[command.args.indexOf("--model") + 1]).toBe("gpt-5.6-sol");
+  expect(f.repo.getSetting("coding_executor")).toBe("codex-luna");
+});
 function setup() {
   f = fixture();
   f.repo.setSetting("reviewer", "codex");

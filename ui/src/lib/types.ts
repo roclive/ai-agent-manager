@@ -209,3 +209,17 @@ export interface ExecutorsView {
   model_note?: string;
   executors: ExecutorInfo[];
 }
+export interface ReviewerInfo {
+  id: string;
+  label: string;
+  provider: string;
+  model?: string;
+  supported: boolean;
+}
+export interface ReviewersView {
+  reviewer: string;
+  reviewer_ok: boolean | null;
+  reviewer_checked_at: string | null;
+  reviewer_error: string;
+  reviewers: ReviewerInfo[];
+}

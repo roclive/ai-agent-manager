@@ -1,5 +1,6 @@
 import { inferIdentity } from "../workers/identity.js";
 import { EXECUTOR_VALUES, validFallback } from "../core/executor-names.js";
+import { validReviewer } from "../core/reviewer-names.js";
 import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
@@ -351,7 +352,7 @@ export class Repo {
     )
       throw new Error("Expected positive number");
     if (
-      (key === "reviewer" && !["codex", "claude", "gw"].includes(value)) ||
+      (key === "reviewer" && !validReviewer(value)) ||
       (key === "default_worker" && !["codex", "opencode"].includes(value)) ||
       (key === "review_mode" && !["manual", "claude"].includes(value)) ||
       (key === "cooldown_until" &&

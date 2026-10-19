@@ -1,4 +1,4 @@
-import type { ExecutorsView, Task, Project, Run, Status, NewTask, Event } from "./types";
+import type { ExecutorsView, ReviewersView, Task, Project, Run, Status, NewTask, Event } from "./types";
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -29,6 +29,7 @@ export const api = {
   projects: () => request<Project[]>("/projects"),
   status: () => request<Status>("/status"),
   executors: () => request<ExecutorsView>("/executors"),
+  reviewers: () => request<ReviewersView>("/reviewers"),
   setExecutors: (body: Record<string, unknown>) =>
     request<ExecutorsView>("/executors", {
       method: "PUT",
