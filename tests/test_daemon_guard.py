@@ -26,6 +26,14 @@ class GuardTests(unittest.TestCase):
         self.assertEqual(stopped, [200])
         self.assertEqual(result["canonical_pid"], 100)
 
+    def test_owner_inspection_never_waits_for_network_name_resolution(self):
+        base = self.inspect(owners="100 300 400")
+        def inspect(argv):
+            if argv[0].endswith("lsof") and "-nP" not in argv:
+                raise module.subprocess.TimeoutExpired(argv, 5)
+            return base(argv)
+        self.assertEqual(module.guard("/manager/.aam", 501, inspect)["stopped_duplicate_pids"], [])
+
     def test_keeps_unrelated_daemon_without_this_database(self):
         stopped = []
         module.guard("/manager/.aam", 501, self.inspect(owners="100 300 400"), stopped.append)

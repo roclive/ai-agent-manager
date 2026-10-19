@@ -39,7 +39,7 @@ def guard(home, uid, inspect=run, stop=lambda pid: os.kill(pid, signal.SIGTERM))
         return int(ids.pop())
 
     def owners():
-        return {int(pid) for pid in inspect(["/usr/sbin/lsof", "-t", database]).split()}
+        return {int(pid) for pid in inspect(["/usr/sbin/lsof", "-nP", "-t", database]).split()}
 
     def command(pid):
         return inspect(["/bin/ps", "-p", str(pid), "-o", "command="]).strip()
