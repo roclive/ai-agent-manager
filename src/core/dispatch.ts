@@ -98,6 +98,18 @@ export function dispatch(repo: Repo, id: string, force = false) {
       .run(t.id, current.worker, current.id, started, startSha);
     const runId = Number(result.lastInsertRowid);
     reserveProvider(repo, runId, current);
+    const previous = repo.runs(t.id).find((r) => r.id !== runId && r.provider);
+    repo.event(
+      "route_selected",
+      JSON.stringify({ provider: current.id, reason: current.reason ?? "" }),
+      t.id,
+    );
+    if (previous && previous.provider !== current.id)
+      repo.event(
+        "route_switch",
+        JSON.stringify({ from: previous.provider, to: current.id }),
+        t.id,
+      );
     selected = current;
     return runId;
   });

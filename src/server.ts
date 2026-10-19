@@ -6,6 +6,7 @@ import { resolve, dirname } from "node:path";
 import { uiRoutes, routineJSON, taskDetail } from "./api/ui.js";
 import { statuses } from "./db/index.js";
 import { Hono } from "hono";
+import { routingRoutes } from "./api/routing.js";
 import { serve } from "@hono/node-server";
 import { Repo } from "./db/index.js";
 import { tick } from "./core/tick.js";
@@ -300,6 +301,7 @@ export function createApp(
     repo.event("settings", `Updated via UI: ${Object.keys(p).join(", ")}`);
     return c.json(repo.settings());
   });
+  routingRoutes(app, repo);
   uiRoutes(app, repo, options.dist);
   return app;
 }

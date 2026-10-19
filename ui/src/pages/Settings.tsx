@@ -1,4 +1,5 @@
 import { UsageSnapshots } from "../components/UsageSnapshots";
+import { RoutingConsole } from "../components/RoutingConsole";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { request } from "../lib/api";
@@ -32,6 +33,7 @@ export function Settings() {
           <p>执行器、审查与项目配置。</p>
         </div>
       </div>
+      <RoutingConsole />
       <UsageSnapshots />
       <ActionError error={action.error} />
       <Load pending={q.isPending} error={q.error}>

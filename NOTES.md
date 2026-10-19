@@ -104,3 +104,9 @@ Validation so far: merged core suite 121 passed before the final provider-isolat
 - GW output is parsed strictly (`src/core/review-gate.ts`): whole-output JSON (optional code fence), exact keys `verdict`,`notes`,`confidence`; planner JSON likewise. Invalid JSON/timeouts/errors leave the task `in_review` and never approve.
 - Gates: tests must pass for any approve (forged "pass" is rejected); confidence below threshold, an approve listing `[P0]`-`[P2]`, or a diff exceeding the bounded context/large files/>25 files is `deferred` (job status `deferred`, event `review_deferred`, no attempt consumed, not retried by the GW reviewer) for an advanced backend or a human. Health requires the exact reply `ok` and a configured model.
 - No real GW/provider smoke was run; quota is unknown. Only fake runners were used.
+
+## AAM-20 quota/routing console (2026-10-19)
+
+- `routing_overrides` setting (JSON: `paused`, `allowed`, `reserve_remaining`) is honoured by `selectProviderFor` for both policy and legacy routes; `reserve_remaining` overrides the policy value. Validated on write; unknown provider ids are rejected by `PUT /api/routing`. `allowed: null` means all backends.
+- `GET/PUT /api/routing` (src/api/routing.ts) returns per-provider quota freshness/reset/free tier ("quota_known": false means unknown), paused/allowed/cooldown state, ready-task queue count (read from the DB; the "in-memory queue" is not a separate structure) and recent `route_selected`/`route_switch`/`quota_deferred`/`routing` events. Raw usage payloads and sources of credentials are never returned.
+- Dispatch records `route_selected` (with reason) and `route_switch` events. UI: Settings → RoutingConsole. Tests use only fake workers/fetch; no browser smoke with a DB copy and no real provider smoke was run.

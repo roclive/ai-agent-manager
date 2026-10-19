@@ -1,5 +1,6 @@
 import type { Repo, Task } from "../db/index.js";
 import { checkQuota } from "./usage.js";
+import { parseOverrides } from "./routing-overrides.js";
 import {
   parseProviderPolicy,
   type Complexity,
@@ -14,6 +15,7 @@ export type {
 
 export interface ProviderSelection extends ProviderRule {
   amount: number;
+  reason?: string;
 }
 type ProviderWork = Pick<Task, "role" | "complexity" | "worker">;
 
@@ -89,12 +91,21 @@ export function selectProviderFor(
   requiredWorkers?: ProviderRule["worker"][],
 ): ProviderSelection {
   const configured = providerRules(repo);
+  const overrides = parseOverrides(repo.getSetting("routing_overrides"));
+  const blocked = (id: string) =>
+    overrides.paused.includes(id)
+      ? "paused by operator"
+      : overrides.allowed && !overrides.allowed.includes(id)
+        ? "not in allowed backends"
+        : null;
   if (!configured.length) {
     const id =
       repo.getSetting("ollama_fallback_enabled") === "1" &&
       repo.getSetting("llm_backend") === "ollama"
         ? "ollama"
         : task.worker;
+    const why = blocked(id);
+    if (why) throw new Error(`No provider available (${id}: ${why})`);
     return {
       id,
       worker: id === "ollama" ? "codex" : (task.worker as "codex" | "opencode"),
@@ -105,6 +116,7 @@ export function selectProviderFor(
       reserve_remaining: 0,
       reservation: { low: 0, medium: 0, high: 0 },
       amount: 0,
+      reason: "no provider_policy; legacy worker/backend selection",
     };
   }
   const failures: string[] = [];
@@ -120,6 +132,11 @@ export function selectProviderFor(
       failures.push(`${rule.id}: worker mismatch`);
       continue;
     }
+    const why = blocked(rule.id);
+    if (why) {
+      failures.push(`${rule.id}: ${why}`);
+      continue;
+    }
     if (!capable(rule, task)) {
       failures.push(`${rule.id}: capability/legal mismatch`);
       continue;
@@ -131,14 +148,20 @@ export function selectProviderFor(
     const amount = rule.reservation[task.complexity];
     const quota = checkQuota(repo, rule.id, {
       reserved: activeReservation(repo, rule.id),
-      reserveRemaining: rule.reserve_remaining,
+      reserveRemaining:
+        overrides.reserve_remaining[rule.id] ?? rule.reserve_remaining,
       required: amount,
     });
     if (!quota.ok) {
       failures.push(`${rule.id}: ${quota.warning || "quota unavailable"}`);
       continue;
     }
-    return { ...rule, amount };
+    const skipped = failures.length ? `; skipped ${failures.join(", ")}` : "";
+    return {
+      ...rule,
+      amount,
+      reason: `${rule.class} provider ranked first available${skipped}${quota.warning ? `; ${quota.warning}` : ""}`,
+    };
   }
   throw new Error(
     `No provider available (${failures.join("; ") || "no providers configured"})`,

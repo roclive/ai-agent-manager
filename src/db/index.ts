@@ -3,6 +3,7 @@ import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { UsageSnapshot } from "./usage.js";
 import { parseProviderPolicy } from "../core/provider-policy.js";
+import { parseOverrides } from "../core/routing-overrides.js";
 
 export const statuses = [
   "backlog",
@@ -185,6 +186,7 @@ export class Repo {
       reviewer_checked_at: "",
       reviewer_error: "",
       provider_policy: "",
+      routing_overrides: "",
       claude_ok: "",
       claude_checked_at: "",
       claude_error: "",
@@ -268,6 +270,7 @@ export class Repo {
           "UPDATE settings SET value='' WHERE key IN ('reviewer_ok','reviewer_checked_at','reviewer_error')",
         )
         .run();
+    if (key === "routing_overrides") parseOverrides(value);
     if (key === "provider_policy" && value) {
       parseProviderPolicy(value);
     }
