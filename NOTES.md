@@ -110,3 +110,8 @@ Validation so far: merged core suite 121 passed before the final provider-isolat
 - `routing_overrides` setting (JSON: `paused`, `allowed`, `reserve_remaining`) is honoured by `selectProviderFor` for both policy and legacy routes; `reserve_remaining` overrides the policy value. Validated on write; unknown provider ids are rejected by `PUT /api/routing`. `allowed: null` means all backends.
 - `GET/PUT /api/routing` (src/api/routing.ts) returns per-provider quota freshness/reset/free tier ("quota_known": false means unknown), paused/allowed/cooldown state, ready-task queue count (read from the DB; the "in-memory queue" is not a separate structure) and recent `route_selected`/`route_switch`/`quota_deferred`/`routing` events. Raw usage payloads and sources of credentials are never returned.
 - Dispatch records `route_selected` (with reason) and `route_switch` events. UI: Settings → RoutingConsole. Tests use only fake workers/fetch; no browser smoke with a DB copy and no real provider smoke was run.
+
+## AAM-21 overnight drill (2026-10-19)
+
+- `tests/overnight-drill.test.ts`: fake-worker end-to-end failover drill (cloud exhausted → opencode free → local → cooldown recovery) asserting no lost tasks/reviews and no duplicate runs after repeated ticks.
+- `scripts/gw-health-smoke.mjs` + `docs/overnight-rollout.md`: read-only GW smoke and install/restart/rollback commands. Real smoke: gateway on 127.0.0.1:4000 is alive but `/v1/models` returned 500 without a key, so real model identity and limits remain unverified/unknown. No real provider was called and no running service or main checkout was touched. `launchd uninstall/install` commands in the runbook were not executed.
