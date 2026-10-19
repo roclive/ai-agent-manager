@@ -1,5 +1,7 @@
 // Adapted from paperclipai/paperclip (MIT)
 import { WorkerBadge } from "./WorkerBadge";
+import { ExecutorBadge } from "./ExecutorSelect";
+import { effectiveExecutor } from "../lib/executor";
 import { ProjectChip } from "./ProjectChip";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -34,6 +36,8 @@ import {
   type Task,
   type TaskStatus,
   type Run,
+  type Project,
+  type ExecutorsView,
 } from "../lib/types";
 import { groupTasks, planDrop } from "../lib/board";
 import { StatusIcon } from "./StatusIcon";
@@ -84,7 +88,21 @@ function Running({ run }: { run: Run }) {
     </span>
   );
 }
-function KanbanCard({ task, run }: { task: Task; run?: Run }) {
+type ExecutorCtx = {
+  projects?: Pick<Project, "id" | "coding_executor">[];
+  executors?: Pick<ExecutorsView, "coding_executor">;
+};
+// Pending cards show the executor that dispatch will use; started work keeps its historical worker badge.
+const isPending = (t: Task) => t.status === "backlog" || t.status === "ready";
+function KanbanCard({
+  task,
+  run,
+  ctx,
+}: {
+  task: Task;
+  run?: Run;
+  ctx: ExecutorCtx;
+}) {
   const {
     attributes,
     listeners,
@@ -148,7 +166,13 @@ function KanbanCard({ task, run }: { task: Task; run?: Run }) {
           )}
       </Link>
       <div className="card-tags">
-        {task.latest_worker ? (
+        {isPending(task) ? (
+          <span data-testid={`card-executor-${task.identifier}`}>
+            <ExecutorBadge
+              effective={effectiveExecutor(task, ctx.projects, ctx.executors)}
+            />
+          </span>
+        ) : task.latest_worker ? (
           <WorkerBadge
             kind={task.latest_worker.kind}
             label={task.latest_worker.label}
@@ -186,11 +210,13 @@ function KanbanColumn({
   tasks,
   runs,
   onCreate,
+  ctx,
 }: {
   status: TaskStatus;
   tasks: Task[];
   runs: Run[];
   onCreate: (s: TaskStatus) => void;
+  ctx: ExecutorCtx;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const [collapsed, setCollapsed] = useState(status === "cancelled");
@@ -230,6 +256,7 @@ function KanbanColumn({
               <KanbanCard
                 key={t.id}
                 task={t}
+                ctx={ctx}
                 run={
                   runs.find((r) => r.task_id === t.id && isLive(r)) ??
                   t.runs?.find(isLive) ??
@@ -251,6 +278,8 @@ export function KanbanBoard({
   onCreate,
   disabled = false,
   allTasks = tasks,
+  projects,
+  executors,
 }: {
   tasks: Task[];
   runs: Run[];
@@ -261,6 +290,8 @@ export function KanbanBoard({
   onCreate: (status: TaskStatus) => void;
   disabled?: boolean;
   allTasks?: Task[];
+  projects?: ExecutorCtx["projects"];
+  executors?: ExecutorCtx["executors"];
 }) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -288,6 +319,7 @@ export function KanbanBoard({
             tasks={grouped[status]}
             runs={runs}
             onCreate={onCreate}
+            ctx={{ projects, executors }}
           />
         ))}
       </div>

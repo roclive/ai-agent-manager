@@ -155,6 +155,8 @@ export function BoardPage({ project }: { project: string }) {
       ) : (
         <KanbanBoard
           allTasks={tasks.data}
+          projects={projects.data}
+          executors={executors.data}
           tasks={filtered}
           runs={runs.data ?? []}
           onMove={(id, patch) => void move(id, patch)}
