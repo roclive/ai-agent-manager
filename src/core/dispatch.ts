@@ -11,6 +11,14 @@ import {
   selectProvider,
 } from "./providers.js";
 import { providerPolicyConfigured } from "./provider-policy.js";
+import {
+  FALLBACK_PROVIDER,
+  fallbackActive,
+  fallbackModel,
+  fallbackSelection,
+  localModelWait,
+  localRunActive,
+} from "./local-model.js";
 
 import { providerLlmArgs, recordBackend } from "./llm.js";
 export function dependenciesDone(repo: Repo, t: Task) {
@@ -40,6 +48,12 @@ export function resolutionBusy(repo: Repo, t: Task) {
         Boolean(t.resolves_task_id || other.resolves_task_id),
     );
 }
+// Low-quota fallback bypasses provider policy and quota: it is the last resort.
+function choose(repo: Repo, t: Task) {
+  return fallbackActive(repo)
+    ? fallbackSelection(repo)
+    : selectProvider(repo, t);
+}
 export function dispatch(repo: Repo, id: string, force = false) {
   const t = repo.task(id);
   if (repo.runs(t.id).some((r) => r.status === "running"))
@@ -60,19 +74,24 @@ export function dispatch(repo: Repo, id: string, force = false) {
 
   let selected;
   try {
-    selected = selectProvider(repo, t);
+    selected = choose(repo, t);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     repo.event("quota_deferred", message, t.id);
     throw new QuotaUnavailableError(message);
   }
-  const quota = checkQuota(repo, selected.id);
+  const fallback = selected.id === FALLBACK_PROVIDER;
+  if (fallback) {
+    const wait = localModelWait(repo, t.id);
+    if (wait) throw new QuotaUnavailableError(wait);
+  }
+  const quota = fallback ? { ok: true } : checkQuota(repo, selected.id);
   if (!quota.ok) {
     const message = quota.warning || `Quota exhausted for ${selected.id}`;
     repo.event("quota_deferred", message, t.id);
     throw new QuotaUnavailableError(message);
   }
-  if (quota.warning) {
+  if ("warning" in quota && quota.warning) {
     repo.event("quota_warning", quota.warning, t.id);
   }
 
@@ -90,7 +109,10 @@ export function dispatch(repo: Repo, id: string, force = false) {
   const reserve = repo.db.transaction(() => {
     // Selection and reservation share the same immediate write transaction, so
     // concurrent dispatchers cannot both spend the last available capacity.
-    const current = selectProvider(repo, t);
+    const current = choose(repo, t);
+    // Re-check the single-run lock inside the write transaction.
+    if (current.id === FALLBACK_PROVIDER && localRunActive(repo))
+      throw new Error("No provider available (local model run active)");
     const result = repo.db
       .prepare(
         "INSERT INTO runs(task_id,worker,provider,status,started_at,start_sha,log_path,last_message_path) VALUES (?,?,?,'running',?,?,'','')",
@@ -148,6 +170,9 @@ export function dispatch(repo: Repo, id: string, force = false) {
       // use its default premium provider while accounting the run to Ollama.
       modelArgs: providerLlmArgs(repo, selected.id),
       provider: selected.id,
+      ...(selected.id === FALLBACK_PROVIDER
+        ? { model: fallbackModel(repo) }
+        : {}),
     });
     repo.db
       .prepare(

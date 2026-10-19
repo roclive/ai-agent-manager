@@ -4,6 +4,7 @@ import { Cron } from "croner";
 import { Repo, type Routine } from "./db/index.js";
 import { tick } from "./core/tick.js";
 import { runner } from "./core/process.js";
+import { stopLocalModelIfIdle } from "./core/local-model.js";
 import { collectUsage, JsonOpenUsageProvider, FakeOpenUsageProvider, CliOpenUsageProvider, type OpenUsageProvider } from "./workers/openusage.js";
 
 export function validateRoutine(
@@ -131,6 +132,8 @@ export function daemon(repo: Repo, interval = 60) {
         }
       }
     }
+    // A previous daemon may have died mid-run and left the model resident.
+    if (repo.getSetting("fallback_worker") === "opencode") stopLocalModelIfIdle(repo);
     const heartbeat = () => {
       try {
         awake.check();

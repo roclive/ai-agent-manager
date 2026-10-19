@@ -182,6 +182,10 @@ export class Repo {
       llm_backend: "primary",
       ollama_model: "gemma4:31b:cloud",
       ollama_base_url: "http://127.0.0.1:11434/api/codex/v1",
+      fallback_worker: "none",
+      fallback_active: "0",
+      opencode_fallback_model: "ollama/gemma4:e4b-mlx",
+      local_model_min_free_gb: "12",
       reviewer_ok: "",
       reviewer_checked_at: "",
       reviewer_error: "",
@@ -231,6 +235,20 @@ export class Repo {
       throw new Error("Expected 0 or 1");
     if (key === "ollama_fallback_enabled" && !["0", "1"].includes(value))
       throw new Error("Expected 0 or 1");
+    if (key === "fallback_worker" && !["none", "opencode"].includes(value))
+      throw new Error("Expected none or opencode");
+    if (key === "fallback_active" && !["0", "1"].includes(value))
+      throw new Error("Expected 0 or 1");
+    if (
+      key === "opencode_fallback_model" &&
+      !/^[\w.-]+\/[\w.:-]+$/.test(value)
+    )
+      throw new Error("Expected provider/model");
+    if (
+      key === "local_model_min_free_gb" &&
+      !(Number.isFinite(Number(value)) && Number(value) >= 0)
+    )
+      throw new Error("Expected nonnegative number");
     if (key === "llm_backend" && !["primary", "ollama"].includes(value))
       throw new Error("Invalid LLM backend");
     if (key === "gw_base_url") {

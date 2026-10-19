@@ -9,6 +9,8 @@ export interface Context {
   sandbox?: string;
   modelArgs?: string[];
   provider?: string;
+  // Only set for the low-quota fallback; other opencode runs keep the pinned default model.
+  model?: string;
 }
 export interface Command {
   cmd: string;
@@ -51,7 +53,8 @@ export const opencode: Adapter = {
       fileURLToPath(new URL("./opencode-launcher.mjs", import.meta.url)),
       c.worktree,
       c.promptFile,
-      ...(c.provider ? [c.provider] : []),
+      ...(c.provider || c.model ? [c.provider || ""] : []),
+      ...(c.model ? [c.model] : []),
     ],
   }),
 };

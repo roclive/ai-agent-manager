@@ -7,13 +7,17 @@ import {
   openCodeConfigContent,
   routedProviders,
 } from "./coding-providers.mjs";
+import { fallbackProvider, fallbackRunArgs } from "./opencode-fallback.mjs";
 const [worktree, promptFile] = process.argv.slice(2);
 const routingPath = resolve(dirname(promptFile), "../../opencode-routing.json");
 const policy = loadCodingProviders(routingPath);
-const requested = process.argv[4];
-const providers = requested
-  ? routedProviders(policy).filter((provider) => provider.id === requested)
-  : routedProviders(policy);
+const requested = process.argv[4] || undefined;
+const fallbackModel = process.argv[5] || undefined;
+const providers = fallbackModel
+  ? [fallbackProvider(requested || "opencode-fallback", fallbackModel)]
+  : requested
+    ? routedProviders(policy).filter((provider) => provider.id === requested)
+    : routedProviders(policy);
 if (requested && !providers.length)
   throw new Error(`Provider ${requested} is not in the configured route`);
 const prompt = readFileSync(promptFile, "utf8");
@@ -31,18 +35,20 @@ const result = await failover(
           at: new Date().toISOString(),
         }),
       );
-      const args = [
-        "run",
-        "--pure",
-        "--format",
-        "json",
-        "--dir",
-        worktree,
-        ...(provider.model ? ["--model", provider.model] : []),
-        ...(policy.agent ? ["--agent", policy.agent] : []),
-        ...(policy.auto ? ["--auto"] : []),
-        prompt,
-      ];
+      const args = fallbackModel
+        ? fallbackRunArgs(worktree, fallbackModel, prompt)
+        : [
+            "run",
+            "--pure",
+            "--format",
+            "json",
+            "--dir",
+            worktree,
+            ...(provider.model ? ["--model", provider.model] : []),
+            ...(policy.agent ? ["--agent", policy.agent] : []),
+            ...(policy.auto ? ["--auto"] : []),
+            prompt,
+          ];
       const configContent = openCodeConfigContent(
         policy,
         provider,

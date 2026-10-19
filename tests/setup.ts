@@ -4,12 +4,15 @@ vi.mock("node:child_process", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:child_process")>();
   const guard = (cmd: unknown, args: unknown) => {
     if (
-      ["codex", "opencode", "claude"].includes(String(cmd)) ||
+      ["codex", "opencode", "claude", "ollama", "vm_stat"].includes(
+        String(cmd),
+      ) ||
       (Array.isArray(args) &&
         args.some(
           (a) =>
-            ["codex", "opencode", "claude"].includes(String(a)) ||
-            String(a).endsWith("opencode-launcher.mjs"),
+            ["codex", "opencode", "claude", "ollama", "vm_stat"].includes(
+              String(a),
+            ) || String(a).endsWith("opencode-launcher.mjs"),
         ))
     )
       throw new Error("Real AI CLI invocation forbidden in tests");

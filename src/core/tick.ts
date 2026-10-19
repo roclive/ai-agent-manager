@@ -10,9 +10,17 @@ import { collectAutopilot, promoteIdle, startAutopilot } from "./autopilot.js";
 import { exportViews } from "../views/index.js";
 import { QuotaUnavailableError } from "./usage.js";
 import { providerPolicyConfigured } from "./provider-policy.js";
+import {
+  FALLBACK_PROVIDER,
+  localRunActive,
+  stopLocalModelIfIdle,
+} from "./local-model.js";
 export function tick(repo: Repo, _reviewRunner: Runner = runner) {
   return withLock(repo, () => {
     repo.setSetting("last_tick_at", new Date().toISOString());
+    const localBefore = repo
+      .runs()
+      .some((r) => r.status === "running" && r.provider === FALLBACK_PROVIDER);
     for (const r of repo.runs().filter((r) => r.status === "running")) {
       try {
         const exited = existsSync(resolve(dirname(r.log_path), "exit_code"));
@@ -34,6 +42,8 @@ export function tick(repo: Repo, _reviewRunner: Runner = runner) {
         repo.event("reap_error", String(e), r.task_id);
       }
     }
+    // Unload the 9.4 GB model as soon as its run has ended (finished, failed, timed out or lost).
+    if (localBefore && !localRunActive(repo)) stopLocalModelIfIdle(repo);
     reconcileIntegration(repo);
     if (
       providerPolicyConfigured(repo.getSetting("provider_policy")) ||
