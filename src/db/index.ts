@@ -184,6 +184,11 @@ export class Repo {
       default_worker: "codex",
       coding_executor: "auto",
       manager_backend: "rules",
+      manager_daily_max: "120",
+      manager_call_day: "",
+      manager_call_count: "0",
+      manager_local_model: "qwen2.5:3b",
+      manager_local_base_url: "http://127.0.0.1:11434/v1",
       executor_fallback: "",
       review_mode: "manual",
       cooldown_until: "",
@@ -257,7 +262,11 @@ export class Repo {
     if (!Object.hasOwn(this.settings(), key))
       throw new Error("Unknown setting");
     if (
-      ["auto_review_daily_max", "planner_daily_max"].includes(key) &&
+      [
+        "auto_review_daily_max",
+        "planner_daily_max",
+        "manager_daily_max",
+      ].includes(key) &&
       (!Number.isInteger(Number(value)) || Number(value) < 0)
     )
       throw new Error("Expected nonnegative integer");
@@ -391,7 +400,15 @@ export class Repo {
       (key === "default_worker" && !["codex", "opencode"].includes(value)) ||
       (key === "review_mode" && !["manual", "claude"].includes(value)) ||
       (key === "manager_backend" &&
-        !["rules", "claude", "codex", "local-small"].includes(value)) ||
+        !["rules", "claude", "codex", "local", "local-small"].includes(
+          value,
+        )) ||
+      (key === "manager_local_model" &&
+        !/(?:^|[:/-])(?:[0-2](?:\.\d+)?|3(?:\.0+)?)b(?:$|[-_:])/i.test(
+          value,
+        )) ||
+      (key === "manager_local_base_url" &&
+        (!/^https?:\/\//i.test(value) || /[\r\n]/.test(value))) ||
       (key === "cooldown_until" &&
         value !== "" &&
         !Number.isFinite(Date.parse(value)))
