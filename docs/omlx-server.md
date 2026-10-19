@@ -31,3 +31,19 @@ Source: GitHub releases of jundot/omlx (v0.7.0, v0.7.1rc1). The jump spans many 
 - Memory gate is removed (`local_model_min_free_gb=0`). Workers force-run gemma4 e4b-mlx. On OOM, timeout or swap storm, retry in order and record the level that worked: (1) SSD offload of the KV/paged cache with a lower per-model memory limit (`--paged-ssd-cache-dir`, `--memory-guard`/`--memory-guard-gb`), (2) smaller context (e.g. 8192), (3) concurrency/batch=1 (`--max-concurrent-requests 1`).
 - Never signal the aam daemon/UI, OntoKB api, Paperclip, or the Claude/Codex/ChatGPT apps.
 - Real smoke test belongs to AAM-31; tests use fakes.
+
+## Configuration and wrappers (AAM-28)
+
+Config lives in `config/omlx.env` (no secrets); omlx's own `~/.omlx/settings.json` is left untouched (it holds an API key). All settings are passed as CLI flags by the wrapper.
+
+| setting | value |
+|---|---|
+| Bind | `127.0.0.1:8000` only (the script refuses any other host) |
+| Weights | gemma4 e4b MLX is **not on disk** at the time of writing (only Qwen3.5 0.8B/4B exist). The script searches `OMLX_WEIGHT_CANDIDATES`, symlinks the first hit into `~/.omlx/aam-models/gemma4-e4b-mlx`, and **never downloads**. Fetch explicitly after checking the size (>4 GB needs a deliberate decision) |
+| SSD cache | `~/.omlx/aam-ssd-cache`, cap `20GB` (`--paged-ssd-cache-dir/-max-size`) |
+| Memory | `--memory-guard-gb` = total RAM - 6 GB reserve. Start also refuses if <6 GB is available unless `OMLX_FORCE=1` (this is a system-reserve guard, not the removed 12 GB gate) |
+| Concurrency | `--max-concurrent-requests 2`; ladder step 3 uses `--max-concurrent 1`. Step 2 (context 8192) is a client/opencode setting |
+| Idle unload | omlx has no idle-TTL flag; a watchdog stops the server after 10 min without log activity (stopping unloads the model) |
+| Autostart | none: no launchd plist, no KeepAlive, no `brew services`. pid file `~/.omlx/aam/omlx.pid`, log `omlx.log` |
+
+Commands: `scripts/omlx-start.sh --dry-run` validates everything without starting omlx or loading a model; `scripts/omlx-start.sh` starts explicitly; `scripts/omlx-stop.sh` stops via pid file only (never by name). Before and after a real run, free memory with `scripts/local-llm-memfree.sh` and record available memory (see `docs/local-llm-memory.md`); never `sudo purge`. Real smoke belongs to AAM-31.
