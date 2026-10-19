@@ -1,3 +1,4 @@
+import { isClaudeWorkerScript } from "../workers/claude-script.js";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { Repo, type Task } from "../db/index.js";
@@ -131,6 +132,8 @@ export function dispatch(repo: Repo, id: string, force = false) {
       throw new Error("No provider available (local model run active)");
     identity = detectIdentity(current.worker, {
       modelArgs: providerLlmArgs(repo, current.id, current.model),
+      effort: workerEffort(repo),
+      fast: repo.getSetting("worker_fast_mode") !== "0",
       ...(current.id === FALLBACK_PROVIDER
         ? { model: fallbackModel(repo) }
         : current.model
@@ -208,7 +211,10 @@ export function dispatch(repo: Repo, id: string, force = false) {
       // use its default premium provider while accounting the run to Ollama.
       modelArgs: providerLlmArgs(repo, selected.id, selected.model),
       provider: selected.id,
-      ...(effortSupported(worker) ? { effort: workerEffort(repo) } : {}),
+      ...(effortSupported(worker) || (process.env.AAM_FAKE_WORKER && isClaudeWorkerScript(process.env.AAM_FAKE_WORKER))
+        ? { effort: workerEffort(repo) } : {}),
+      fast: repo.getSetting("worker_fast_mode") !== "0",
+      timeoutMin: Number(repo.getSetting("worker_timeout_min") || 45),
       ...(selected.id === FALLBACK_PROVIDER
         ? { model: fallbackModel(repo) }
         : selected.model

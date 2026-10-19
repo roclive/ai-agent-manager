@@ -1,3 +1,5 @@
+import { isClaudeWorkerScript } from "./claude-script.js";
+import { claudeSettings } from "../core/claude-settings.js";
 import { closeSync, openSync, readSync, existsSync, readFileSync } from "node:fs";
 import { basename } from "node:path";
 
@@ -65,16 +67,24 @@ export function scriptIdentity(script: string): WorkerIdentity {
 // Identity of the executor that is really spawned for this run.
 export function detectIdentity(
   worker: string,
-  opts: { model?: string; modelArgs?: string[] } = {},
+  opts: { model?: string; modelArgs?: string[]; effort?: string; fast?: boolean } = {},
   fakeWorker = process.env.AAM_FAKE_WORKER,
 ): WorkerIdentity {
-  if (fakeWorker) return scriptIdentity(fakeWorker);
+  if (fakeWorker && !isClaudeWorkerScript(fakeWorker)) return scriptIdentity(fakeWorker);
+  if (fakeWorker) {
+    opts = { ...opts, model: worker === "claude" ? opts.model : undefined };
+    worker = "claude";
+  }
   const args = opts.modelArgs ?? [];
   const i = args.indexOf("-m");
   const model = opts.model || (i >= 0 ? args[i + 1] : "") || "default";
   if (worker === "codex") return makeIdentity("codex", model);
   if (worker === "opencode") return makeIdentity("opencode", model);
-  if (worker === "claude") return makeIdentity("claude", opts.model || "sonnet");
+  if (worker === "claude") {
+    const config = claudeSettings(opts);
+    return { kind: "claude", model: config.model,
+      label: `Claude (${config.model}, ${config.effort}${config.fast ? ", fast" : ""})` };
+  }
   if (worker === "pi" || worker === "hermes")
     return makeIdentity(worker, opts.model ?? "");
   return { kind: "other", model: "", label: worker };

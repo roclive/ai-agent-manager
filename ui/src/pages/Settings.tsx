@@ -108,6 +108,12 @@ export function Settings() {
               />
             </label>
             <label>
+              Claude 工作执行器快速模式
+              <NativeSelect name="worker_fast_mode" defaultValue={q.data.worker_fast_mode || "1"}>
+                <option value="1">开启</option><option value="0">关闭</option>
+              </NativeSelect>
+            </label>
+            <label>
               审查模式
               <NativeSelect
                 name="review_mode"
@@ -125,6 +131,24 @@ export function Settings() {
               >
                 <option value="codex">Codex</option>
                 <option value="claude">Claude</option>
+              </NativeSelect>
+            </label>
+            <label>
+              Claude 审查模型
+              <NativeSelect name="reviewer_model" defaultValue={q.data.reviewer_model || "opus"}>
+                <option value="opus">Opus</option><option value="sonnet">Sonnet</option><option value="haiku">Haiku</option>
+              </NativeSelect>
+            </label>
+            <label>
+              Claude 审查思考强度
+              <NativeSelect name="reviewer_effort" defaultValue={q.data.reviewer_effort || "max"}>
+                {["low", "medium", "high", "xhigh", "max"].map(value => <option key={value} value={value}>{value}</option>)}
+              </NativeSelect>
+            </label>
+            <label>
+              Claude 审查快速模式
+              <NativeSelect name="reviewer_fast_mode" defaultValue={q.data.reviewer_fast_mode || "1"}>
+                <option value="1">开启</option><option value="0">关闭</option>
               </NativeSelect>
             </label>
             {[

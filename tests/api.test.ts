@@ -255,7 +255,7 @@ it("exposes executor settings, validates them and reports the effective executor
   expect(view.worker_effort).toBe("medium");
   expect(view.executors.map((e: { id: string }) => e.id)).toContain("hermes");
   expect((await req("executors", "PUT", { coding_executor: "x" })).status).toBe(400);
-  expect((await req("executors", "PUT", { worker_effort: "max" })).status).toBe(400);
+  expect((await req("executors", "PUT", { worker_effort: "invalid" })).status).toBe(400);
   expect((await (await req("executors")).json()).worker_effort).toBe("medium");
   expect((await req("executors", "PUT", { reviewer: "codex" })).status).toBe(400);
   await req("projects/T", "PATCH", { coding_executor: "pi" });

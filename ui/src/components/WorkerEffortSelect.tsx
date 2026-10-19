@@ -2,7 +2,7 @@ import { useExecutors } from "../lib/queries";
 import { NativeSelect } from "./ui/select";
 
 const labels: Record<string, string> = {
-  default: "默认（使用 CLI/模型默认值）",
+  default: "默认（Claude: max；其他: CLI 默认值）",
   low: "low",
   medium: "medium",
   high: "high",
@@ -39,7 +39,7 @@ export function WorkerEffortSelect({
           ? { value, onChange: (event) => onChange(event.target.value) }
           : { defaultValue: value })}
       >
-        {(q.data?.effort_choices ?? ["default", "low", "medium", "high"]).map(
+        {(q.data?.effort_choices ?? ["default", "low", "medium", "high", "xhigh", "max"]).map(
           (effort) => <option key={effort} value={effort}>{labels[effort] ?? effort}</option>,
         )}
       </NativeSelect>

@@ -1,3 +1,4 @@
+import { reviewerClaudeSettings } from "./claude-settings.js";
 import { rateLimited } from "./finalize.js";
 import {
   llmArgs,
@@ -150,6 +151,14 @@ export const claudeArgs: string[] = [
   "--append-system-prompt",
   "You have no tools. Never emit tool calls or <invoke> blocks. Answer in one turn using only the task, diff and test output in the prompt, and reply with the final JSON object only.",
 ];
+export function claudeReviewerArgs(repo: Repo): string[] {
+  const config = reviewerClaudeSettings(repo);
+  const args = [...claudeArgs];
+  args[args.indexOf("--settings") + 1] = JSON.stringify({
+    disableAllHooks: true, fastMode: config.fast,
+  });
+  return [...args, "--model", config.model, "--effort", config.effort];
+}
 export const healthSetting = (repo: Repo, key: string) =>
   repo.getSetting(`reviewer_${key}`) ||
   (repo.getSetting("reviewer") === "claude" && llmBackend(repo) === "primary"
@@ -209,7 +218,7 @@ export function reviewerCommand(
           resolve(dir, "last.md"),
           "-",
         ]
-      : claudeArgs,
+      : claudeReviewerArgs(repo),
     cwd,
     env: cleanEnv(),
     codex,

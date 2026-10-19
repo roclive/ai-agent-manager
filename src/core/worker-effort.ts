@@ -1,6 +1,6 @@
 import type { Repo } from "../db/index.js";
 
-export const WORKER_EFFORTS = ["default", "low", "medium", "high"] as const;
+export const WORKER_EFFORTS = ["default", "low", "medium", "high", "xhigh", "max"] as const;
 export type WorkerEffort = (typeof WORKER_EFFORTS)[number];
 
 export function parseWorkerEffort(value: unknown): WorkerEffort {

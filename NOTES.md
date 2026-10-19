@@ -125,3 +125,9 @@ Validation so far: merged core suite 121 passed before the final provider-isolat
   daemon-guard is locally installed policy and has no canonical generator in this repository.
 
 - Reviewer/planner subprocess stdout and stderr now stream directly to private log files, removing the former 1 MiB pipe buffer cap. Result collection permits responses up to 64 MiB and bounds diagnostic tails to 256 KiB. Oversized final responses retain logs and pause automatic retries for the unchanged task with a visible review_stalled event; no task attempt is consumed. Task updates after remediation resume review.
+
+## AAM-66
+
+- Claude adapter/reviewer defaults are Opus, max effort and fast mode; explicitly selected model variants (including Sonnet) remain authoritative. Existing routing, reviewer choice, and the 45-minute database timeout default remain unchanged; a saved 60-minute timeout is passed through to the script alarm.
+- Reuse `worker_effort` (default resolves to max for Claude); add `worker_fast_mode`, and independent `reviewer_model`, `reviewer_effort`, `reviewer_fast_mode`. AAM_CLAUDE_MODEL/EFFORT/FAST override both roles and the recorded worker identity. Fast accepts false/0 as disabled.
+- Reviewer health invalidation clears only health fields, preserving the new configuration. Runtime deployment and live settings were not modified.
