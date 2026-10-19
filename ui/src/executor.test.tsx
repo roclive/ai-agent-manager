@@ -47,3 +47,53 @@ it("offers an inherit option and shows effective executor with source", async ()
   await screen.findByRole("option", { name: "继承" });
   expect(screen.getByText("claude · 项目")).toHaveAttribute("data-source", "project");
 });
+
+import { effectiveExecutor } from "./lib/executor";
+import { Backlog } from "./pages/Backlog";
+import { MemoryRouter } from "react-router-dom";
+
+it("resolves effective executor as task > project > global, ignoring legacy worker", () => {
+  const projects = [
+    { id: 1, coding_executor: "hermes" },
+    { id: 2, coding_executor: "" },
+  ];
+  const g = { coding_executor: "claude" };
+  const t = (o: object) => ({ project_id: 1, worker: "codex", ...o }) as never;
+  expect(effectiveExecutor(t({ executor: "pi" }), projects, g)).toEqual({ value: "pi", source: "task" });
+  expect(effectiveExecutor(t({}), projects, g)).toEqual({ value: "hermes", source: "project" });
+  expect(effectiveExecutor(t({ project_id: 2 }), projects, g)).toEqual({ value: "claude", source: "global" });
+  expect(effectiveExecutor(t({ project_id: 2 }), projects, { coding_executor: "" })).toEqual({ value: "auto", source: "global" });
+  const server = { value: "codex", source: "global" as const };
+  expect(effectiveExecutor(t({ project_id: 2, effective_executor: server }), undefined, undefined)).toBe(server);
+});
+
+it("backlog filter options follow API, labels/filter use effective executor and refresh on settings change", async () => {
+  let current = { ...view, executors: [...view.executors, { id: "pi", label: "pi", installed: true, install_hint: "", cooldown_until: null }] };
+  const task = (id: number, extra: object) => ({
+    id, project_id: 1, identifier: `AAM-${id}`, title: `t${id}`, description: "", status: "ready",
+    priority: "P1", role: "any", worker: "codex", depends_on: "[]", updated_at: "2026-01-01", ...extra,
+  });
+  const tasks = [task(1, {}), task(2, { executor: "pi" })];
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    if (String(url).includes("/executors")) return new Response(JSON.stringify(current));
+    if (String(url).includes("/projects")) return new Response(JSON.stringify([{ id: 1, key: "AAM", name: "AAM" }]));
+    return new Response(JSON.stringify(tasks));
+  }));
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter><Backlog project="" /></MemoryRouter>
+    </QueryClientProvider>,
+  );
+  await screen.findByRole("option", { name: "pi" });
+  expect(screen.getByRole("option", { name: "Hermes Agent (Nous)" })).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByTestId("executor-AAM-1")).toHaveTextContent("claude · 全局"));
+  expect(screen.getByTestId("executor-AAM-2")).toHaveTextContent("pi · 任务");
+  fireEvent.change(screen.getByLabelText("筛选执行器"), { target: { value: "pi" } });
+  expect(screen.queryByTestId("executor-AAM-1")).toBeNull();
+  expect(screen.getByTestId("executor-AAM-2")).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("筛选执行器"), { target: { value: "" } });
+  current = { ...current, coding_executor: "opencode" };
+  await client.invalidateQueries({ queryKey: ["executors"] });
+  await waitFor(() => expect(screen.getByTestId("executor-AAM-1")).toHaveTextContent("opencode · 全局"));
+});

@@ -67,6 +67,36 @@ export function ExecutorSelect({
   );
 }
 
+// Filter dropdown: options come from the executors API, so new executors appear automatically.
+export function ExecutorFilter({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const q = useExecutors();
+  const executors = q.data?.executors ?? [];
+  return (
+    <NativeSelect
+      aria-label="筛选执行器"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      <option value="">全部执行器</option>
+      <option value="auto">auto</option>
+      {executors.map((e) => (
+        <option key={e.id} value={e.id}>
+          {e.label}
+        </option>
+      ))}
+      {value && value !== "auto" && !executors.some((e) => e.id === value) && (
+        <option value={value}>{value}</option>
+      )}
+    </NativeSelect>
+  );
+}
+
 export function ExecutorBadge({ effective }: { effective?: EffectiveExecutor }) {
   if (!effective) return null;
   return (
