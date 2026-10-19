@@ -142,6 +142,19 @@ describe("manager decision backends", () => {
       (cmd, args, cwd, input, timeout) => {
         expect(cmd).toBe("claude");
         expect(args).toContain("-p");
+        expect(args).toContain("--tools");
+        expect(args[args.indexOf("--tools") + 1]).toBe("");
+        expect(args).toContain("--strict-mcp-config");
+        expect(args[args.indexOf("--mcp-config") + 1]).toBe(
+          '{"mcpServers":{}}',
+        );
+        expect(args[args.indexOf("--settings") + 1]).toBe(
+          '{"disableAllHooks":true}',
+        );
+        expect(args).toContain("--setting-sources");
+        expect(args[args.indexOf("--setting-sources") + 1]).toBe("");
+        expect(args).toContain("--disable-slash-commands");
+        expect(args).toContain("--no-session-persistence");
         expect(timeout).toBe(30_000);
         expect(
           JSON.parse(input!.slice(input!.indexOf("[")))[0].description,
