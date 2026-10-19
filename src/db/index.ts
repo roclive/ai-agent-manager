@@ -185,7 +185,7 @@ export class Repo {
       fallback_worker: "none",
       fallback_active: "0",
       opencode_fallback_model: "ollama/gemma4:e4b-mlx",
-      local_model_min_free_gb: "12",
+      local_model_min_free_gb: "0",
       reviewer_ok: "",
       reviewer_checked_at: "",
       reviewer_error: "",

@@ -17,6 +17,7 @@ import {
   fallbackModel,
   fallbackSelection,
   localModelWait,
+  recordLocalModelMemory,
   localRunActive,
 } from "./local-model.js";
 
@@ -84,6 +85,7 @@ export function dispatch(repo: Repo, id: string, force = false) {
   if (fallback) {
     const wait = localModelWait(repo, t.id);
     if (wait) throw new QuotaUnavailableError(wait);
+    recordLocalModelMemory(repo, t.id);
   }
   const quota = fallback ? { ok: true } : checkQuota(repo, selected.id);
   if (!quota.ok) {

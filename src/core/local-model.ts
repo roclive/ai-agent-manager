@@ -5,7 +5,7 @@ import { runner } from "./process.js";
 import type { ProviderSelection } from "./providers.js";
 
 // gemma4:e4b-mlx keeps ~9.4 GB resident. Everything that may load it goes through this module so
-// that at most one run exists, memory is checked first, and the model is unloaded afterwards.
+// that at most one run exists, memory is recorded first, and the model is unloaded afterwards.
 export const LOCAL_MODEL = "gemma4:e4b-mlx";
 export const FALLBACK_PROVIDER = "opencode-fallback";
 const WAIT_EVENT = "local_model_waiting_memory";
@@ -81,27 +81,31 @@ function waitEvent(repo: Repo, taskId: number, message: string) {
 }
 
 // Returns why the local model cannot start now, or null. Never starts the model.
+// Only the single-run lock refuses; memory is informational (local_model_memory event).
 export function localModelWait(repo: Repo, taskId: number) {
   if (localRunActive(repo)) {
     const message = "another local-model run is active";
     waitEvent(repo, taskId, message);
     return message;
   }
-  const min = Number(repo.getSetting("local_model_min_free_gb"));
+  return null;
+}
+
+// Informational only: records available memory before a start; never blocks, never throws.
+export function recordLocalModelMemory(repo: Repo, taskId: number) {
   let free = NaN;
   try {
     free = availableGb(localModelHost.vmStat());
   } catch {
-    /* treated as unknown below */
+    /* unknown */
   }
-  if (!(free >= min)) {
-    const message = Number.isFinite(free)
-      ? `free memory ${free.toFixed(1)} GB below required ${min} GB`
-      : "free memory unknown (vm_stat unusable)";
-    waitEvent(repo, taskId, message);
-    return message;
-  }
-  return null;
+  repo.event(
+    "local_model_memory",
+    Number.isFinite(free)
+      ? `available memory ${free.toFixed(1)} GB before local model start`
+      : "available memory unknown (vm_stat unusable)",
+    taskId,
+  );
 }
 
 export function stopLocalModel(model = LOCAL_MODEL) {

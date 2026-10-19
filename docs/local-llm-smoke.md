@@ -49,3 +49,7 @@ To rerun once >= 12 GB is available (e.g. after quitting the desktop apps and ru
 
 - (a) **opencode as worker is the supported route.** That is the AAM-22 design, and the manager (Claude Code) stays on Anthropic models.
 - (b) Pointing Claude Code itself at a local endpoint via `ANTHROPIC_BASE_URL` (with `ANTHROPIC_AUTH_TOKEN` set to a dummy value) is only viable if the endpoint speaks the Anthropic Messages API (`/v1/messages`, including tool use and streaming). I did not verify this here. The Ollama OpenAI-style `/v1` endpoint used by AAM-22 is not enough on its own, and the omlx server on :8000 was not probed. Even if the protocol works, a 4B-class model is a weak fit for the manager role (planning, review, tool use), and it would need the same ~12 GB memory headroom. Recommendation: do not use it as the manager; keep the local model as a worker only. This is unverified evidence, with no secrets involved.
+
+## Update (AAM-41, 2026-10-19): memory gate removed
+
+The 12 GB gate described above no longer exists in code. `local_model_min_free_gb` defaults to 0 (0/unset = no memory refusal) and an unreadable `vm_stat` never blocks dispatch. Only the single-run lock, process-group kill on timeout and unload after idle remain. Available memory before start is recorded as the informational event `local_model_memory`. References to the "12 GB guard" above are historical.

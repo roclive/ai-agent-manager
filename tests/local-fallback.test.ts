@@ -52,7 +52,7 @@ it("has safe defaults and validates the new settings", () => {
   expect(f.repo.getSetting("opencode_fallback_model")).toBe(
     "ollama/gemma4:e4b-mlx",
   );
-  expect(f.repo.getSetting("local_model_min_free_gb")).toBe("12");
+  expect(f.repo.getSetting("local_model_min_free_gb")).toBe("0");
   expect(() => f.repo.setSetting("fallback_worker", "codex")).toThrow();
   expect(() =>
     f.repo.setSetting("opencode_fallback_model", "no-slash"),
@@ -119,24 +119,21 @@ it("parses vm_stat free+inactive+speculative", () => {
   expect(availableGb("garbage")).toBeNaN();
 });
 
-it("holds a ready task below the memory threshold, rate-limits the event, then releases", () => {
+it("does not refuse at low memory and records local_model_memory", () => {
   f = fixture();
   enable();
   const t = f.task();
-  memory = 11.9;
-  tick(f.repo);
-  tick(f.repo);
-  expect(f.repo.task(t.id).status).toBe("ready");
-  expect(f.repo.runs()).toHaveLength(0);
-  expect(waits()).toHaveLength(1);
-  memory = 12.5;
+  memory = 0.5;
   tick(f.repo);
   expect(f.repo.task(t.id).status).toBe("in_progress");
   expect(f.repo.runs()[0].provider).toBe("opencode-fallback");
-  expect(f.repo.runs()[0].worker).toBe("opencode");
+  expect(waits()).toHaveLength(0);
+  expect(
+    f.repo.events(100).filter((e: any) => e.kind === "local_model_memory"),
+  ).toHaveLength(1);
 });
 
-it("treats unusable vm_stat as insufficient memory", () => {
+it("unusable vm_stat does not block dispatch", () => {
   f = fixture();
   enable();
   const t = f.task();
@@ -144,8 +141,8 @@ it("treats unusable vm_stat as insufficient memory", () => {
     throw new Error("no vm_stat");
   };
   tick(f.repo);
-  expect(f.repo.task(t.id).status).toBe("ready");
-  expect(waits()).toHaveLength(1);
+  expect(f.repo.task(t.id).status).toBe("in_progress");
+  expect(waits()).toHaveLength(0);
 });
 
 it("allows only one local-model run at a time and stops ollama after it ends", async () => {

@@ -105,5 +105,5 @@ Python：`/opt/homebrew/Caskroom/miniconda/base/bin/python3`。AAM 修改完成�
 
 - Claude 额度不足 → 将 `.aam/manager-owner` 写为 `opencode-fallback`（或设置 `fallback_active=1`），且 `fallback_worker=opencode`；此后任务经 opencode 适配器以 `opencode_fallback_model`（默认 `ollama/gemma4:e4b-mlx`，即 `opencode run --format json --dir <worktree> -m <model>`）派发。Claude 恢复 → 将 owner 写回 `claude`（并清除 `fallback_active`）。
 - 不再使用 Codex 跑 gemma4（缺模型元数据、无输出）。小模型不自动批准审查：沿用现有质量门槛，测试必须通过，含糊的审查保持 `in_review` 交给人工/Claude。
-- 内存保护（强制）：gemma4:e4b-mlx 常驻约 9.4 GB。同一时刻最多一个本地模型 run；`vm_stat` 的 free+inactive+speculative 须 ≥ `local_model_min_free_gb`（默认 12）否则任务保持 `ready` 并记录限频事件 `local_model_waiting_memory`；run 结束（含超时/丢失）后与守护进程启动时（无活跃 run）执行 `ollama stop gemma4:e4b-mlx`；超时杀整个进程组。健康检查和规划器绝不自动加载该模型。
+- 本地模型保护：gemma4:e4b-mlx 常驻约 9.4 GB。已移除内存门槛（`local_model_min_free_gb` 默认 0，0 或未设置 = 不因内存拒绝；`vm_stat` 不可读也不阻塞派发）。仅保留：同一时刻最多一个本地模型 run（单次运行锁，占用时任务保持 `ready` 并记录限频事件 `local_model_waiting_memory`）；启动前记录信息级事件 `local_model_memory`（可用内存，仅供参考）；run 结束（含超时/丢失）后与守护进程启动时（无活跃 run）执行 `ollama stop gemma4:e4b-mlx`；超时杀整个进程组。健康检查和规划器绝不自动加载该模型。
 - opencode 的 Ollama provider 由启动器按进程注入（`OPENCODE_CONFIG_CONTENT`：`@ai-sdk/openai-compatible`、`baseURL http://127.0.0.1:11434/v1`、`limit.context 32768`），不依赖也不修改 `~/.config/opencode/opencode.jsonc`。若想在手动使用 opencode 时也可选该模型，可自行在该文件的 `provider.ollama` 下加入相同内容（先备份）。
