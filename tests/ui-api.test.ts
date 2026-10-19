@@ -272,6 +272,18 @@ it("explains idle state and keeps board actions behind normal eligibility checks
   expect(body.idle.reason).toContain("未启用自动审查");
   expect(f.repo.task(reviewTask.id).status).toBe("in_review");
 });
+it("does not call the configured LLM manager or spend its cap while reading board activity", async () => {
+  const { req } = setup();
+  const ready = f.task();
+  f.repo.setSetting("manager_backend", "claude");
+  f.repo.setSetting("manager_call_count", "0");
+  const runner = vi.fn(() => ({ status: 0, stdout: "{}", stderr: "" }));
+  const { eligibleReadyTasks } = await import("../src/core/board-activity.js");
+  expect(eligibleReadyTasks(f.repo).map((task) => task.identifier)).toEqual([ready.identifier]);
+  expect((await (await req("/api/board/activity")).json()).eligible_ready).toEqual([ready.identifier]);
+  expect(runner).not.toHaveBeenCalled();
+  expect(f.repo.getSetting("manager_call_count")).toBe("0");
+});
 it("serializes board dispatch with a scheduler tick lock and rechecks eligibility", async () => {
   const { req } = setup();
   const ready = f.task();

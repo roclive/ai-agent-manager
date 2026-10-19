@@ -19,7 +19,7 @@ import {
 
 import { providerLlmArgs, recordBackend } from "./llm.js";
 import { effortSupported, workerEffort } from "./worker-effort.js";
-import { managerBackend, type ManagerBackend, type ManagerDecision } from "./manager-backend.js";
+import { managerBackend, RulesBackend, type ManagerBackend, type ManagerDecision } from "./manager-backend.js";
 import { resolveExecutor } from "./executors.js";
 import type { ProviderSelection } from "./providers.js";
 export function dependenciesDone(repo: Repo, t: Task) {
@@ -67,7 +67,9 @@ export function globalCooldownBlocks(repo: Repo, t: Task) {
 // Preview the same provider selection as dispatch without reserving or spawning work.
 export function dispatchAvailability(repo: Repo, task: Task): string | null {
   try {
-    const selected = choose(repo, task, managerBackend(repo)).worker;
+    // Availability is a read-only preview used by board/API reads. Keep it
+    // deterministic and free of manager model calls or call-cap consumption.
+    const selected = new RulesBackend().decide([task], { repo }).worker;
     const quota = selected.id === FALLBACK_PROVIDER ? { ok: true } : checkQuota(repo, selected.id);
     return quota.ok ? null : quota.warning || "执行器额度不可用";
   } catch (error) {
