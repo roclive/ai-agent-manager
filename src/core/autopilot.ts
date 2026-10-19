@@ -178,6 +178,9 @@ export function reviewerCommand(
       codex: false,
       gw: true,
     };
+  const ollama = provider
+    ? provider === "ollama"
+    : llmBackend(repo) === "ollama";
   const codex = provider
     ? provider !== "claude"
     : llmBackend(repo) === "ollama" || repo.getSetting("reviewer") !== "claude";
@@ -190,7 +193,7 @@ export function reviewerCommand(
       ? [
           "exec",
           "--json",
-          ...(llmBackend(repo) === "ollama"
+          ...(ollama
             ? []
             : [
                 "--ignore-user-config",
@@ -206,11 +209,7 @@ export function reviewerCommand(
           'approval_policy="never"',
           "-c",
           'model_reasoning_effort="medium"',
-          ...(provider === "ollama"
-            ? llmArgs(repo, "ollama")
-            : provider
-              ? []
-              : llmArgs(repo)),
+          ...(ollama ? llmArgs(repo, "ollama") : []),
           "--skip-git-repo-check",
           "-o",
           resolve(dir, "last.md"),

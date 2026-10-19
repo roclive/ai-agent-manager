@@ -90,6 +90,25 @@ it("isolates the primary Codex reviewer from local config and uses fallback only
   expect(reviewerCommand(f.repo, f.path, f.root).args).not.toContain(
     "--ignore-user-config",
   );
+  const routedPrimary = reviewerCommand(f.repo, f.path, f.root, "codex");
+  expect(routedPrimary.args).toEqual(
+    expect.arrayContaining([
+      "--ignore-user-config",
+      "--model",
+      "gpt-5.6-sol",
+    ]),
+  );
+  expect(routedPrimary.args).not.toContain("-c model_provider=\"aam-fallback\"");
+  f.repo.setSetting("llm_backend", "primary");
+  const routedOllama = reviewerCommand(f.repo, f.path, f.root, "ollama");
+  expect(routedOllama.args).toEqual(
+    expect.arrayContaining([
+      "-c",
+      'model_provider="aam-fallback"',
+      `model_providers.aam-fallback.base_url=${JSON.stringify(f.repo.getSetting("ollama_base_url"))}`,
+    ]),
+  );
+  expect(routedOllama.args).not.toContain("--ignore-user-config");
   for (const [key, value] of [
     ["llm_backend", "bad"],
     ["ollama_model", "bad model"],
