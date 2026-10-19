@@ -8,23 +8,37 @@ Claude 或 Codex owner 完成审核后，在 AAM 仓库主 checkout 中先预览
 npm run aam -- deploy-runtime --dry-run
 ```
 
-确认没有 worker 运行后执行 `npm run aam -- deploy-runtime`。命令从
-`aam/integration` 创建新的 `.aam/runtime/integration-<timestamp>` worktree，复用现有
-`node_modules`（不存在时只允许 `npm ci --offline`），依次运行服务端测试和类型检查、UI
-测试和类型检查及构建。随后它把 SQLite 数据库备份到 `.aam/backups/`，运行加法迁移，
-逐个切换并重启 UI、daemon、daemon-guard。UI 必须在 60 秒内由
-`http://127.0.0.1:3199/api/status` 响应，daemon 的 `last_tick_at` 必须前进，guard 必须被
-launchd 列出。任一步失败会恢复旧 plist 和数据库备份，并重启已切换的服务。旧 runtime
-不会删除，可用于审计和回滚。部署 worker 本身绝不能执行真实部署；首次部署由 manager
+确认没有 worker 运行后执行 `npm run aam -- deploy-runtime`。命令流程：
+
+1. 获取部署锁 `.aam/deploy.lock`（并发部署直接拒绝，崩溃留下的死 pid 锁自动接管），并先校验三个
+   launchd plist 存在且含有 `.aam/runtime/<name>` 路径——缺失 guard 或没有 runtime 路径会在构建、
+   备份、迁移之前报错。
+2. 从 `aam/integration` 创建新的 `.aam/runtime/integration-<timestamp>` worktree，复用现有
+   `node_modules`（不存在时只允许 `npm ci --offline`），运行服务端和 UI 的测试、类型检查及构建，
+   并确认新 plist 引用的路径（如 tsx loader）都存在。
+3. 长时间验证结束后再次检查 worker（`--force` 除外），然后用 SQLite 在线备份 API 生成一致的
+   `.aam/backups/aam-<timestamp>.db`（含 WAL 内尚未 checkpoint 的写入，并做 integrity_check），
+   再运行加法迁移，并在第一次切换服务前最后检查一次 worker。
+4. 逐个停止/切换/启动 UI、daemon、daemon-guard：plist 只替换 runtime 目录，参数、环境变量和端口
+   原样保留（UI 健康检查使用 plist 中的端口）；原 plist 另存于 `.aam/backups/plists-<timestamp>/`。
+   UI 必须在 60 秒内响应 `/api/status`，daemon 在停止旧进程之后记录的 `last_tick_at` 必须前进，
+   guard 必须被 launchd 列出。
+5. 任一步失败自动回滚，顺序固定：停止全部三个服务（guard 先停）→ 关闭 DB 连接 → 把当前数据库
+   （含 -wal/-shm）另存为 `.aam/backups/aam-<timestamp>.pre-rollback.db*` → 原子恢复备份并删除
+   -wal/-shm → 恢复原 plist → 启动旧服务 → 对旧服务做健康检查。若某服务停不掉，则不恢复数据库、
+   不启动旧服务；若恢复数据库失败，旧服务保持停止。错误信息会如实写 `ROLLBACK FAILED/PARTIAL`
+   和每个失败步骤，成功时才会写 `rolled back successfully`。
+
+旧 runtime 不会删除，可用于审计和回滚。部署 worker 本身绝不能执行真实部署；首次部署由 manager
 在代码审核后运行。
 
 运行中的 worker 是 detached 进程，daemon 重启不会终止它们，但部署默认为避免并发而
 拒绝执行。只有 owner 明确核对这些进程可以跨版本继续运行时才使用 `--force`。
 
-手工回滚时，找到 `.aam/backups/aam-<timestamp>.db` 和对应旧 runtime，将三个
-`~/Library/LaunchAgents/com.aam.{ui,daemon,daemon-guard}.plist` 中的 runtime 路径改回旧
-目录；逐个 `launchctl unload <plist>`、`launchctl load <plist>`，并按上述相同健康检查
-验证。恢复数据库前必须停止三个服务，并把当前数据库另存一份；恢复后再依次启动服务。
+手工回滚（自动回滚失败或事后发现问题时）：先 `launchctl unload` 三个服务（guard、daemon、ui），
+确认没有 aam 进程，把当前 `aam.db`、`aam.db-wal`、`aam.db-shm` 另存一份，删除 -wal/-shm，再把
+`.aam/backups/aam-<timestamp>.db` 复制为 `aam.db`；把 `.aam/backups/plists-<timestamp>/` 中的
+原 plist 复制回 `~/Library/LaunchAgents/`，然后依次 `launchctl load` 并按上述标准验证。
 
 用户已授权：接手所有项目，重点处理受阻、反复返工和验收不完整的任务；在本机无沙箱执行真实测试；持续无人值守。不要 push，不要修改受管项目主 checkout，不要自动提升到 base 分支。遵守 SPEC.md、AGENTS.md 和各项目规则。
 
