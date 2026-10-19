@@ -127,6 +127,22 @@ decision remains required before any download. Use one owned server/process grou
 one request at a time. Record AAM-26 memory observations before/after; no sudo purge or
 user-app cleanup. Prefer omlx with this pinned environment, verify actual native MLX
 backend, and save bounded-load errors.
+
+### Current recheck (2026-10-19)
+
+The pinned 2.6B snapshot remains fully cached (1,535,593,294 repository bytes), and the
+8B artifact still exceeds the 4GB download cap. No AAM-60 Gemma MLX benchmark, test prompt
+set, or model snapshot is available in this checkout. The current host sample is about
+0.85 GiB by the AAM-26 free+inactive+speculative page formula; `sysctl vm.swapusage`
+reports 1,319 MiB used. `ps` showed no `omlx` or `mlx_lm` process. A fresh
+`aam memory --top 20` attempt emitted permission failures for unrelated PIDs and could
+not produce a useful footprint inventory; this helper scans the whole host and has no
+candidate-PID-only mode. No shared model lock was found. The footprint scan could not
+inspect unrelated processes, so peak and process-boundary measurements are unavailable.
+No inference process was started; no files were downloaded and no other process was
+signalled. This headroom is insufficient for responsibly attempting a model load under
+the task's memory-observation and owned-process cleanup constraints. These are blocker
+observations, not a model load failure or a model capability result.
 Use a 180-second total smoke deadline and 45-second per-request deadline; a supervisor
 must enforce the total across load and requests and clean only owned processes.
 Save complete raw response, finish_reason, reasoning, timing and exit status.
@@ -139,7 +155,8 @@ comparability; don't invent substitute scores. Sample memory throughout; preserv
 samples and metric definitions. Skip long-context testing unless a specific requirement
 needs one bounded 8k retrieval check. Record opencode separately from backend quality.
 
-`local_model_preference`: **no validated production order yet**. Proposed evaluation
+`local_model_preference`: **none validated**. No preference order can be recommended until
+the pending live smoke and comparable Gemma results exist. Proposed evaluation
 order is 8B (after size approval), then 2.6B; its smaller weight footprint makes 2.6B a
 plausible memory candidate, not a measured winner. Do not promote either for AAM-37
 until the smoke and test-gated coding evidence pass. Reuse AAM-60 Gemma evidence when

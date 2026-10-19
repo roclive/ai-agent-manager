@@ -75,4 +75,16 @@ describe('AAM-39 pinned native MLX evidence', () => {
     expect(report).toContain('Offline test success cannot satisfy the');
     expect(report).toContain('No recommendation for unattended AAM-37');
   });
+
+  it('does not claim a safe runtime attempt when host headroom and scoped monitoring are unavailable', () => {
+    const report = readFileSync(new URL('../docs/local-model-eval.md', import.meta.url), 'utf8');
+    expect(report).toContain('Current recheck (2026-10-19)');
+    expect(report).toContain('0.85 GiB');
+    expect(report).toContain('1,319 MiB');
+    expect(report).toContain('produce a useful footprint inventory');
+    expect(report).toContain('peak and process-boundary measurements are unavailable');
+    expect(report).toContain('No inference process was started');
+    expect(report).toContain('local_model_preference');
+    expect(report).toContain('none validated');
+  });
 });
