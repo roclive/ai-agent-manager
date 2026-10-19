@@ -1,5 +1,12 @@
 # Implementation choices
 
+## AAM-47 LLM manager backends
+
+- `manager_backend` supports `claude`, `codex`, and `local` (with `local-small` retained as a compatibility alias). Calls are synchronous to preserve the existing tick/dispatch interface and have a 30-second process timeout. CLI and Ollama requests use injectable runners for offline tests.
+- Local manager calls use the configured OpenAI-compatible chat completions endpoint and a validated model name at or below 3B. `manager_daily_max` caps calls per UTC day; `manager_call_day` and `manager_call_count` persist the rolling daily counter.
+- The model selects an eligible task and, for automatic executor routing, a configured `codex` or `opencode` worker. Explicit executor and fallback policies remain authoritative. Invalid output, timeout, unavailable provider, or call cap records `manager_fallback` and uses `RulesBackend`.
+- Candidate task content is serialized as JSON and explicitly marked untrusted in the prompt. No task text is interpolated into shell code.
+
 ## AAM-18 provider-aware scheduling (2026-10-19)
 
 - Provider routing is opt-in through the versioned `provider_policy` setting. Existing installations retain their task worker and legacy single-provider cooldown behavior until configured. A provider must be explicitly marked legal and declare its worker, class, roles, maximum complexity, reserve threshold and per-complexity reservation units. Only explicitly declared free/local entries receive preference; unknown quota remains dispatchable with a warning and is never interpreted as free or unlimited.
@@ -129,6 +136,7 @@ Validation so far: merged core suite 121 passed before the final provider-isolat
 Sol model mapping is shared by worker/reviewer/database defaults and now targets gpt-6.1-sol. Legacy codex IDs remain aliases of codex-sol; existing primary_model exactly matching the old built-in gpt-5.6-sol upgrades on open, while other explicit models are preserved. AAM intentionally passes its persisted model with --ignore-user-config, so desktop/CLI defaults never silently override an explicitly selected AAM executor.
 
 Codex Luna mapping now uses gpt-6-luna for both worker and reviewer. Executor selectors show warnings from the local CODEX_HOME/models_cache.json (default ~/.codex): missing model, a newer numbered Sol/Luna version, unreadable metadata, or metadata older than seven days. This checks the local catalog, not the Desktop model picker or live account entitlement. Mappings stay explicit; warnings never silently change them. A seven-day freshness limit is the simplest local-only policy.
+
 ## AAM-66
 
 - Claude adapter/reviewer defaults are Opus, max effort and fast mode; explicitly selected model variants (including Sonnet) remain authoritative. Existing routing, reviewer choice, and the 45-minute database timeout default remain unchanged; a saved 60-minute timeout is passed through to the script alarm.
@@ -136,6 +144,7 @@ Codex Luna mapping now uses gpt-6-luna for both worker and reviewer. Executor se
 - Reviewer health invalidation clears only health fields, preserving the new configuration. Runtime deployment and live settings were not modified.
 
 - Unified reviewer model precedence: selecting a Claude variant persists its model; changing reviewer_model updates an active Claude variant, but never switches a non-Claude provider. On open, an existing explicit Claude variant wins over a conflicting stored model. The UI synchronizes both controls before save; if an API request supplies conflicting controls, the explicit reviewer identity wins regardless of JSON key order. Haiku has an explicit reviewer variant so every persisted Claude model has a matching identity. AAM_CLAUDE_MODEL overrides the effective Claude model and active reviewer label only; effort/fast overrides remain independent. Provider-policy routing and Codex reviewer model selection stay independent.
+
 ## AAM-57
 
 - Activity is based on live coding runs and pending automatic-review jobs, rather than task status alone. API items retain the underlying running/pending status and run/job ID.
