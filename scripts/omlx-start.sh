@@ -24,11 +24,12 @@ OMLX_BIN=${OMLX_BIN:-omlx}
 
 [ "$OMLX_HOST" = 127.0.0.1 ] || { echo "refusing: host must be 127.0.0.1" >&2; exit 1; }
 
-# Total RAM (GB) and hard memory ceiling.
+# Total RAM (GB) is informational. Keep the configured reserve visible in the
+# server command, but do not refuse a forced launch based on machine memory.
 MEM_BYTES=${OMLX_MEM_BYTES:-$(/usr/sbin/sysctl -n hw.memsize)}
 TOTAL_GB=$((MEM_BYTES / 1073741824))
 LIMIT_GB=$((TOTAL_GB - OMLX_SYSTEM_RESERVE_GB))
-[ "$LIMIT_GB" -ge 2 ] || { echo "refusing: only ${TOTAL_GB}GB RAM, cannot keep ${OMLX_SYSTEM_RESERVE_GB}GB for system" >&2; exit 1; }
+[ "$LIMIT_GB" -ge 0 ] || LIMIT_GB=0
 
 # Locate existing weights (no download).
 WEIGHTS=
