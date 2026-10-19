@@ -136,3 +136,11 @@ Codex Luna mapping now uses gpt-6-luna for both worker and reviewer. Executor se
 - Reviewer health invalidation clears only health fields, preserving the new configuration. Runtime deployment and live settings were not modified.
 
 - Unified reviewer model precedence: selecting a Claude variant persists its model; changing reviewer_model updates an active Claude variant, but never switches a non-Claude provider. On open, an existing explicit Claude variant wins over a conflicting stored model. The UI synchronizes both controls before save; if an API request supplies conflicting controls, the explicit reviewer identity wins regardless of JSON key order. Haiku has an explicit reviewer variant so every persisted Claude model has a matching identity. AAM_CLAUDE_MODEL overrides the effective Claude model and active reviewer label only; effort/fast overrides remain independent. Provider-policy routing and Codex reviewer model selection stay independent.
+## AAM-57
+
+- Activity is based on live coding runs and pending automatic-review jobs, rather than task status alone. API items retain the underlying running/pending status and run/job ID.
+- Idle review guidance mirrors the normal launcher’s cooldown, health, concurrency, daily budget and retry/stall gates. Board review requests only start reviews, without starting unrelated planner work. Provider reservation and quota checks remain authoritative at execution time; rejected actions surface their normal API error without changing settings.
+- Pending coding rows still reserve dispatch capacity until the normal tick reaps them, even if their process is no longer live.
+
+- Follow-up: automatic jobs snapshot the actual command provider/model at launch; the board displays this identity and the stored pending/running status. Legacy jobs without a snapshot show only their recorded provider rather than guessing from current reviewer settings.
+- This worktree predates AAM-69. No worker/reviewer model defaults or global routing were changed here. Integration must retain AAM-69’s shared model-defaults.ts and migration and run the combined regressions before deployment. No deployment is performed by this worker.

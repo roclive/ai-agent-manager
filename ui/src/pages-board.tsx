@@ -2,12 +2,14 @@ import { TaskDrawer } from "./components/TaskDrawer";
 import { useState, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Search, Plus } from "lucide-react";
+import { Link } from "react-router-dom";
 import {
   useTasks,
   useRuns,
   useEventStream,
   useProjects,
   useExecutors,
+  useBoardActivity,
 } from "./lib/queries";
 import { effectiveExecutor } from "./lib/executor";
 import { api } from "./lib/api";
@@ -28,7 +30,8 @@ export function BoardPage({ project }: { project: string }) {
   const tasks = useTasks(live),
     runs = useRuns(live),
     projects = useProjects(),
-    executors = useExecutors();
+    executors = useExecutors(),
+    activity = useBoardActivity(live);
   const client = useQueryClient();
   const [search, setSearch] = useState(""),
     [worker, setWorker] = useState(""),
@@ -66,6 +69,22 @@ export function BoardPage({ project }: { project: string }) {
     }
   };
   const projectId = projects.data?.find((p) => p.key === project)?.id;
+  const runSafeAction = async (action: "dispatch" | "review") => {
+    setPending(true);
+    setToast("");
+    try {
+      await (action === "dispatch" ? api.dispatchReady() : api.requestReview());
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["tasks"] }),
+        client.invalidateQueries({ queryKey: ["runs"] }),
+        client.invalidateQueries({ queryKey: ["board-activity"] }),
+      ]);
+    } catch (error) {
+      setToast(`操作未执行：${(error as Error).message}`);
+    } finally {
+      setPending(false);
+    }
+  };
   const filtered = (tasks.data ?? []).filter(
     (t) =>
       (!project || t.project_id === projectId) &&
@@ -140,6 +159,34 @@ export function BoardPage({ project }: { project: string }) {
             关闭
           </Button>
         </div>
+      )}
+      {activity.data?.active && (
+        <section className="board-activity" aria-label="进行中活动">
+          <h2>进行中</h2>
+          {activity.data.active.map((item) => (
+            <div className="activity-work" key={`${item.kind}-${item.activity_id}`}>
+              <strong>{item.kind === "coding" ? "编码执行中" : "自动审查中"}</strong>
+              <Link to={`?task=${encodeURIComponent(item.identifier)}`}>{item.identifier} {item.title}</Link>
+              <span>状态：{item.status === "pending" ? "待完成（pending）" : "运行中（running）"}</span>
+              {item.identity && <span>{item.kind === "review" ? "审查者" : "执行者"}：{item.identity}</span>}
+              {item.worktree_path && <span title={item.worktree_path}>工作树：{item.worktree_path}</span>}
+              {item.branch && <span>分支：{item.branch}</span>}
+            </div>
+          ))}
+          {activity.data.idle && (
+            <div className="idle-guidance" role="status">
+              <span>当前无编码或自动审查活动：{activity.data.idle.reason}</span>
+              {activity.data.idle.action && (
+                <Button disabled={pending} variant="outline" onClick={() => void runSafeAction(activity.data!.idle!.action!)}>
+                  {activity.data.idle.action === "dispatch" ? "安全派发就绪任务" : "请求自动审查"}
+                </Button>
+              )}
+              {activity.data.idle.control && (
+                <Link to="/settings">查看{activity.data.idle.control === "projects" ? "项目" : "全局"}设置</Link>
+              )}
+            </div>
+          )}
+        </section>
       )}
       {tasks.isPending || (!!project && projects.isPending) ? (
         <div role="status" aria-label="正在加载任务…" className="board-skeleton">
