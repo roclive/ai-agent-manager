@@ -66,6 +66,8 @@ if [ "$FREE_GB" -lt "$OMLX_SYSTEM_RESERVE_GB" ] && [ "${OMLX_FORCE:-0}" != 1 ]; 
   exit 1
 fi
 
+# Own process group (PGID = PID) so omlx-stop.sh can clean up the whole server tree.
+set -m
 "$@" >>"$LOG" 2>&1 &
 PID=$!
 echo "$PID" >"$PIDFILE"

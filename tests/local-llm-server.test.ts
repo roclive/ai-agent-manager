@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { fixture } from "./helpers.js";
+import { writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { dispatch } from "../src/core/dispatch.js";
+import { opencode } from "../src/workers/index.js";
 import {
   localLlmHealth,
   localLlmProfile,
@@ -7,18 +11,22 @@ import {
   omlxStartCommand,
   startLocalLlm,
   stopLocalModelAfterTask,
+  stopLocalModelIfIdle,
 } from "../src/core/local-model.js";
 
 let f: ReturnType<typeof fixture>;
 let runs: { cmd: string; args: string[]; env: NodeJS.ProcessEnv }[];
 let probes: string[];
 let healthy: boolean;
+let becomesHealthy: boolean;
 let startStatuses: number[];
 const real = { ...localModelHost };
 beforeEach(() => {
   runs = [];
   probes = [];
   healthy = false;
+  becomesHealthy = true;
+  localModelHost.sleep = () => {};
   startStatuses = [0];
   localModelHost.probe = (url) => {
     probes.push(url);
@@ -26,7 +34,10 @@ beforeEach(() => {
   };
   localModelHost.run = (cmd, args, env) => {
     runs.push({ cmd, args, env });
-    const status = cmd.endsWith("omlx-stop.sh") ? 0 : (startStatuses.shift() ?? 0);
+    const stop = cmd.endsWith("omlx-stop.sh");
+    const status = stop ? 0 : (startStatuses.shift() ?? 0);
+    if (stop) healthy = false;
+    else if (status === 0 && becomesHealthy) healthy = true;
     return { status, stdout: "", stderr: status ? "boom" : "" };
   };
   localModelHost.ollamaStop = () => {};
@@ -46,13 +57,33 @@ it("defaults to ollama and validates the new settings", () => {
   f.repo.setSetting("local_llm_server", "omlx");
 });
 
-it("builds start commands per fallback profile, always forcing", () => {
+const starts = () => runs.filter((r) => r.cmd.endsWith("omlx-start.sh"));
+const stopsRun = () => runs.filter((r) => r.cmd.endsWith("omlx-stop.sh"));
+const kinds = () => f.repo.events(200).map((e: any) => e.kind);
+function enableOmlx() {
+  f.repo.setSetting("local_llm_server", "omlx");
+  f.repo.setSetting("fallback_worker", "opencode");
+  writeFileSync(resolve(f.repo.home, "manager-owner"), "opencode-fallback\n");
+}
+function failRun(taskId: number, status: string, summary: string) {
+  f.repo.db
+    .prepare(
+      "INSERT INTO runs(task_id,worker,provider,status,started_at,log_path,last_message_path,summary) VALUES (?,?,?,?,?,'','',?)",
+    )
+    .run(taskId, "opencode", "opencode-fallback", status, new Date().toISOString(), summary);
+}
+
+it("server launch settings get strictly safer; client-only level adds no new server command", () => {
+  const sig = (p: 0 | 1 | 2 | 3) => JSON.stringify(omlxStartCommand(p));
   const p0 = omlxStartCommand(0);
   expect(p0.cmd).toMatch(/omlx-start\.sh$/);
   expect(p0.env.OMLX_FORCE).toBe("1");
   expect(p0.args).toEqual(["--max-concurrent", "2"]);
-  expect(omlxStartCommand(1).env.OMLX_SYSTEM_RESERVE_GB).toBe("8");
+  expect(sig(1)).not.toBe(sig(0));
+  expect(sig(2)).toBe(sig(1)); // 8192 context is client-only
+  expect(sig(3)).not.toBe(sig(1));
   expect(omlxStartCommand(3).args).toEqual(["--max-concurrent", "1"]);
+  for (const p of [0, 1, 2, 3] as const) expect(omlxStartCommand(p).env.OMLX_FORCE).toBe("1");
 });
 
 it("never starts omlx for ollama or from a health probe", () => {
@@ -65,28 +96,118 @@ it("never starts omlx for ollama or from a health probe", () => {
   expect(runs).toHaveLength(0);
 });
 
-it("skips the start when already healthy, otherwise starts once", () => {
+it("starts once when not healthy and records the effective profile", () => {
   f = fixture();
   f.repo.setSetting("local_llm_server", "omlx");
-  healthy = true;
-  startLocalLlm(f.repo, f.task().id);
-  expect(runs).toHaveLength(0);
-  healthy = false;
   expect(startLocalLlm(f.repo, f.task().id)).toBe(0);
-  expect(runs).toHaveLength(1);
-  expect(runs[0].env.OMLX_FORCE).toBe("1");
+  expect(starts()).toHaveLength(1);
+  expect(starts()[0].env.OMLX_FORCE).toBe("1");
+  expect(f.repo.getSetting("local_llm_active_profile")).toBe("0");
+  expect(kinds()).toContain("local_llm_start");
 });
 
-it("retries with lighter profiles and throws when all fail", () => {
+it("reuses a healthy server at least as safe, restarts one running a weaker profile", () => {
+  f = fixture();
+  f.repo.setSetting("local_llm_server", "omlx");
+  const task = f.task();
+  healthy = true;
+  expect(startLocalLlm(f.repo, task.id)).toBe(0);
+  expect(runs).toHaveLength(0);
+  expect(f.repo.events(20).some((e: any) => /reused at profile 0/.test(e.message))).toBe(true);
+  failRun(task.id, "timeout", "");
+  expect(localLlmProfile(f.repo, task.id)).toBe(1);
+  expect(startLocalLlm(f.repo, task.id)).toBe(1); // warm profile-0 server is replaced
+  expect(stopsRun()).toHaveLength(1);
+  expect(starts()).toHaveLength(1);
+  expect(starts()[0].env.OMLX_SYSTEM_RESERVE_GB).toBe("8");
+  expect(kinds()).toContain("local_llm_restart");
+  expect(f.repo.getSetting("local_llm_active_profile")).toBe("1");
+  runs = [];
+  expect(startLocalLlm(f.repo, task.id)).toBe(1); // now healthy at profile 1: reused
+  expect(runs).toHaveLength(0);
+});
+
+it("retries with distinct server profiles, stopping before every attempt", () => {
   f = fixture();
   f.repo.setSetting("local_llm_server", "omlx");
   startStatuses = [1, 1, 0];
-  expect(startLocalLlm(f.repo, f.task().id)).toBe(2);
-  expect(runs).toHaveLength(3);
-  expect(runs[1].env.OMLX_SYSTEM_RESERVE_GB).toBe("8");
-  startStatuses = [1, 1, 1, 1];
+  expect(startLocalLlm(f.repo, f.task().id)).toBe(3);
+  const s = starts();
+  expect(s).toHaveLength(3);
+  expect(new Set(s.map((r) => JSON.stringify([r.args, r.env.OMLX_SYSTEM_RESERVE_GB]))).size).toBe(3);
+  expect(stopsRun()).toHaveLength(3);
+  expect(runs[0].cmd).toMatch(/omlx-stop\.sh$/);
+});
+
+it("treats a server that never becomes healthy as a failure and stops it", () => {
+  f = fixture();
+  f.repo.setSetting("local_llm_server", "omlx");
+  becomesHealthy = false;
   expect(() => startLocalLlm(f.repo, f.task().id)).toThrow(/every profile/);
-  expect(localLlmProfile(f.repo, f.task().id)).toBe(0);
+  expect(starts()).toHaveLength(3);
+  expect(runs[runs.length - 1].cmd).toMatch(/omlx-stop\.sh$/);
+  expect(f.repo.getSetting("local_llm_active_profile")).toBe("");
+});
+
+it("only resource failures escalate the profile, not ordinary code failures", () => {
+  f = fixture();
+  const task = f.task();
+  failRun(task.id, "failed", "tests failed: expected 1 got 2");
+  expect(localLlmProfile(f.repo, task.id)).toBe(0);
+  failRun(task.id, "failed", "Out of memory while loading");
+  expect(localLlmProfile(f.repo, task.id)).toBe(1);
+  failRun(task.id, "lost", "");
+  failRun(task.id, "timeout", "");
+  failRun(task.id, "timeout", "");
+  expect(localLlmProfile(f.repo, task.id)).toBe(3);
+});
+
+it("dispatch starts omlx only after the single-run guard and passes URL + context argv", () => {
+  f = fixture("sleep 1");
+  enableOmlx();
+  failRun(f.task().id, "running", ""); // another local run holds the lock
+  const t = f.task();
+  expect(() => dispatch(f.repo, t.identifier, true)).toThrow(/local-model/);
+  expect(runs).toHaveLength(0);
+  f.repo.db.prepare("UPDATE runs SET status='done'").run();
+  dispatch(f.repo, t.identifier, true);
+  expect(starts()).toHaveLength(1);
+  const cmd = opencode.command({
+    worktree: "/w",
+    promptFile: "/w/runs/1/prompt.md",
+    runDir: "/w/runs/1",
+    sandbox: "",
+    modelArgs: [],
+    provider: "opencode-fallback",
+    model: "ollama/gemma4:e4b-mlx",
+    localBaseUrl: "http://127.0.0.1:8000/v1",
+    localContext: 8192,
+  } as any);
+  expect(cmd.args.slice(-2)).toEqual(["http://127.0.0.1:8000/v1", "8192"]);
+});
+
+it("all-profile start failure fails the run and releases the single-run lock", () => {
+  f = fixture("sleep 1");
+  enableOmlx();
+  becomesHealthy = false;
+  const t = f.task();
+  expect(() => dispatch(f.repo, t.identifier, true)).toThrow(/every profile/);
+  const r = f.repo.runs(t.id)[0];
+  expect(r.status).toBe("failed");
+  expect(f.repo.runs().some((x) => x.status === "running")).toBe(false);
+  // the failure is not a resource failure of the model: next attempt starts at profile 0
+  expect(localLlmProfile(f.repo, t.id)).toBe(0);
+});
+
+it("never starts omlx from planner/health paths", async () => {
+  f = fixture();
+  f.repo.setSetting("local_llm_server", "omlx");
+  const src = await import("node:fs").then((m) =>
+    ["src/core/llm.ts", "src/core/review.ts", "src/core/autopilot.ts", "src/core/usage.ts"]
+      .map((p) => m.readFileSync(p, "utf8"))
+      .join("\n"),
+  );
+  expect(src).not.toMatch(/startLocalLlm|omlxStartCommand|omlx-start/);
 });
 
 it("stops omlx after a task unless keep_warm is set", () => {
@@ -99,4 +220,18 @@ it("stops omlx after a task unless keep_warm is set", () => {
   stopLocalModelAfterTask(f.repo);
   expect(runs).toHaveLength(1);
   expect(runs[0].cmd).toMatch(/omlx-stop\.sh$/);
+});
+
+it("switching provider away from omlx still unloads a server this module started", () => {
+  f = fixture();
+  f.repo.setSetting("local_llm_server", "omlx");
+  expect(startLocalLlm(f.repo, f.task().id)).toBe(0);
+  f.repo.setSetting("local_llm_server", "ollama");
+  runs = [];
+  stopLocalModelIfIdle(f.repo);
+  expect(stopsRun()).toHaveLength(1);
+  expect(f.repo.getSetting("local_llm_active_profile")).toBe("");
+  runs = [];
+  stopLocalModelIfIdle(f.repo); // nothing started by us any more: omlx untouched
+  expect(runs).toHaveLength(0);
 });

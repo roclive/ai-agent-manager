@@ -32,6 +32,9 @@ export const localModelHost = {
       stderr: (result.stderr || "") + (result.error?.message || ""),
     };
   },
+  sleep: (ms: number) => {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  },
   probe: (url: string) => {
     const result = runner(
       "curl",
@@ -47,6 +50,8 @@ export const localModelHost = {
 export type LocalLlmServer = "ollama" | "omlx";
 export type LocalLlmProfile = 0 | 1 | 2 | 3;
 const OMLX_BASE_URL = "http://127.0.0.1:8000/v1";
+const START_WAIT_ATTEMPTS = 60;
+const START_WAIT_STEP_MS = 2_000;
 const OLLAMA_BASE_URL = "http://127.0.0.1:11434/v1";
 
 export function localLlmServer(repo: Repo): LocalLlmServer {
@@ -57,14 +62,25 @@ export function localLlmBaseUrl(repo: Repo) {
   return localLlmServer(repo) === "omlx" ? OMLX_BASE_URL : OLLAMA_BASE_URL;
 }
 
+// Server-side launch ladder. Profile 2 (8192 context) only changes the client, so the server
+// command for it equals profile 1 and the startup retry skips it.
+export const SERVER_LEVELS: LocalLlmProfile[] = [0, 1, 3];
+const serverLevel = (profile: LocalLlmProfile) =>
+  (profile === 2 ? 1 : profile) as LocalLlmProfile;
+
 export function omlxStartCommand(profile: LocalLlmProfile = 0) {
   const script = fileURLToPath(new URL("../../scripts/omlx-start.sh", import.meta.url));
+  const level = serverLevel(profile);
   return {
     cmd: script,
-    args: ["--max-concurrent", profile >= 3 ? "1" : "2"],
+    args: ["--max-concurrent", level >= 3 ? "1" : "2"],
     env: {
       OMLX_FORCE: "1",
-      ...(profile >= 1 ? { OMLX_SYSTEM_RESERVE_GB: "8" } : {}),
+      ...(level >= 3
+        ? { OMLX_SYSTEM_RESERVE_GB: "10" }
+        : level >= 1
+          ? { OMLX_SYSTEM_RESERVE_GB: "8" }
+          : {}),
     },
   };
 }
@@ -81,13 +97,18 @@ export function localLlmHealth(repo: Repo) {
   return localModelHost.probe(`${localLlmBaseUrl(repo)}/models`);
 }
 
+// Only resource failures (timeout, lost worker, OOM/thrash text) escalate; ordinary
+// code/test failures do not make the next attempt run with a weaker profile.
+const RESOURCE_FAILURE = /out of memory|\boom\b|memory pressure|swap|thrash|killed|jetsam|memory guard/i;
+
 function previousLocalFailures(repo: Repo, taskId: number) {
   return repo
     .runs(taskId)
     .filter(
       (run) =>
         run.provider === FALLBACK_PROVIDER &&
-        ["failed", "timeout", "lost"].includes(run.status),
+        (["timeout", "lost"].includes(run.status) ||
+          (run.status === "failed" && RESOURCE_FAILURE.test(run.summary || ""))),
     ).length;
 }
 
@@ -95,30 +116,74 @@ export function localLlmProfile(repo: Repo, taskId: number): LocalLlmProfile {
   return Math.min(previousLocalFailures(repo, taskId), 3) as LocalLlmProfile;
 }
 
-/** Called only from dispatch, after the single-run guard has accepted the task. */
+const PROFILE_LABEL = [
+  "standard",
+  "SSD cache + lower memory ceiling",
+  "8192 context",
+  "batch/concurrency 1",
+];
+
+function stopOmlx() {
+  const command = omlxStopCommand();
+  try {
+    localModelHost.run(command.cmd, command.args, process.env);
+  } catch {
+    /* nothing to stop */
+  }
+}
+
+function waitHealthy(repo: Repo) {
+  for (let i = 0; i < START_WAIT_ATTEMPTS; i++) {
+    if (localLlmHealth(repo).ok) return true;
+    localModelHost.sleep(START_WAIT_STEP_MS);
+  }
+  return false;
+}
+
+/**
+ * Called only from dispatch, after the single-run guard has accepted the task.
+ * Returns the effective profile (client context follows it) and records it.
+ */
 export function startLocalLlm(repo: Repo, taskId: number) {
   if (localLlmServer(repo) !== "omlx") return 0 as LocalLlmProfile;
-  let profile = localLlmProfile(repo, taskId);
-  if (localLlmHealth(repo).ok) return profile;
+  const required = localLlmProfile(repo, taskId);
+  const level = serverLevel(required);
+  const recorded = repo.getSetting("local_llm_active_profile");
+  const active = recorded === "" || recorded === undefined ? 0 : Number(recorded);
+  const record = (effective: LocalLlmProfile, how: string) => {
+    repo.setSetting("local_llm_active_profile", String(effective));
+    repo.event(
+      "local_llm_start",
+      `omlx ${how} at profile ${effective} (${PROFILE_LABEL[effective]}); required ${required}`,
+      taskId,
+    );
+    return effective;
+  };
+  if (localLlmHealth(repo).ok) {
+    // A warm server keeps its launch settings; reuse it only if it is at least as safe.
+    if (active >= level) return record(Math.max(required, active) as LocalLlmProfile, "reused");
+    repo.event(
+      "local_llm_restart",
+      `omlx running at profile ${active} but profile ${required} is required; restarting`,
+      taskId,
+    );
+  }
   let failure = "";
-  for (; profile <= 3; profile = (profile + 1) as LocalLlmProfile) {
-    const command = omlxStartCommand(profile);
+  for (const attempt of SERVER_LEVELS.filter((l) => l >= level)) {
+    stopOmlx(); // never leave a half-loaded server behind (pid/process group), idempotent
+    const command = omlxStartCommand(attempt);
     const result = localModelHost.run(command.cmd, command.args, {
       ...process.env,
       ...command.env,
       OMLX_IDLE_MINUTES: repo.getSetting("local_llm_idle_timeout_min") || "10",
     });
-    if (result.status === 0 || /already running/i.test(result.stderr)) {
-      repo.event(
-        "local_llm_start",
-        `omlx profile ${profile}: ${profile === 0 ? "standard" : profile === 1 ? "SSD cache + lower memory ceiling" : profile === 2 ? "8192 context" : "batch/concurrency 1"}`,
-        taskId,
-      );
-      return profile;
-    }
-    failure = result.stderr || result.stdout;
-    repo.event("local_llm_retry", `omlx profile ${profile} failed: ${failure}`, taskId);
+    if (result.status === 0 && waitHealthy(repo))
+      return record(Math.max(required, attempt) as LocalLlmProfile, "started");
+    failure = result.stderr || result.stdout || "server never became healthy";
+    repo.event("local_llm_retry", `omlx profile ${attempt} failed: ${failure}`, taskId);
   }
+  stopOmlx();
+  repo.setSetting("local_llm_active_profile", "");
   throw new Error(`omlx start failed at every profile: ${failure}`);
 }
 
@@ -224,7 +289,13 @@ export function stopLocalModel(model = LOCAL_MODEL, server: LocalLlmServer = "ol
 
 // Unload the model unless a local run still needs it (daemon startup, after reaping).
 export function stopLocalModelIfIdle(repo: Repo) {
-  if (!localRunActive(repo)) stopLocalModel(LOCAL_MODEL, localLlmServer(repo));
+  // Stop both backends: the setting may have been switched while a model was still loaded.
+  if (localRunActive(repo)) return;
+  stopLocalModel(LOCAL_MODEL, "ollama");
+  if (localLlmServer(repo) === "omlx" || repo.getSetting("local_llm_active_profile")) {
+    stopLocalModel(LOCAL_MODEL, "omlx");
+    repo.setSetting("local_llm_active_profile", "");
+  }
 }
 
 export function stopLocalModelAfterTask(repo: Repo) {

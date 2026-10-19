@@ -203,6 +203,7 @@ export class Repo {
       local_model_min_free_gb: "0",
       local_llm_server: "ollama",
       keep_warm: "0",
+      local_llm_active_profile: "",
       local_llm_idle_timeout_min: "10",
       reviewer_ok: "",
       reviewer_checked_at: "",
