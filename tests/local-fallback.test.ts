@@ -183,9 +183,17 @@ it("kills the whole process group on timeout and unloads the model", async () =>
   enable();
   f.task();
   tick(f.repo);
-  for (let i = 0; i < 100 && !existsSync(pidFile); i++)
+  // Redirection creates pidFile before echo writes the PID. Waiting only for
+  // existence can therefore read an empty file under full-suite load and turn
+  // it into PID 0. Require a complete, live PID before testing the timeout.
+  let child = 0;
+  for (let i = 0; i < 100; i++) {
+    child = existsSync(pidFile)
+      ? Number(readFileSync(pidFile, "utf8").trim())
+      : 0;
+    if (Number.isInteger(child) && child > 0 && alive(child)) break;
     await new Promise((r) => setTimeout(r, 20));
-  const child = Number(readFileSync(pidFile, "utf8"));
+  }
   expect(alive(child)).toBe(true);
   f.repo.db.prepare("UPDATE runs SET started_at=?").run("2000-01-01T00:00:00Z");
   tick(f.repo);
