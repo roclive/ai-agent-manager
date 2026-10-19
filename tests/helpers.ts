@@ -50,7 +50,14 @@ export function fixture(script = "printf changed > changed.txt\nexit 0") {
       if (!repo.db.open) return;
       for (const r of repo.runs()) if (r.status === "running") killGroup(r.pid);
       repo.close();
-      rmSync(root, { recursive: true, force: true });
+      // Killing a detached worker is asynchronous. Its shell may still be
+      // closing log files while the fixture tree is removed (ENOTEMPTY).
+      rmSync(root, {
+        recursive: true,
+        force: true,
+        maxRetries: 8,
+        retryDelay: 25,
+      });
       delete process.env.AAM_FAKE_WORKER;
       delete process.env.AAM_FAKE_CLAUDE;
     },

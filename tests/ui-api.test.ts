@@ -1,6 +1,6 @@
 import { it, expect, afterEach, vi } from "vitest";
 import { spawn } from "node:child_process";
-import { mkdirSync, writeFileSync, symlinkSync } from "node:fs";
+import { mkdirSync, writeFileSync, symlinkSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { createApp } from "../src/server.js";
 import { Repo } from "../src/db/index.js";
@@ -271,6 +271,14 @@ it("explains idle state and keeps board actions behind normal eligibility checks
   expect(body.idle).toMatchObject({ action: null, control: "projects" });
   expect(body.idle.reason).toContain("未启用自动审查");
   expect(f.repo.task(reviewTask.id).status).toBe("in_review");
+});
+it("cleans a fixture after stopping a dispatched background worker", async () => {
+  const { req } = setup("sleep 30");
+  const task = f.task();
+  expect((await req(`/api/tasks/${task.id}/run`, "POST", {})).status).toBe(200);
+  const root = f.root;
+  f.cleanup();
+  expect(existsSync(root)).toBe(false);
 });
 it("does not call the configured LLM manager or spend its cap while reading board activity", async () => {
   const { req } = setup();
