@@ -138,3 +138,17 @@ checkout; comparison stays pending rather than importing historical GGUF numbers
 Validation: core 242/242 and UI 45/45 passed with maxWorkers=1; both typechecks
 passed. Core retry used 60-second test/hook deadlines after default-parallel resource
 contention; no production code or existing test assertions were changed.
+
+## AAM-39 runtime recheck
+
+- Reconfirmed the pinned 2.6B snapshot is complete in the user HF cache; no download
+  or cache mutation was needed. Did not start model inference: no shared AAM local-model
+  lock was available in this task worktree, and `aam memory --top` could not collect
+  process footprints (permission errors). Read-only host sample: 5.34 GiB using the
+  AAM-26 free+inactive+speculative formula, 1,338.31 MiB swap used; other AAM Codex
+  workers were active. No worker/model process was signalled. This is not a model memory
+  measurement and has no post-run sample.
+- Updated the evaluation report to leave the prior P2 live-smoke finding explicitly
+  unresolved and added an offline regression preventing metadata-only success from being
+  presented as runtime acceptance. Gemma comparison, coding benchmark, memory/throughput
+  measurements and AAM-37 recommendation remain pending.

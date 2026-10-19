@@ -66,4 +66,13 @@ describe('AAM-39 pinned native MLX evidence', () => {
     expect(report).not.toContain('explicitly restricted to writing inside this worktree');
     expect(report).toContain('no download is');
   });
+
+  it('keeps the missing live-smoke review finding open when the shared lock is unavailable', () => {
+    const report = readFileSync(new URL('../docs/local-model-eval.md', import.meta.url), 'utf8');
+    expect(report).toContain('no shared AAM local-model lock was');
+    expect(report).toContain('there is no post-run measurement');
+    expect(report).toContain('hardware check remains unresolved');
+    expect(report).toContain('Offline test success cannot satisfy the');
+    expect(report).toContain('No recommendation for unattended AAM-37');
+  });
 });

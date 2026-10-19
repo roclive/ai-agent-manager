@@ -1,8 +1,9 @@
 # Native MLX evaluation — AAM-39
 
-2026-10-19 JST. **Metadata preflight completed; real model evaluation remains blocked.**
-No model was downloaded, loaded, converted, or served by this worker. No recommendation
-for unattended AAM-37 coding is established. Automatic local routing remains unchanged.
+2026-10-19 JST. **Metadata preflight completed; runtime evaluation is still pending.**
+The cached 2.6B model was not downloaded, loaded, converted, or served by this worker.
+No recommendation for unattended AAM-37 coding is established. Automatic local routing
+remains unchanged.
 
 ## Verified artifacts
 
@@ -114,12 +115,18 @@ must not be summed blindly. No ending measurement here is labelled peak.
 
 ## Next authorized run and recommendation
 
-The 2.6B pinned artifact is already complete in the user cache, so no download is
-needed for its bounded load smoke. Before loading it, coordinate the shared local model
-lock with the manager. The 8B size decision remains required before any download. Use
-one owned server/process group and one request at a time. Record AAM-26
-memory observations before/after; no sudo purge or user-app cleanup. Prefer omlx with
-this pinned environment, verify actual native MLX backend, and save bounded-load errors.
+The 2.6B pinned artifact is complete in the user cache, so no download is needed for its
+bounded load smoke. This attempt did not proceed: no shared AAM local-model lock was
+available in the task worktree, and the existing memory helper failed to obtain process
+footprints (permission errors for unrelated processes). A read-only host snapshot showed
+5.34 GiB by the AAM-26 available-memory formula and 1,338.31 MiB swap used; several other
+AAM Codex workers were active. These are host observations, not model residency. No
+inference process was started, so there is no post-run measurement. Re-run only when the
+shared single-run lock is available and memory monitoring is reliable. The 8B size
+decision remains required before any download. Use one owned server/process group and
+one request at a time. Record AAM-26 memory observations before/after; no sudo purge or
+user-app cleanup. Prefer omlx with this pinned environment, verify actual native MLX
+backend, and save bounded-load errors.
 Use a 180-second total smoke deadline and 45-second per-request deadline; a supervisor
 must enforce the total across load and requests and clean only owned processes.
 Save complete raw response, finish_reason, reasoning, timing and exit status.
@@ -141,19 +148,19 @@ GW-9/10 and AAM-64; no fallback code changes were needed here.
 
 ## Review feedback and offline validation
 
-Supplied previous feedback contains only successful core/UI test logs, with no concrete
-finding or failing assertion. There is no defect description to reproduce. Added offline
-evidence regressions for the actual preflight findings: over-limit 8B weights, gate
-precision overrides, dense 2.6B identity/context discrepancy, runner-card discrepancy,
-and templates remaining distinct from runtime verification. No test loads a model or
-invokes a real worker. Offline test success cannot satisfy the pending hardware checks.
+The previous review finding was that real model evaluation and comparison were missing.
+The hardware check remains unresolved because this attempt had no shared model lock and
+could not collect process-footprint measurements; tests do not represent that inference
+passed. Existing offline evidence regressions cover the preflight findings: over-limit
+8B weights, gate precision overrides, dense 2.6B identity/context discrepancy,
+runner-card discrepancy, and templates remaining distinct from runtime verification. No
+test loads a model or invokes a real worker. Offline test success cannot satisfy the
+pending hardware checks.
 
 Validation on this worktree: core `npm test -- --maxWorkers=1 --testTimeout=60000
---hookTimeout=60000` passed **242 tests / 27 files**, exit 0; `npm run typecheck`
-passed, exit 0. UI `npm test -- --maxWorkers=1` passed **45 tests / 8 files**,
-exit 0; UI `npm run typecheck` passed, exit 0. `git diff --check` passed.
-The first default-parallel core invocation was stopped after unrelated existing tests
-exceeded deadlines amid multiple other worktree suites; the first UI invocation had
-one board-query timeout (44/45 passed). Both suites passed on the bounded-concurrency
-rerun without changing their assertions or application code. These offline results
-include five new evidence checks, not real MLX inference acceptance.
+--hookTimeout=60000` passed **244 tests / 27 files**, exit 0; `npm run typecheck`
+passed, exit 0. UI `npm test -- --maxWorkers=1 --testTimeout=60000
+--hookTimeout=60000` passed **45 tests / 8 files**, exit 0; `npm run typecheck`
+passed, exit 0. `git diff --check` passed. These offline results include a regression
+that keeps the pending live-smoke finding open; they are not real MLX inference
+acceptance.
