@@ -17,6 +17,7 @@ import {
   providerStatuses,
 } from "./workers/coding-providers.mjs";
 import { resolve } from "node:path";
+import { availableMemory, stopService, topProcesses } from "./core/memory.js";
 
 export const output = (v: unknown) =>
   console.log(typeof v === "string" ? v : JSON.stringify(v, null, 2));
@@ -308,6 +309,18 @@ async function register(app: Command, repo: Repo) {
     .command("daemon")
     .option("--interval <seconds>", "heartbeat interval", "60")
     .action((o) => daemon(repo, Number(o.interval)));
+  app
+    .command("memory")
+    .description("Process footprint inventory, free memory, safe service stop")
+    .option("--top <n>", "number of processes", "10")
+    .option("--stop-service <label>", "gracefully stop an allow-listed service")
+    .action((o) => {
+      if (o.stopService) return output(stopService(o.stopService));
+      output({
+        ...availableMemory(),
+        top: topProcesses(undefined, Number(o.top)),
+      });
+    });
   const routine = app.command("routine");
   routine
     .command("add")
