@@ -2,6 +2,7 @@ import { rateLimited } from "./finalize.js";
 import {
   llmArgs,
   llmBackend,
+  primaryCodexArgs,
   recordBackend,
   readBackend,
   quotaFallback,
@@ -193,14 +194,7 @@ export function reviewerCommand(
       ? [
           "exec",
           "--json",
-          ...(ollama
-            ? []
-            : [
-                "--ignore-user-config",
-                ...(repo.getSetting("primary_model")
-                  ? ["--model", repo.getSetting("primary_model")!]
-                  : []),
-              ]),
+          ...(ollama ? [] : primaryCodexArgs(repo)),
           "-s",
           repo.getSetting("codex_reviewer_sandbox") || "read-only",
           "-C",

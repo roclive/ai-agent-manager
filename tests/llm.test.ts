@@ -12,6 +12,7 @@ import {
 import {
   llmArgs,
   llmBackend,
+  providerLlmArgs,
   quotaFallback,
   recordBackend,
 } from "../src/core/llm.js";
@@ -118,6 +119,34 @@ it("isolates the primary Codex reviewer from local config and uses fallback only
     expect(() => f.repo.setSetting(key!, value!)).toThrow();
   f.repo.setSetting("ollama_fallback_enabled", "0");
   expect(llmArgs(f.repo)).toEqual([]);
+});
+it("isolates primary Codex coding workers from user config while keeping Ollama explicit", () => {
+  setup();
+  f.repo.setSetting("primary_model", "gpt-5.6-sol");
+  const primary = codex.command({
+    worktree: f.path,
+    runDir: f.root,
+    promptFile: "prompt",
+    modelArgs: providerLlmArgs(f.repo, "codex"),
+  });
+  expect(primary.args).toEqual(
+    expect.arrayContaining([
+      "--ignore-user-config",
+      "--model",
+      "gpt-5.6-sol",
+    ]),
+  );
+  expect(primary.args.join(" ")).not.toContain("11434");
+  expect(primary.args.join(" ")).not.toContain("aam-fallback");
+
+  const local = codex.command({
+    worktree: f.path,
+    runDir: f.root,
+    promptFile: "prompt",
+    modelArgs: providerLlmArgs(f.repo, "ollama"),
+  });
+  expect(local.args).toEqual(expect.arrayContaining(llmArgs(f.repo, "ollama")));
+  expect(local.args).not.toContain("--ignore-user-config");
 });
 it("records an explicit primary provider independently of the legacy Ollama setting", () => {
   setup();

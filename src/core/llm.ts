@@ -32,8 +32,18 @@ export function llmArgs(
     : [];
 }
 
+export function primaryCodexArgs(repo: Repo): string[] {
+  return [
+    "--ignore-user-config",
+    ...(repo.getSetting("primary_model")
+      ? ["--model", repo.getSetting("primary_model")!]
+      : []),
+  ];
+}
+
 export function providerLlmArgs(repo: Repo, provider: string): string[] {
-  return provider === "ollama" ? llmArgs(repo, "ollama") : [];
+  if (provider === "ollama") return llmArgs(repo, "ollama");
+  return provider === "codex" ? primaryCodexArgs(repo) : [];
 }
 
 export function recordBackend(
