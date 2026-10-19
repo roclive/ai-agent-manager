@@ -97,3 +97,46 @@ it("backlog filter options follow API, labels/filter use effective executor and 
   await client.invalidateQueries({ queryKey: ["executors"] });
   await waitFor(() => expect(screen.getByTestId("executor-AAM-1")).toHaveTextContent("opencode · 全局"));
 });
+
+import { BoardPage } from "./pages-board";
+
+it("kanban pending cards use effective executor, keep historical worker on active cards, and refresh via SSE", async () => {
+  let current = { ...view };
+  const task = (id: number, extra: object) => ({
+    id, project_id: 1, identifier: `AAM-${id}`, title: `t${id}`, description: "", status: "backlog",
+    priority: "P1", role: "any", worker: "codex", depends_on: "[]", attempts: 1, max_attempts: 3,
+    updated_at: "2026-01-01", latest_worker: { run_id: 1, kind: "codex", model: null, label: "OLDWORKER" }, ...extra,
+  });
+  const tasks = [
+    task(1, {}),
+    task(2, { status: "ready", executor: "hermes" }),
+    task(3, { status: "in_progress" }),
+  ];
+  let listener: (() => void) | undefined;
+  class FakeES {
+    onopen: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    addEventListener(_: string, fn: () => void) { listener = fn; }
+    close() {}
+  }
+  vi.stubGlobal("EventSource", FakeES);
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    if (String(url).includes("/executors")) return new Response(JSON.stringify(current));
+    if (String(url).includes("/projects")) return new Response(JSON.stringify([{ id: 1, key: "AAM", name: "AAM" }]));
+    if (String(url).includes("/runs")) return new Response("[]");
+    return new Response(JSON.stringify(tasks));
+  }));
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter><BoardPage project="" /></MemoryRouter>
+    </QueryClientProvider>,
+  );
+  await waitFor(() => expect(screen.getByTestId("card-executor-AAM-1")).toHaveTextContent("claude · 全局"));
+  expect(screen.getByTestId("card-executor-AAM-2")).toHaveTextContent("hermes · 任务");
+  expect(screen.queryByTestId("card-executor-AAM-3")).toBeNull();
+  expect(screen.getAllByText("OLDWORKER").length).toBe(1);
+  current = { ...current, coding_executor: "opencode" };
+  listener?.();
+  await waitFor(() => expect(screen.getByTestId("card-executor-AAM-1")).toHaveTextContent("opencode · 全局"));
+});
