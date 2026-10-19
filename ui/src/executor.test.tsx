@@ -14,7 +14,7 @@ const view = {
     { id: "claude", label: "Claude (Sonnet)", installed: true, install_hint: "", effort_supported: true, cooldown_until: null },
     { id: "claude-opus", label: "Claude (Opus)", installed: true, install_hint: "", effort_supported: true, cooldown_until: null, model: "opus" },
     { id: "codex-luna", label: "Codex (Luna)", installed: true, install_hint: "", effort_supported: true, cooldown_until: null, model: "gpt-5.6-luna" },
-    { id: "hermes", label: "Hermes Agent (Nous)", installed: false, install_hint: "curl install.sh | bash", effort_supported: true, cooldown_until: null },
+    { id: "hermes", label: "Hermes Agent (Nous)", installed: false, install_hint: "curl install.sh | bash", effort_supported: false, cooldown_until: null },
   ],
 };
 function wrap(ui: React.ReactElement) {
