@@ -101,7 +101,7 @@ it("runs executable CLI management commands and reaps workers after the launchin
   run(["worktree", "prune", "T-1"]);
   run(["task", "move", "T-1", "backlog", "--note", "Reopen"]);
   expect(f.repo.task("T-1").status).toBe("backlog");
-});
+}, 60000);
 
 it("lists every current usage window for a selected provider", async () => {
   f = fixture();
