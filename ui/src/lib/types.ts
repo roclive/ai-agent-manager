@@ -41,6 +41,8 @@ export interface Task {
   priority: Priority;
   role: Role;
   worker: Worker;
+  executor?: string;
+  effective_executor?: EffectiveExecutor;
   depends_on: string | string[];
   attempts: number;
   max_attempts: number;
@@ -65,6 +67,7 @@ export interface Project {
   goal?: string;
   autopilot_rank?: number;
   context_file?: string | null;
+  coding_executor?: string;
   color?: string;
   running?: number;
   counts?: Partial<Record<TaskStatus, number>>;
@@ -173,3 +176,21 @@ export const workerLabels: Record<string, string> = {
   codex: "Codex 执行器",
   opencode: "OpenCode 执行器",
 };
+export type ExecutorSource = "task" | "project" | "global";
+export interface EffectiveExecutor {
+  value: string;
+  source: ExecutorSource;
+}
+export interface ExecutorInfo {
+  id: string;
+  label: string;
+  installed: boolean;
+  install_hint: string;
+  cooldown_until: string | null;
+}
+export interface ExecutorsView {
+  coding_executor: string;
+  executor_fallback: string[];
+  reviewer: string;
+  executors: ExecutorInfo[];
+}

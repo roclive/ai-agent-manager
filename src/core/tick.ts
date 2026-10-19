@@ -5,11 +5,15 @@ import { Repo } from "../db/index.js";
 import { alive, killGroup, type Runner, runner } from "./process.js";
 import { withLock } from "./lock.js";
 import { finalize, read } from "./finalize.js";
-import { dispatch, dependenciesDone, resolutionBusy } from "./dispatch.js";
+import {
+  dispatch,
+  dependenciesDone,
+  globalCooldownBlocks,
+  resolutionBusy,
+} from "./dispatch.js";
 import { collectAutopilot, promoteIdle, startAutopilot } from "./autopilot.js";
 import { exportViews } from "../views/index.js";
 import { QuotaUnavailableError } from "./usage.js";
-import { providerPolicyConfigured } from "./provider-policy.js";
 import {
   FALLBACK_PROVIDER,
   localRunActive,
@@ -45,10 +49,7 @@ export function tick(repo: Repo, _reviewRunner: Runner = runner) {
     // Unload the 9.4 GB model as soon as its run has ended (finished, failed, timed out or lost).
     if (localBefore && !localRunActive(repo)) stopLocalModelIfIdle(repo);
     reconcileIntegration(repo);
-    if (
-      providerPolicyConfigured(repo.getSetting("provider_policy")) ||
-      !(Date.parse(repo.getSetting("cooldown_until") || "") > Date.now())
-    )
+    {
       for (const t of repo.tasks({ status: "ready" })) {
         if (
           repo.runs().filter((r) => r.status === "running").length >=
@@ -56,6 +57,7 @@ export function tick(repo: Repo, _reviewRunner: Runner = runner) {
         )
           break;
         if (!dependenciesDone(repo, t) || resolutionBusy(repo, t)) continue;
+        if (globalCooldownBlocks(repo, t)) continue;
         try {
           dispatch(repo, t.identifier);
         } catch (e) {
@@ -64,6 +66,7 @@ export function tick(repo: Repo, _reviewRunner: Runner = runner) {
           repo.event("dispatch_error", String(e), t.id);
         }
       }
+    }
     collectAutopilot(repo);
     promoteIdle(repo);
     startAutopilot(repo);

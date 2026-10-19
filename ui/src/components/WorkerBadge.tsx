@@ -2,6 +2,8 @@ export type WorkerKind =
   | "codex"
   | "claude"
   | "opencode"
+  | "pi"
+  | "hermes"
   | "fake"
   | "other"
   | "unknown";
@@ -13,6 +15,8 @@ const kindText: Record<string, string> = {
   claude: "Claude",
   codex: "Codex",
   opencode: "opencode",
+  pi: "pi",
+  hermes: "Hermes",
   fake: "local",
   other: "local",
   unknown: "未知",
@@ -21,6 +25,8 @@ const kindColor: Record<string, string> = {
   claude: "28 85% 45%",
   codex: "160 70% 33%",
   opencode: "215 75% 48%",
+  pi: "190 70% 36%",
+  hermes: "330 60% 45%",
   fake: "270 45% 48%",
   other: "270 45% 48%",
   unknown: "220 8% 45%",

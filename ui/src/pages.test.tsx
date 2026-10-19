@@ -100,6 +100,7 @@ it("drawer saves editable fields with PATCH and previews markdown", async () => 
           priority: "P1",
           role: "frontend",
           worker: "codex",
+          executor: "",
           max_attempts: 3,
           depends_on: [],
         }),

@@ -60,6 +60,39 @@ export const opencode: Adapter = {
     ],
   }),
 };
+export const claude: Adapter = {
+  name: "claude",
+  // The script reads the prompt itself and declares sonnet as its model.
+  command: (c) => ({
+    cmd: "sh",
+    args: [
+      fileURLToPath(new URL("../../scripts/claude-worker.sh", import.meta.url)),
+      c.worktree,
+      c.promptFile,
+    ],
+  }),
+};
+// pi (https://github.com/badlogic/pi-mono): -p is non-interactive; @file attaches the prompt file.
+export const pi: Adapter = {
+  name: "pi",
+  command: (c) => ({
+    cmd: "pi",
+    args: [
+      "-p",
+      "--no-session",
+      `@${c.promptFile}`,
+      "Carry out the attached task in the current directory. Do not run git add, git commit or git push.",
+    ],
+  }),
+};
+// Hermes Agent (Nous Research): `hermes chat --quiet -q <prompt>` is the one-shot mode.
+export const hermes: Adapter = {
+  name: "hermes",
+  command: (c) => ({
+    cmd: "sh",
+    args: ["-c", 'exec hermes chat --quiet -q "$(cat "$1")"', "hermes", c.promptFile],
+  }),
+};
 export function command(worker: string, ctx: Context): Command {
   if (process.env.AAM_FAKE_WORKER)
     return {
@@ -68,6 +101,9 @@ export function command(worker: string, ctx: Context): Command {
     };
   if (worker === "codex") return codex.command(ctx);
   if (worker === "opencode") return opencode.command(ctx);
+  if (worker === "claude") return claude.command(ctx);
+  if (worker === "pi") return pi.command(ctx);
+  if (worker === "hermes") return hermes.command(ctx);
   throw new Error("Unknown worker");
 }
 const CONVENTION_FILES = ["CLAUDE.md", "MANAGER.md"];

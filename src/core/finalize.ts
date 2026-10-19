@@ -11,6 +11,7 @@ import { Repo, type Run } from "../db/index.js";
 import { git, runner } from "./process.js";
 import { quotaFallback, readBackend } from "./llm.js";
 import { freezeProvider, releaseProvider } from "./providers.js";
+import { resolveExecutor } from "./executors.js";
 import { providerPolicyConfigured } from "./provider-policy.js";
 export function read(path: string) {
   try {
@@ -95,7 +96,11 @@ export function finalize(repo: Repo, run: Run, terminal?: "timeout" | "lost") {
       freezeProvider(repo, provider, "Worker quota exhausted");
       // Preserve the old single-provider signal for existing installations.
       // Configured multi-provider routing relies only on the scoped breaker.
-      if (!providerPolicyConfigured(repo.getSetting("provider_policy"))) {
+      // An explicit executor is accounted only through its own breaker above.
+      if (
+        !providerPolicyConfigured(repo.getSetting("provider_policy")) &&
+        resolveExecutor(repo, t).value === "auto"
+      ) {
         if (quotaFallback(repo, readBackend(dir), "Worker quota exhausted"))
           return;
         repo.setSetting(

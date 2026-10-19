@@ -1,4 +1,5 @@
 // Adapted from paperclipai/paperclip (MIT)
+import { ExecutorBadge, ExecutorSelect } from "./ExecutorSelect";
 import { WorkerBadge } from "./WorkerBadge";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -109,6 +110,7 @@ function Detail({ task }: { task: TaskDetail }) {
                 priority: f.get("priority"),
                 role: f.get("role"),
                 worker: f.get("worker"),
+                executor: f.get("executor"),
                 max_attempts: Number(f.get("max_attempts")),
                 depends_on: f.getAll("depends_on"),
               });
@@ -154,6 +156,16 @@ function Detail({ task }: { task: TaskDetail }) {
                 </label>
               ))}
             </div>
+            <label>
+              编码执行器（任务级覆盖）{" "}
+              <ExecutorBadge effective={task.effective_executor} />
+              <ExecutorSelect
+                name="executor"
+                label="任务编码执行器"
+                inheritLabel="继承项目/全局"
+                value={task.executor ?? ""}
+              />
+            </label>
             <label>
               依赖任务
               <select

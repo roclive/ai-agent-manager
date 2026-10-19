@@ -106,6 +106,7 @@ export function cli(repo: Repo) {
     .option("--role <role>", "role", "any")
     .option("--complexity <level>", "low, medium or high", "medium")
     .option("--worker <worker>")
+    .option("--executor <executor>", "task coding executor override")
     .option("--depends <ids>")
     .option("--ready")
     .action((o) => {
@@ -172,6 +173,7 @@ export function cli(repo: Repo) {
     .option("--desc <text>")
     .option("--priority <priority>")
     .option("--worker <worker>")
+    .option("--executor <executor>", "task coding executor override (auto, codex, claude, ...; \"\" inherits)")
     .option("--depends <ids>")
     .action((id, o) =>
       output(
@@ -185,6 +187,7 @@ export function cli(repo: Repo) {
           description: o.desc,
           priority: o.priority,
           worker: o.worker,
+          executor: o.executor,
           depends_on: o.depends?.split(","),
         }),
       ),

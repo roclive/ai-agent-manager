@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { request } from "../lib/api";
 import { useProjects } from "../lib/queries";
 import type { Project } from "../lib/types";
+import { ExecutorSelect } from "../components/ExecutorSelect";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { NativeSelect } from "../components/ui/select";
@@ -81,6 +82,21 @@ export function Settings() {
                 <option>codex</option>
                 <option>opencode</option>
               </NativeSelect>
+            </label>
+            <label>
+              编码执行器（全局默认，自动审查驳回后重派也使用它）
+              <ExecutorSelect
+                name="coding_executor"
+                label="全局编码执行器"
+                value={q.data.coding_executor || "auto"}
+              />
+            </label>
+            <label>
+              执行器回退列表（逗号分隔；为空则限流时等待，绝不静默回退到 Codex）
+              <Input
+                name="executor_fallback"
+                defaultValue={q.data.executor_fallback ?? ""}
+              />
             </label>
             <label>
               审查模式
@@ -314,6 +330,15 @@ function ProjectEditor({
               defaultChecked={!!project.autopilot}
             />
             自动驾驶
+          </label>
+          <label>
+            编码执行器（覆盖全局）
+            <ExecutorSelect
+              name="coding_executor"
+              label="项目编码执行器"
+              inheritLabel="继承全局"
+              value={project.coding_executor ?? ""}
+            />
           </label>
           <label>
             项目目标

@@ -1,4 +1,5 @@
 import { usageState, checkQuota } from "./core/usage.js";
+import { resolveExecutor, executorsView } from "./core/executors.js";
 import { dependencyWaiting } from "./core/dispatch.js";
 import { integrationStatus, integrate } from "./core/integration.js";
 import { cors } from "hono/cors";
@@ -100,6 +101,7 @@ export function createApp(
           ...t,
           dependency_waiting: dependencyWaiting(repo, t),
           latest_worker: repo.latestWorker(t.id),
+          effective_executor: resolveExecutor(repo, t),
         })),
     ),
   );
@@ -138,6 +140,7 @@ export function createApp(
       "title",
       "description",
       "worker",
+      "executor",
       "sort",
       "sort_order",
       "depends_on",
@@ -304,6 +307,22 @@ export function createApp(
     })();
     repo.event("settings", `Updated via UI: ${Object.keys(p).join(", ")}`);
     return c.json(repo.settings());
+  });
+  app.get("/api/executors", (c) => c.json(executorsView(repo)));
+  app.put("/api/executors", async (c) => {
+    const p = await c.req.json<Record<string, unknown>>();
+    const keys = Object.keys(p);
+    if (keys.some((k) => !["coding_executor", "executor_fallback"].includes(k)))
+      throw new Error("Unsupported executor field");
+    repo.db.transaction(() => {
+      for (const k of keys)
+        repo.setSetting(
+          k,
+          Array.isArray(p[k]) ? (p[k] as string[]).join(",") : String(p[k]),
+        );
+    })();
+    repo.event("settings", `Updated executors via UI: ${keys.join(", ")}`);
+    return c.json(executorsView(repo));
   });
   routingRoutes(app, repo);
   uiRoutes(app, repo, options.dist);

@@ -235,3 +235,26 @@ it("retries with preserved feedback, validated attempts, and running-worker prot
   expect((await retry()).status).toBe(400);
   expect(f.repo.task(t.id).attempts).toBe(0);
 });
+it("exposes executor settings, validates them and reports the effective executor", async () => {
+  f = fixture();
+  const app = createApp(f.repo);
+  const req = (path: string, method = "GET", body?: unknown) =>
+    app.request(`/api/${path}`, {
+      method,
+      headers: { "Content-Type": "application/json", "X-AAM": "1" },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  const t = f.task();
+  const put = await req("executors", "PUT", { coding_executor: "claude" });
+  expect(put.status).toBe(200);
+  const view = await put.json();
+  expect(view.coding_executor).toBe("claude");
+  expect(view.executors.map((e: { id: string }) => e.id)).toContain("hermes");
+  expect((await req("executors", "PUT", { coding_executor: "x" })).status).toBe(400);
+  expect((await req("executors", "PUT", { reviewer: "codex" })).status).toBe(400);
+  await req("projects/T", "PATCH", { coding_executor: "pi" });
+  expect((await (await req(`tasks/${t.identifier}`)).json()).effective_executor).toEqual({ value: "pi", source: "project" });
+  await req(`tasks/${t.identifier}`, "PATCH", { executor: "codex" });
+  const list = await (await req("tasks")).json();
+  expect(list[0].effective_executor).toEqual({ value: "codex", source: "task" });
+});

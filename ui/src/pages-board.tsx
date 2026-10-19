@@ -10,6 +10,7 @@ import { KanbanBoard } from "./components/KanbanBoard";
 import { NewTaskDialog } from "./components/NewTaskDialog";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
+import { GlobalExecutorSwitch } from "./components/ExecutorSelect";
 import { NativeSelect } from "./components/ui/select";
 export function BoardPage({ project }: { project: string }) {
   const live = useEventStream();
@@ -69,6 +70,14 @@ export function BoardPage({ project }: { project: string }) {
           <h1>看板</h1>
           <p>跟进任务，从待办到完成。</p>
         </div>
+        <GlobalExecutorSwitch
+          onChange={(value) =>
+            void api
+              .setExecutors({ coding_executor: value })
+              .then(() => client.invalidateQueries({ queryKey: ["executors"] }))
+              .catch((e: Error) => setToast(`切换执行器失败：${e.message}`))
+          }
+        />
         <Button onClick={() => setCreating("backlog")}>
           <Plus />
           新建任务

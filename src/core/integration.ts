@@ -203,6 +203,7 @@ function integrateLocked(repo: Repo, id: string) {
             priority: "P0",
             role: "any",
             worker: original.worker,
+            executor: original.executor,
             status: "ready",
             integrated: 0,
             resolves_task_id: original.id,

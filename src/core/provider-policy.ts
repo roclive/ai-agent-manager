@@ -3,7 +3,7 @@ export type ProviderClass = "free" | "local" | "premium" | "standard";
 
 export interface ProviderRule {
   id: string;
-  worker: "codex" | "opencode" | "claude";
+  worker: "codex" | "opencode" | "claude" | "pi" | "hermes";
   class: ProviderClass;
   legal: boolean;
   roles: Array<"backend" | "frontend" | "testing" | "any">;

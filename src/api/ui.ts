@@ -14,6 +14,7 @@ import { streamSSE } from "hono/streaming";
 import { Cron } from "croner";
 import { Repo, statuses, type Routine } from "../db/index.js";
 import { alive, git, killGroup } from "../core/process.js";
+import { resolveExecutor, executorsView } from "../core/executors.js";
 import { dispatch } from "../core/dispatch.js";
 import { review } from "../core/review.js";
 import { merge } from "../core/worktree.js";
@@ -32,7 +33,10 @@ export const routineJSON = (r: Routine) => {
   }
 };
 export function taskDetail(repo: Repo, id: string) {
-  const detail = repo.detail(id);
+  const detail = {
+    ...repo.detail(id),
+    effective_executor: resolveExecutor(repo, repo.task(id)),
+  };
   let diff_stat: string | null = null,
     last_message: string | null = null;
   try {
@@ -188,6 +192,7 @@ export function uiRoutes(
         last_tick_age_s: age,
       },
       cooldown_until: repo.getSetting("cooldown_until"),
+      executors: executorsView(repo),
       running_runs: repo.runs().filter((r) => r.status === "running").length,
       max_parallel: Number(repo.getSetting("max_parallel")),
       counts_by_status: Object.fromEntries(

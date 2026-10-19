@@ -5,6 +5,8 @@ export type WorkerKind =
   | "codex"
   | "claude"
   | "opencode"
+  | "pi"
+  | "hermes"
   | "fake"
   | "other"
   | "unknown";
@@ -14,11 +16,13 @@ export interface WorkerIdentity {
   label: string;
 }
 
-const KNOWN = ["codex", "claude", "opencode"] as const;
+const KNOWN = ["codex", "claude", "opencode", "pi", "hermes"] as const;
 const KIND_NAME: Record<string, string> = {
   codex: "Codex",
   claude: "Claude",
   opencode: "opencode",
+  pi: "pi",
+  hermes: "Hermes",
   fake: "fake",
   other: "other",
   unknown: "unknown",
@@ -70,6 +74,9 @@ export function detectIdentity(
   const model = opts.model || (i >= 0 ? args[i + 1] : "") || "default";
   if (worker === "codex") return makeIdentity("codex", model);
   if (worker === "opencode") return makeIdentity("opencode", model);
+  if (worker === "claude") return makeIdentity("claude", "sonnet");
+  if (worker === "pi" || worker === "hermes")
+    return makeIdentity(worker, opts.model ?? "");
   return { kind: "other", model: "", label: worker };
 }
 

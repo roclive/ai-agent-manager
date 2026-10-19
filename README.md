@@ -282,3 +282,12 @@ aam autopilot status
 `CODEX_HOME`），与编码 worker 共享额度；触发额度限制后冷却 30 分钟再重试。
 新安装默认每日自动审查上限为 120，规划上限为 10；已有配置保持原值。
 健康失败时暂停 LLM 作业，每 2 分钟重查；健康时每 30 分钟重查。
+
+## 编码执行器（coding executor）与审查者（reviewer）
+
+- `coding_executor`（全局，默认 `auto`）、项目级 `coding_executor`、任务级 `executor`；解析顺序：任务 > 项目 > 全局 > `auto`。
+  可选值：`auto`（按配额路由）、`codex`、`claude`（scripts/claude-worker.sh，sonnet）、`opencode`、`opencode-local`（本地 gemma4）、`pi`、`hermes`（Hermes Agent，未安装则下拉禁用并显示安装提示，aam 不会自动安装）。
+- 所有自动路径（首次派发、自动审查驳回后重派、冲突解决任务、空闲补充/规划任务、重试）都在派发时解析该设置。
+- 选定执行器限流时只冷却它自己（按执行器的熔断器），不会静默回退到 Codex；只有用户设置了 `executor_fallback`（逗号分隔列表）才会按列表回退，否则任务保持就绪等待。
+- `reviewer` 是另一个独立设置：只决定自动审查/规划由谁执行，与编码执行器无关。
+- 命令：`aam settings set coding_executor claude`、`aam task edit <ID> --executor pi`；API：`GET/PUT /api/executors`。

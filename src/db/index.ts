@@ -1,4 +1,5 @@
 import { inferIdentity } from "../workers/identity.js";
+import { EXECUTOR_VALUES, validFallback } from "../core/executor-names.js";
 import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
@@ -30,6 +31,7 @@ export interface Project {
   goal: string;
   autopilot_rank: number;
   context_file: string | null;
+  coding_executor: string;
   created_at: string;
 }
 export interface Task {
@@ -45,6 +47,7 @@ export interface Task {
   role: string;
   complexity: "low" | "medium" | "high";
   worker: string;
+  executor: string;
   depends_on: string;
   attempts: number;
   integrated: number;
@@ -117,6 +120,7 @@ export class Repo {
       goal: "TEXT NOT NULL DEFAULT ''",
       autopilot_rank: "INTEGER NOT NULL DEFAULT 100",
       context_file: "TEXT",
+      coding_executor: "TEXT NOT NULL DEFAULT ''",
     }))
       if (!projectColumns.some((c) => c.name === name))
         this.db.exec(`ALTER TABLE projects ADD COLUMN ${name} ${declaration}`);
@@ -153,6 +157,7 @@ export class Repo {
       integration_attempts: "INTEGER NOT NULL DEFAULT 0",
       integrated: "INTEGER NOT NULL DEFAULT 1",
       resolves_task_id: "INTEGER REFERENCES tasks(id)",
+      executor: "TEXT NOT NULL DEFAULT ''",
     }))
       if (!columns.some((c) => c.name === name))
         this.db.exec(`ALTER TABLE tasks ADD COLUMN ${name} ${declaration}`);
@@ -169,6 +174,8 @@ export class Repo {
       max_parallel: "2",
       worker_timeout_min: "45",
       default_worker: "codex",
+      coding_executor: "auto",
+      executor_fallback: "",
       review_mode: "manual",
       cooldown_until: "",
       last_tick_at: "",
@@ -239,6 +246,10 @@ export class Repo {
         Number(value) > 5)
     )
       throw new Error("Expected integer from 1 to 5");
+    if (key === "coding_executor" && !EXECUTOR_VALUES.includes(value))
+      throw new Error("Invalid coding executor");
+    if (key === "executor_fallback" && !validFallback(value))
+      throw new Error("Expected comma-separated executors");
     if (key === "keep_awake" && !["0", "1"].includes(value))
       throw new Error("Expected 0 or 1");
     if (key === "ollama_fallback_enabled" && !["0", "1"].includes(value))
@@ -410,10 +421,16 @@ export class Repo {
       "goal",
       "autopilot_rank",
       "context_file",
+      "coding_executor",
     ];
     if (Object.keys(patch).some((k) => !allowed.includes(k)))
       throw new Error("Unsupported project field");
     const data = { ...patch };
+    if (
+      data.coding_executor !== undefined &&
+      !["", ...EXECUTOR_VALUES].includes(data.coding_executor as string)
+    )
+      throw new Error("Invalid coding executor");
     for (const k of ["auto_review", "autopilot"])
       if (data[k] !== undefined) {
         if (![0, 1, false, true].includes(data[k] as number))
@@ -535,6 +552,7 @@ export class Repo {
       "role",
       "complexity",
       "worker",
+      "executor",
       "depends_on",
       "attempts",
       "integrated",
@@ -566,6 +584,7 @@ export class Repo {
       role: ["backend", "frontend", "testing", "any"],
       complexity: ["low", "medium", "high"],
       worker: ["codex", "opencode"],
+      executor: ["", ...EXECUTOR_VALUES],
     }))
       if (
         data[k] !== undefined &&

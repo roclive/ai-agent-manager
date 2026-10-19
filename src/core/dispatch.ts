@@ -22,6 +22,7 @@ import {
   localRunActive,
 } from "./local-model.js";
 
+import { resolveExecutor, selectExecutor } from "./executors.js";
 import { providerLlmArgs, recordBackend } from "./llm.js";
 export function dependenciesDone(repo: Repo, t: Task) {
   return (JSON.parse(t.depends_on) as string[]).every((id) => {
@@ -51,10 +52,23 @@ export function resolutionBusy(repo: Repo, t: Task) {
     );
 }
 // Low-quota fallback bypasses provider policy and quota: it is the last resort.
+// An explicitly chosen coding executor is authoritative: neither the legacy low-quota
+// fallback nor quota-aware routing may substitute another worker for it.
 function choose(repo: Repo, t: Task) {
+  const effective = resolveExecutor(repo, t);
+  if (effective.value !== "auto") return selectExecutor(repo, effective);
   return fallbackActive(repo)
     ? fallbackSelection(repo)
     : selectProvider(repo, t);
+}
+// The legacy single cooldown only gates quota-aware ("auto") routing; explicit executors
+// carry their own per-executor cooldown (provider_breakers).
+export function globalCooldownBlocks(repo: Repo, t: Task) {
+  return (
+    !providerPolicyConfigured(repo.getSetting("provider_policy")) &&
+    Date.parse(repo.getSetting("cooldown_until") || "") > Date.now() &&
+    resolveExecutor(repo, t).value === "auto"
+  );
 }
 export function dispatch(repo: Repo, id: string, force = false) {
   const t = repo.task(id);
@@ -68,10 +82,7 @@ export function dispatch(repo: Repo, id: string, force = false) {
     throw new Error(
       "Project has active work or review; serialize integration resolutions",
     );
-  if (
-    !providerPolicyConfigured(repo.getSetting("provider_policy")) &&
-    Date.parse(repo.getSetting("cooldown_until") || "") > Date.now()
-  )
+  if (globalCooldownBlocks(repo, t))
     throw new Error("Workers are in cooldown");
 
   let selected;
