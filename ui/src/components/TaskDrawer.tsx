@@ -1,4 +1,5 @@
 // Adapted from paperclipai/paperclip (MIT)
+import { WorkerBadge } from "./WorkerBadge";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -214,7 +215,12 @@ function Detail({ task }: { task: TaskDetail }) {
           {task.runs?.map((r) => (
             <article className="event-row" key={r.id}>
               <strong>
-                #{r.id} · {r.worker} · {runStatusLabels[r.status]}
+                #{r.id} ·{" "}
+                <WorkerBadge
+                  kind={r.worker_kind}
+                  label={r.worker_label ?? r.worker}
+                />{" "}
+                · {runStatusLabels[r.status]}
               </strong>
               <p>
                 {r.started_at} → {r.ended_at ?? "运行中"} ·{" "}

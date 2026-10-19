@@ -49,6 +49,12 @@ export interface Task {
   created_at: string;
   updated_at: string;
   runs?: Run[];
+  latest_worker?: {
+    run_id: number;
+    kind: string | null;
+    model: string | null;
+    label: string | null;
+  } | null;
 }
 export interface Project {
   id: number;
@@ -75,6 +81,9 @@ export interface Run {
   id: number;
   task_id: number;
   worker: Worker;
+  worker_kind?: string | null;
+  worker_model?: string | null;
+  worker_label?: string | null;
   status:
     "running" | "succeeded" | "failed" | "timeout" | "lost" | "rate_limited";
   started_at: string;

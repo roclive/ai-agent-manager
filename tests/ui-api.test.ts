@@ -347,3 +347,16 @@ it("reports recent daemon heartbeats and records scheduler ticks", async () => {
     });
   }
 });
+it("exposes worker identity on runs, task detail and task list", async () => {
+  const { req } = setup("sleep 30");
+  const t = f.task();
+  await req(`/api/tasks/${t.id}/run`, "POST", {});
+  const run = f.repo.runs()[0];
+  const runs = await (await req(`/api/runs?task=${t.identifier}`)).json();
+  expect(runs[0]).toMatchObject({ worker_kind: "fake", worker_label: expect.any(String) });
+  const detail = await (await req(`/api/tasks/${t.id}`)).json();
+  expect(detail.latest_worker).toMatchObject({ kind: "fake" });
+  const list = await (await req("/api/tasks")).json();
+  expect(list[0].latest_worker).toMatchObject({ run_id: run.id });
+  await req(`/api/tasks/${t.id}/cancel`, "POST");
+});

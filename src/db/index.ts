@@ -1,3 +1,4 @@
+import { inferIdentity } from "../workers/identity.js";
 import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
@@ -63,6 +64,9 @@ export interface Run {
   task_id: number;
   worker: string;
   provider: string | null;
+  worker_kind: string | null;
+  worker_model: string | null;
+  worker_label: string | null;
   pid: number | null;
   status: string;
   start_sha: string | null;
@@ -157,6 +161,10 @@ export class Repo {
       this.db.exec("ALTER TABLE runs ADD COLUMN start_sha TEXT");
     if (!runColumns.some((c) => c.name === "provider"))
       this.db.exec("ALTER TABLE runs ADD COLUMN provider TEXT");
+    for (const name of ["worker_kind", "worker_model", "worker_label"])
+      if (!runColumns.some((c) => c.name === name))
+        this.db.exec(`ALTER TABLE runs ADD COLUMN ${name} TEXT`);
+    this.backfillWorkerIdentity();
     for (const [k, v] of Object.entries({
       max_parallel: "2",
       worker_timeout_min: "45",
@@ -620,6 +628,19 @@ export class Repo {
       )
       .all(...(taskId === undefined ? [limit] : [taskId, limit]));
   }
+  // Runs recorded before worker identity existed: derive it from run files.
+  backfillWorkerIdentity() {
+    const rows = this.db
+      .prepare("SELECT id,worker FROM runs WHERE worker_kind IS NULL")
+      .all() as { id: number; worker: string }[];
+    const update = this.db.prepare(
+      "UPDATE runs SET worker_kind=?,worker_model=?,worker_label=? WHERE id=?",
+    );
+    for (const r of rows) {
+      const i = inferIdentity(r.worker, resolve(this.home, "runs", String(r.id)));
+      update.run(i.kind, i.model, i.label, r.id);
+    }
+  }
   runs(taskId?: number) {
     return this.db
       .prepare(
@@ -627,10 +648,23 @@ export class Repo {
       )
       .all(...(taskId === undefined ? [] : [taskId])) as Run[];
   }
+  // Identity of whoever really executed the task's most recent run.
+  latestWorker(taskId: number) {
+    const r = this.runs(taskId)[0];
+    return r
+      ? {
+          run_id: r.id,
+          kind: r.worker_kind,
+          model: r.worker_model,
+          label: r.worker_label,
+        }
+      : null;
+  }
   detail(id: string) {
     const task = this.task(id);
     return {
       ...task,
+      latest_worker: this.latestWorker(task.id),
       runs: this.runs(task.id),
       events: this.events(50, task.id),
     };

@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import type { WorkerIdentity } from "../workers/identity.js";
 import { Repo } from "../db/index.js";
 
 export function llmBackend(repo: Repo): "primary" | "ollama" {
@@ -35,7 +36,12 @@ export function providerLlmArgs(repo: Repo, provider: string): string[] {
   return provider === "ollama" ? llmArgs(repo, "ollama") : [];
 }
 
-export function recordBackend(repo: Repo, dir: string, provider?: string) {
+export function recordBackend(
+  repo: Repo,
+  dir: string,
+  provider?: string,
+  identity?: WorkerIdentity,
+) {
   const backend = provider
     ? provider === "ollama"
       ? "ollama"
@@ -52,6 +58,13 @@ export function recordBackend(repo: Repo, dir: string, provider?: string) {
           : backend === "ollama"
             ? repo.getSetting("ollama_model")
             : "configured default",
+      ...(identity
+        ? {
+            worker_kind: identity.kind,
+            worker_model: identity.model,
+            worker_label: identity.label,
+          }
+        : {}),
     }),
   );
 }
