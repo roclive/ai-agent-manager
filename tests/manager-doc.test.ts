@@ -30,7 +30,8 @@ describe("docs/MANAGER.md audit", () => {
     expect(hits).toEqual(["src/db/index.ts"]);
   });
   it("cited dispatch routing lines still match", () => {
-    const lines = readFileSync(resolve(root, "src/core/dispatch.ts"), "utf8").split("\n");
-    expect(lines.slice(56, 59).join("\n")).toMatch(/function choose[\s\S]*selectExecutor/);
+    const source = readFileSync(resolve(root, "src/core/dispatch.ts"), "utf8");
+    const choose = source.match(/function choose\([^]*?\n}/)?.[0];
+    expect(choose).toMatch(/function choose[\s\S]*selectExecutor/);
   });
 });

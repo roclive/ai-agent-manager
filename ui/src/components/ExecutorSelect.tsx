@@ -118,7 +118,7 @@ export function GlobalExecutorSwitch({
   onEffortChange,
 }: {
   onChange: (value: string) => void;
-  onEffortChange: (value: string) => void;
+  onEffortChange?: (value: string) => void;
 }) {
   const q = useExecutors();
   if (!q.data) return null;

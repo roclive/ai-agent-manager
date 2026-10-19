@@ -9,7 +9,7 @@ import {
   executorsView,
   resolveExecutor,
 } from "../src/core/executors.js";
-import { claude, hermes, pi, command } from "../src/workers/index.js";
+import { claude, codex, hermes, pi, command } from "../src/workers/index.js";
 import { QuotaUnavailableError } from "../src/core/usage.js";
 
 let f: ReturnType<typeof fixture>;
@@ -126,8 +126,31 @@ it("builds pi, hermes and claude adapter commands", () => {
   expect(h.args.join(" ")).toContain("hermes chat --quiet -q");
   expect(h.args).toContain("/r/prompt.md");
   const c = claude.command(ctx);
-  expect(c.args.slice(-2)).toEqual(["/w", "/r/prompt.md"]);
+  expect(c.args.slice(1)).toEqual(["/w", "/r/prompt.md", "sonnet", "default"]);
   expect(c.args[0]).toMatch(/scripts\/claude-worker\.sh$/);
   expect(command("pi", ctx).cmd).toBe("pi");
   expect(() => command("nope", ctx)).toThrow();
+});
+
+it("passes worker effort as separate CLI arguments and leaves defaults unchanged", () => {
+  delete process.env.AAM_FAKE_WORKER;
+  const ctx = { worktree: "/w", promptFile: "/r/prompt.md", runDir: "/r" };
+  const defaultCodex = codex.command(ctx).args;
+  expect(defaultCodex.some((arg) => arg.includes("model_reasoning_effort"))).toBe(false);
+  expect(codex.command({ ...ctx, effort: "high" }).args).toContain(
+    'model_reasoning_effort="high"',
+  );
+  expect(claude.command({ ...ctx, model: "opus", effort: "medium" }).args.slice(-4))
+    .toEqual(["/w", "/r/prompt.md", "opus", "medium"]);
+});
+
+it("persists supported effort and only dispatches it to Claude or Codex", () => {
+  f = fixture();
+  f.repo.setSetting("worker_effort", "high");
+  expect(executorsView(f.repo).worker_effort).toBe("high");
+  expect(() => f.repo.setSetting("worker_effort", "max")).toThrow(/Invalid worker effort/);
+  expect(executorsView(f.repo).executors.find((e) => e.id === "claude")?.effort_supported)
+    .toBe(true);
+  expect(executorsView(f.repo).executors.find((e) => e.id === "opencode")?.effort_supported)
+    .toBe(false);
 });

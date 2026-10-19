@@ -5,12 +5,14 @@ import { GlobalExecutorSwitch, ExecutorBadge, ExecutorSelect } from "./component
 
 const view = {
   coding_executor: "claude",
+  worker_effort: "default",
+  effort_choices: ["default", "low", "medium", "high"],
   executor_fallback: [],
   reviewer: "codex",
   executors: [
-    { id: "codex", label: "Codex", installed: true, install_hint: "npm i -g @openai/codex", cooldown_until: new Date(Date.now() + 600000).toISOString() },
-    { id: "claude", label: "Claude (sonnet)", installed: true, install_hint: "", cooldown_until: null },
-    { id: "hermes", label: "Hermes Agent (Nous)", installed: false, install_hint: "curl install.sh | bash", cooldown_until: null },
+    { id: "codex", label: "Codex", installed: true, install_hint: "npm i -g @openai/codex", cooldown_until: new Date(Date.now() + 600000).toISOString(), effort_supported: true },
+    { id: "claude", label: "Claude (sonnet)", installed: true, install_hint: "", cooldown_until: null, effort_supported: true },
+    { id: "hermes", label: "Hermes Agent (Nous)", installed: false, install_hint: "curl install.sh | bash", cooldown_until: null, effort_supported: false },
   ],
 };
 function wrap(ui: React.ReactElement) {
@@ -22,6 +24,32 @@ function wrap(ui: React.ReactElement) {
 }
 beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(view))));
+});
+
+it("persists effort, refetches it, and disables it after switching executor", async () => {
+  let current = { ...view };
+  const fetch = vi.fn(async (_url: string, init?: RequestInit) => {
+    if (init?.method === "PUT") {
+      current = { ...current, ...JSON.parse(String(init.body)) };
+    }
+    return new Response(JSON.stringify(current));
+  });
+  vi.stubGlobal("fetch", fetch);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={client}>
+      <GlobalExecutorSwitch
+        onChange={(coding_executor) => void fetch("/executors", { method: "PUT", body: JSON.stringify({ coding_executor }) }).then(() => client.invalidateQueries({ queryKey: ["executors"] }))}
+        onEffortChange={(worker_effort) => void fetch("/executors", { method: "PUT", body: JSON.stringify({ worker_effort }) }).then(() => client.invalidateQueries({ queryKey: ["executors"] }))}
+      />
+    </QueryClientProvider>,
+  );
+  const effort = await screen.findByLabelText("工作执行器思考强度");
+  fireEvent.change(effort, { target: { value: "high" } });
+  await waitFor(() => expect(effort).toHaveValue("high"));
+  fireEvent.change(screen.getByLabelText("全局编码执行器"), { target: { value: "hermes" } });
+  await waitFor(() => expect(effort).toBeDisabled());
+  expect(screen.getByText("不可用")).toBeInTheDocument();
 });
 
 it("lists executors, disables uninstalled ones with hint, and reports changes", async () => {
