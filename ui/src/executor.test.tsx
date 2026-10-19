@@ -13,7 +13,7 @@ const view = {
     { id: "codex-sol", label: "Codex (Sol)", installed: true, install_hint: "npm i -g @openai/codex", effort_supported: true, cooldown_until: new Date(Date.now() + 600000).toISOString(), model: "gpt-6.1-sol" },
     { id: "claude", label: "Claude (Sonnet)", installed: true, install_hint: "", effort_supported: true, cooldown_until: null },
     { id: "claude-opus", label: "Claude (Opus)", installed: true, install_hint: "", effort_supported: true, cooldown_until: null, model: "opus" },
-    { id: "codex-luna", label: "Codex (Luna)", installed: true, install_hint: "", effort_supported: true, cooldown_until: null, model: "gpt-5.6-luna" },
+    { id: "codex-luna", label: "Codex (Luna)", installed: true, install_hint: "", effort_supported: true, cooldown_until: null, model: "gpt-6-luna" },
     { id: "hermes", label: "Hermes Agent (Nous)", installed: false, install_hint: "curl install.sh | bash", effort_supported: false, cooldown_until: null },
   ],
 };
@@ -179,4 +179,12 @@ it("shows model variants and maps legacy codex to Codex (Sol)", async () => {
   expect(select.value).toBe("codex-sol");
   expect(new FormData(select.form!).get("e")).toBe("codex-sol");
   expect(effectiveExecutor({ executor: "codex", project_id: 1 } as never, [], undefined)).toEqual({ value: "codex-sol", source: "task" });
+});
+
+it("shows model drift warnings and clears them on executor switching", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ ...view, executors: view.executors.map(e => ({...e, model_warning: e.id === "codex-luna" ? "模型映射警告：发现更新模型" : null})) }))));
+  wrap(<ExecutorSelect label="执行器警告测试" value="codex-luna" name="executor" />);
+  expect(await screen.findByRole("alert")).toHaveTextContent("发现更新模型");
+  fireEvent.change(screen.getByLabelText("执行器警告测试"), {target: {value:"claude"}});
+  expect(screen.queryByRole("alert")).toBeNull();
 });

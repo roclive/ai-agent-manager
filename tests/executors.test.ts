@@ -161,7 +161,7 @@ it("model variants build the right command, identity and accounting", () => {
   f = fixture();
   const cases = [
     ["codex-sol", "codex", "codex", "gpt-6.1-sol"],
-    ["codex-luna", "codex", "codex", "gpt-5.6-luna"],
+    ["codex-luna", "codex", "codex", "gpt-6-luna"],
     ["claude-opus", "claude", "claude", "opus"],
     ["claude", "claude", "claude", "sonnet"],
   ] as const;
@@ -184,9 +184,9 @@ it("model variants build the right command, identity and accounting", () => {
   const sol = command("codex", { ...ctx, modelArgs: providerLlmArgs(f.repo, "codex", "gpt-6.1-sol") });
   expect(sol.args).toContain("--model");
   expect(sol.args[sol.args.indexOf("--model") + 1]).toBe("gpt-6.1-sol");
-  const luna = command("codex", { ...ctx, modelArgs: providerLlmArgs(f.repo, "codex", "gpt-5.6-luna") });
+  const luna = command("codex", { ...ctx, modelArgs: providerLlmArgs(f.repo, "codex", "gpt-6-luna") });
   expect(luna.args).toContain("--model");
-  expect(luna.args[luna.args.indexOf("--model") + 1]).toBe("gpt-5.6-luna");
+  expect(luna.args[luna.args.indexOf("--model") + 1]).toBe("gpt-6-luna");
   const opus = command("claude", { ...ctx, model: "opus" });
   expect(opus.args.slice(-4)).toEqual(["/w", "/p", "opus", "default"]);
 });

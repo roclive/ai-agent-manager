@@ -1,3 +1,4 @@
+import { codexModelWarnings } from "./model-warnings.js";
 import { DEFAULT_SOL_MODEL } from "./model-defaults.js";
 import { existsSync } from "node:fs";
 import { delimiter, join } from "node:path";
@@ -32,7 +33,7 @@ interface Meta {
 // Install hints are shown in the UI; aam never installs anything itself.
 export const EXECUTOR_META: Record<Executor, Meta> = {
   "codex-sol": { label: "Codex (Sol)", bin: "codex", worker: "codex", hint: "npm i -g @openai/codex", provider: "codex", model: DEFAULT_SOL_MODEL },
-  "codex-luna": { label: "Codex (Luna)", bin: "codex", worker: "codex", hint: "npm i -g @openai/codex", provider: "codex", model: "gpt-5.6-luna" },
+  "codex-luna": { label: "Codex (Luna)", bin: "codex", worker: "codex", hint: "npm i -g @openai/codex", provider: "codex", model: "gpt-6-luna" },
   claude: { label: "Claude (Sonnet)", bin: "claude", worker: "claude", hint: "npm i -g @anthropic-ai/claude-code", model: "sonnet" },
   "claude-opus": { label: "Claude (Opus)", bin: "claude", worker: "claude", hint: "npm i -g @anthropic-ai/claude-code", provider: "claude", model: "opus" },
   opencode: { label: "opencode", bin: "opencode", worker: "opencode", hint: "brew install sst/tap/opencode" },
@@ -136,6 +137,7 @@ export function selectExecutor(
 }
 
 export function executorsView(repo: Repo) {
+  const warnings = codexModelWarnings({ "codex-sol": EXECUTOR_META["codex-sol"].model!, "codex-luna": EXECUTOR_META["codex-luna"].model! });
   return {
     coding_executor: normalizeExecutor(repo.getSetting("coding_executor") || "auto"),
     model_note:
@@ -147,6 +149,7 @@ export function executorsView(repo: Repo) {
     executors: EXECUTORS.map((id) => ({
       id,
       label: EXECUTOR_META[id].label,
+      model_warning: warnings[id] ?? null,
       model: EXECUTOR_META[id].model ?? null,
       provider: executorProvider(id),
       installed: executorInstalled(id),

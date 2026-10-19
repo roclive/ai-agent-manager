@@ -64,7 +64,9 @@ export function ExecutorSelect({
   const [formValue, setFormValue] = useState(normalizedValue);
   useEffect(() => setFormValue(normalizedValue), [normalizedValue]);
   const selectedValue = onChange ? normalizedValue : formValue;
+  const warning = q.data?.executors?.find((e) => e.id === selectedValue)?.model_warning;
   return (
+    <>
     <NativeSelect
       aria-label={label}
       name={name}
@@ -73,6 +75,8 @@ export function ExecutorSelect({
     >
       <ExecutorOptions executors={q.data?.executors ?? []} inheritLabel={inheritLabel} />
     </NativeSelect>
+    {warning && <span role="alert" style={{ color: "var(--color-warning, #b45309)", fontSize: 12 }}>{warning}</span>}
+    </>
   );
 }
 

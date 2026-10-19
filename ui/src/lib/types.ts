@@ -194,6 +194,7 @@ export interface EffectiveExecutor {
   source: ExecutorSource;
 }
 export interface ExecutorInfo {
+  model_warning?: string | null;
   id: string;
   label: string;
   installed: boolean;
