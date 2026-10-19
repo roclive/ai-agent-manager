@@ -587,42 +587,48 @@ it.each([1, 5])(
   },
 );
 
-it("stops deterministic output-limit retries until the task is updated", () => {
-  f = fixture();
-  f.repo.setSetting("claude_ok", "1");
-  f.repo.updateProject("T", { auto_review: 1 });
-  const t = f.task({ status: "in_review" });
-  pending("review", t.id, {});
-  const job = f.repo.db
-    .prepare("SELECT id FROM autopilot_jobs ORDER BY id DESC LIMIT 1")
-    .get() as { id: number };
-  writeFileSync(
-    resolve(f.repo.home, "autopilot", String(job.id), "result.json"),
-    JSON.stringify({
-      status: -1,
-      code: "AAM_OUTPUT_TOO_LARGE",
-      stderr: "Final reviewer response exceeds 64 MiB",
-    }),
-  );
-  collectAutopilot(f.repo);
-  expect(
+it.each(["AAM_OUTPUT_TOO_LARGE", "ENOBUFS"])(
+  "stops %s retries without misclassifying quoted quota errors",
+  (code) => {
+    f = fixture();
+    f.repo.setSetting("claude_ok", "1");
+    f.repo.updateProject("T", { auto_review: 1 });
+    const t = f.task({ status: "in_review" });
+    pending("review", t.id, {});
+    const job = f.repo.db
+      .prepare("SELECT id FROM autopilot_jobs ORDER BY id DESC LIMIT 1")
+      .get() as { id: number };
+    writeFileSync(
+      resolve(f.repo.home, "autopilot", String(job.id), "result.json"),
+      JSON.stringify({
+        status: -1,
+        code,
+        output:
+          '{"type":"item.completed","item":{"error":"historical rate limit 429"}}',
+        stderr: "Final reviewer response exceeds 64 MiB",
+      }),
+    );
+    collectAutopilot(f.repo);
+    expect(
+      f.repo.db
+        .prepare("SELECT status FROM autopilot_jobs WHERE id=?")
+        .get(job.id),
+    ).toEqual({ status: "output_limit" });
     f.repo.db
-      .prepare("SELECT status FROM autopilot_jobs WHERE id=?")
-      .get(job.id),
-  ).toEqual({ status: "output_limit" });
-  f.repo.db
-    .prepare("UPDATE autopilot_jobs SET finished_at=? WHERE id=?")
-    .run(new Date(Date.now() - 120000).toISOString(), job.id);
-  startAutopilot(f.repo);
-  startAutopilot(f.repo);
-  expect(
-    f.repo.db.prepare("SELECT count(*) n FROM autopilot_jobs").get(),
-  ).toEqual({ n: 1 });
-  expect(f.repo.task(t.id).attempts).toBe(0);
-  expect(autopilotStatus(f.repo).stalled_reviews).toContain(t.identifier);
-  expect(
-    f.repo.db
-      .prepare("SELECT count(*) n FROM events WHERE kind='review_stalled'")
-      .get(),
-  ).toEqual({ n: 1 });
-});
+      .prepare("UPDATE autopilot_jobs SET finished_at=? WHERE id=?")
+      .run(new Date(Date.now() - 120000).toISOString(), job.id);
+    startAutopilot(f.repo);
+    startAutopilot(f.repo);
+    expect(
+      f.repo.db.prepare("SELECT count(*) n FROM autopilot_jobs").get(),
+    ).toEqual({ n: 1 });
+    expect(f.repo.task(t.id).attempts).toBe(0);
+    expect(autopilotStatus(f.repo).stalled_reviews).toContain(t.identifier);
+    expect(f.repo.getSetting("llm_backend")).toBe("primary");
+    expect(
+      f.repo.db
+        .prepare("SELECT count(*) n FROM events WHERE kind='review_stalled'")
+        .get(),
+    ).toEqual({ n: 1 });
+  },
+);

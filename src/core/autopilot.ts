@@ -581,6 +581,10 @@ export function collectAutopilot(repo: Repo) {
             code: "ETIMEDOUT",
             stderr: "ETIMEDOUT: Reviewer timed out",
           };
+      // Transport/output failures take precedence over quoted CLI output. A truncated
+      // tool transcript may contain historical quota errors unrelated to this run.
+      if (["ENOBUFS", "AAM_OUTPUT_TOO_LARGE"].includes(r.code))
+        throw new Error(`${r.code} ${r.stderr || "Reviewer output limit"}`);
       if (rateLimited([r.stdout, r.output, r.stderr].join("\n"), r.status)) {
         finish(repo, job, "rate_limited");
         if (job.provider)
