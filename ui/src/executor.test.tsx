@@ -10,7 +10,7 @@ const view = {
   executor_fallback: [],
   reviewer: "codex",
   executors: [
-    { id: "codex-sol", label: "Codex (Sol)", installed: true, install_hint: "npm i -g @openai/codex", effort_supported: true, cooldown_until: new Date(Date.now() + 600000).toISOString(), model: "gpt-5.6-sol" },
+    { id: "codex-sol", label: "Codex (Sol)", installed: true, install_hint: "npm i -g @openai/codex", effort_supported: true, cooldown_until: new Date(Date.now() + 600000).toISOString(), model: "gpt-6.1-sol" },
     { id: "claude", label: "Claude (Sonnet)", installed: true, install_hint: "", effort_supported: true, cooldown_until: null },
     { id: "claude-opus", label: "Claude (Opus)", installed: true, install_hint: "", effort_supported: true, cooldown_until: null, model: "opus" },
     { id: "codex-luna", label: "Codex (Luna)", installed: true, install_hint: "", effort_supported: true, cooldown_until: null, model: "gpt-5.6-luna" },

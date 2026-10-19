@@ -1,9 +1,10 @@
+import { DEFAULT_SOL_MODEL } from "./model-defaults.js";
 import type { Repo } from "../db/index.js";
 import { executorInstalled } from "./executors.js";
 import { normalizeReviewer, REVIEWERS, type Reviewer } from "./reviewer-names.js";
 
 const META: Record<Reviewer, { label: string; provider: string; model?: string }> = {
-  "codex-sol": { label: "Codex (Sol)", provider: "codex", model: "gpt-5.6-sol" },
+  "codex-sol": { label: "Codex (Sol)", provider: "codex", model: DEFAULT_SOL_MODEL },
   "codex-luna": { label: "Codex (Luna)", provider: "codex", model: "gpt-5.6-luna" },
   claude: { label: "Claude (Sonnet)", provider: "claude", model: "sonnet" },
   "claude-opus": { label: "Claude (Opus)", provider: "claude", model: "opus" },

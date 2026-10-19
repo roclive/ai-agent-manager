@@ -62,14 +62,14 @@ it("switches failed workers without attempts, isolates late primary failures and
 it("isolates the primary Codex reviewer from local config and uses fallback only when selected", () => {
   setup();
   f.repo.setSetting("reviewer", "codex");
-  f.repo.setSetting("primary_model", "gpt-5.6-sol");
+  f.repo.setSetting("primary_model", "gpt-6.1-sol");
   expect(llmArgs(f.repo)).toEqual([]);
   const primaryReviewer = reviewerCommand(f.repo, f.path, f.root);
   expect(primaryReviewer.args).toEqual(
     expect.arrayContaining([
       "--ignore-user-config",
       "--model",
-      "gpt-5.6-sol",
+      "gpt-6.1-sol",
     ]),
   );
   expect(primaryReviewer.args).not.toContain("--oss");
@@ -96,7 +96,7 @@ it("isolates the primary Codex reviewer from local config and uses fallback only
     expect.arrayContaining([
       "--ignore-user-config",
       "--model",
-      "gpt-5.6-sol",
+      "gpt-6.1-sol",
     ]),
   );
   expect(routedPrimary.args).not.toContain("-c model_provider=\"aam-fallback\"");
@@ -122,7 +122,7 @@ it("isolates the primary Codex reviewer from local config and uses fallback only
 });
 it("isolates primary Codex coding workers from user config while keeping Ollama explicit", () => {
   setup();
-  f.repo.setSetting("primary_model", "gpt-5.6-sol");
+  f.repo.setSetting("primary_model", "gpt-6.1-sol");
   const primary = codex.command({
     worktree: f.path,
     runDir: f.root,
@@ -133,7 +133,7 @@ it("isolates primary Codex coding workers from user config while keeping Ollama 
     expect.arrayContaining([
       "--ignore-user-config",
       "--model",
-      "gpt-5.6-sol",
+      "gpt-6.1-sol",
     ]),
   );
   expect(primary.args.join(" ")).not.toContain("11434");

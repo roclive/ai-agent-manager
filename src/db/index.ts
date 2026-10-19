@@ -1,3 +1,4 @@
+import { DEFAULT_SOL_MODEL } from "../core/model-defaults.js";
 import { inferIdentity } from "../workers/identity.js";
 import { EXECUTOR_VALUES, validFallback } from "../core/executor-names.js";
 import { validReviewer } from "../core/reviewer-names.js";
@@ -195,7 +196,7 @@ export class Repo {
       gw_context_bytes: "24000",
       codex_worker_sandbox: "workspace-write",
       codex_reviewer_sandbox: "read-only",
-      primary_model: "gpt-5.6-sol",
+      primary_model: DEFAULT_SOL_MODEL,
       ollama_fallback_enabled: "0",
       llm_backend: "primary",
       ollama_model: "gemma4:31b:cloud",
@@ -214,6 +215,8 @@ export class Repo {
       claude_error: "",
     }))
       this.db.prepare("INSERT OR IGNORE INTO settings VALUES (?,?)").run(k, v);
+    // Upgrade the previous built-in Sol default; preserve other explicit models.
+    this.db.prepare("UPDATE settings SET value=? WHERE key='primary_model' AND value='gpt-5.6-sol'").run(DEFAULT_SOL_MODEL);
   }
   close() {
     if (this.db.open) this.db.close();

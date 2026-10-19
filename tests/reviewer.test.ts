@@ -32,7 +32,7 @@ it("routes each persisted reviewer model without changing the coding executor", 
   f.repo.setSetting("reviewer", "codex-sol");
   command = reviewerCommand(f.repo, f.root, resolve(f.root, "review"));
   expect(command.cmd).toBe(process.env.AAM_FAKE_CODEX || "codex");
-  expect(command.args[command.args.indexOf("--model") + 1]).toBe("gpt-5.6-sol");
+  expect(command.args[command.args.indexOf("--model") + 1]).toBe("gpt-6.1-sol");
   expect(f.repo.getSetting("coding_executor")).toBe("codex-luna");
 });
 it.each([
@@ -86,7 +86,7 @@ it.each([
 function setup() {
   f = fixture();
   f.repo.setSetting("reviewer", "codex");
-  f.repo.setSetting("primary_model", "gpt-5.6-sol");
+  f.repo.setSetting("primary_model", "gpt-6.1-sol");
   const fake = resolve(f.root, "codex.sh");
   writeFileSync(
     fake,
@@ -108,7 +108,7 @@ it("defaults new installations to Codex and preserves configured budgets", () =>
   const home = resolve(f.root, "fresh");
   let repo = new Repo(home);
   expect(repo.getSetting("reviewer")).toBe("codex");
-  expect(repo.getSetting("primary_model")).toBe("gpt-5.6-sol");
+  expect(repo.getSetting("primary_model")).toBe("gpt-6.1-sol");
   expect(repo.getSetting("auto_review_daily_max")).toBe("120");
   expect(repo.getSetting("planner_daily_max")).toBe("10");
   repo.setSetting("auto_review_daily_max", "80");
@@ -126,7 +126,7 @@ it("builds read-only Codex argv and minimal environment, retaining Claude", () =
     "--json",
     "--ignore-user-config",
     "--model",
-    "gpt-5.6-sol",
+    "gpt-6.1-sol",
     "-s",
     "read-only",
     "-C",

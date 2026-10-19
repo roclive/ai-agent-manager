@@ -1,3 +1,4 @@
+import { DEFAULT_SOL_MODEL } from "./model-defaults.js";
 import { existsSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { homedir } from "node:os";
@@ -30,7 +31,7 @@ interface Meta {
 }
 // Install hints are shown in the UI; aam never installs anything itself.
 export const EXECUTOR_META: Record<Executor, Meta> = {
-  "codex-sol": { label: "Codex (Sol)", bin: "codex", worker: "codex", hint: "npm i -g @openai/codex", provider: "codex", model: "gpt-5.6-sol" },
+  "codex-sol": { label: "Codex (Sol)", bin: "codex", worker: "codex", hint: "npm i -g @openai/codex", provider: "codex", model: DEFAULT_SOL_MODEL },
   "codex-luna": { label: "Codex (Luna)", bin: "codex", worker: "codex", hint: "npm i -g @openai/codex", provider: "codex", model: "gpt-5.6-luna" },
   claude: { label: "Claude (Sonnet)", bin: "claude", worker: "claude", hint: "npm i -g @anthropic-ai/claude-code", model: "sonnet" },
   "claude-opus": { label: "Claude (Opus)", bin: "claude", worker: "claude", hint: "npm i -g @anthropic-ai/claude-code", provider: "claude", model: "opus" },

@@ -160,7 +160,7 @@ it("persists supported effort and only dispatches it to Claude or Codex", () => 
 it("model variants build the right command, identity and accounting", () => {
   f = fixture();
   const cases = [
-    ["codex-sol", "codex", "codex", "gpt-5.6-sol"],
+    ["codex-sol", "codex", "codex", "gpt-6.1-sol"],
     ["codex-luna", "codex", "codex", "gpt-5.6-luna"],
     ["claude-opus", "claude", "claude", "opus"],
     ["claude", "claude", "claude", "sonnet"],
@@ -181,9 +181,9 @@ it("model variants build the right command, identity and accounting", () => {
   }
   delete process.env.AAM_FAKE_WORKER;
   const ctx = { worktree: "/w", promptFile: "/p", runDir: "/r" };
-  const sol = command("codex", { ...ctx, modelArgs: providerLlmArgs(f.repo, "codex", "gpt-5.6-sol") });
+  const sol = command("codex", { ...ctx, modelArgs: providerLlmArgs(f.repo, "codex", "gpt-6.1-sol") });
   expect(sol.args).toContain("--model");
-  expect(sol.args[sol.args.indexOf("--model") + 1]).toBe("gpt-5.6-sol");
+  expect(sol.args[sol.args.indexOf("--model") + 1]).toBe("gpt-6.1-sol");
   const luna = command("codex", { ...ctx, modelArgs: providerLlmArgs(f.repo, "codex", "gpt-5.6-luna") });
   expect(luna.args).toContain("--model");
   expect(luna.args[luna.args.indexOf("--model") + 1]).toBe("gpt-5.6-luna");
