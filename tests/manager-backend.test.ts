@@ -257,6 +257,29 @@ describe("manager decision backends", () => {
     ).toThrow("Invalid setting value");
   });
 
+  it("does not silently fall back when fallback-to-rules is disabled", () => {
+    f = fixture();
+    const task = f.task();
+    f.repo.setSetting("manager_fallback_to_rules", "0");
+    const failed = new LlmManagerBackend("codex", () => ({
+      status: null,
+      stdout: "",
+      stderr: "ETIMEDOUT",
+    }));
+
+    expect(() => failed.decide([task], { repo: f.repo })).toThrow(
+      "codex manager backend failed (rules fallback disabled): ETIMEDOUT",
+    );
+    expect(f.repo.task(task.id).status).toBe("ready");
+    expect(
+      (f.repo.events() as { kind: string; message: string }[]).some(
+        (event) =>
+          event.kind === "manager_fallback" &&
+          event.message.includes("ETIMEDOUT"),
+      ),
+    ).toBe(true);
+  });
+
   it("enforces the daily cap across separate database connections", async () => {
     f = fixture();
     const task = f.task();

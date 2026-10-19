@@ -319,6 +319,9 @@ export class LlmManagerBackend extends RulesBackend {
         "manager_fallback",
         `${this.name} backend failed; using rules: ${reason}`,
       );
+      if (repo.getSetting("manager_fallback_to_rules") === "0") {
+        throw new Error(`${this.name} manager backend failed (rules fallback disabled): ${reason}`);
+      }
       const decision = rules.decide(candidates, { repo });
       return {
         ...decision,
