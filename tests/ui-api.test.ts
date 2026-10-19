@@ -272,6 +272,16 @@ it("explains idle state and keeps board actions behind normal eligibility checks
   expect(body.idle.reason).toContain("未启用自动审查");
   expect(f.repo.task(reviewTask.id).status).toBe("in_review");
 });
+it("serializes board dispatch with a scheduler tick lock and rechecks eligibility", async () => {
+  const { req } = setup();
+  const ready = f.task();
+  writeFileSync(resolve(f.repo.home, "tick.lock"), String(process.pid));
+  const response = await req("/api/board/dispatch", "POST");
+  expect(response.status).toBe(400);
+  expect((await response.json()).error).toContain("调度器正在处理");
+  expect(f.repo.runs()).toHaveLength(0);
+  expect(f.repo.task(ready.id).status).toBe("ready");
+});
 it("never bypasses dependencies, capacity or executor pauses when dispatching from the board", async () => {
   const { req } = setup();
   const dependency = f.task({ status: "backlog" });
@@ -302,6 +312,8 @@ it("starts only eligible fake review work without starting an opted-in planner",
     expect.objectContaining({ kind: "review", status: "pending", task_id: task.id, worktree_path: f.path, identity: "claude · sonnet" }),
   ]);
   expect(f.repo.db.prepare("SELECT kind FROM autopilot_jobs").all()).toEqual([{ kind: "review" }]);
+  expect(f.repo.db.prepare("SELECT kind,message,task_id FROM events WHERE kind='auto_review_started'").all())
+    .toEqual([expect.objectContaining({ kind: "auto_review_started", message: expect.stringContaining("claude · sonnet"), task_id: task.id })]);
   await new Promise(resolve => setTimeout(resolve, 300));
 });
 it.each([

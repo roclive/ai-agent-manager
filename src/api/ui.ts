@@ -23,6 +23,7 @@ import { autopilotStatus, startAutopilot } from "../core/autopilot.js";
 import { boardActivity, eligibleReadyTasks } from "../core/board-activity.js";
 import { fireRoutine } from "../scheduler.js";
 import { releaseProvider } from "../core/providers.js";
+import { withLock } from "../core/lock.js";
 export const routineJSON = (r: Routine) => {
   const cron = new Cron(r.cron, { paused: true });
   try {
@@ -77,20 +78,28 @@ export function uiRoutes(
 ) {
   app.get("/api/board/activity", (c) => c.json(boardActivity(repo)));
   app.post("/api/board/dispatch", (c) => {
-    const before = boardActivity(repo);
-    const task = eligibleReadyTasks(repo)[0];
-    if (!task) throw new Error(before.idle?.reason || "当前没有可安全派发的就绪任务");
-    return c.json({ run_id: dispatch(repo, task.identifier, false), task: task.identifier });
+    const result = withLock(repo, () => {
+      const before = boardActivity(repo);
+      const task = eligibleReadyTasks(repo)[0];
+      if (!task) throw new Error(before.idle?.reason || "当前没有可安全派发的就绪任务");
+      return { run_id: dispatch(repo, task.identifier, false), task: task.identifier };
+    });
+    if (!result) throw new Error("调度器正在处理任务，请稍后重试");
+    return c.json(result);
   });
   app.post("/api/board/review", (c) => {
-    const before = boardActivity(repo);
-    if (before.idle?.action !== "review")
-      throw new Error(before.idle?.reason || "当前没有可自动审查的任务");
-    startAutopilot(repo, { reviewOnly: true });
-    const after = boardActivity(repo);
-    if (!after.active.some((item) => item.kind === "review"))
-      throw new Error(after.idle?.reason || "自动审查流程当前无法启动任务");
-    return c.json(after);
+    const result = withLock(repo, () => {
+      const before = boardActivity(repo);
+      if (before.idle?.action !== "review")
+        throw new Error(before.idle?.reason || "当前没有可自动审查的任务");
+      startAutopilot(repo, { reviewOnly: true });
+      const after = boardActivity(repo);
+      if (!after.active.some((item) => item.kind === "review"))
+        throw new Error(after.idle?.reason || "自动审查流程当前无法启动任务");
+      return after;
+    });
+    if (!result) throw new Error("调度器正在处理任务，请稍后重试");
+    return c.json(result);
   });
   app.post("/api/projects", async (c) => {
     const p = await c.req.json();

@@ -39,7 +39,7 @@ export const useRuns = (live = false) =>
     refetchInterval: live ? false : 5000,
   });
 export const useBoardActivity = (live = false) =>
-  useQuery({ queryKey: ["board-activity"], queryFn: api.boardActivity, refetchInterval: live ? false : 5000 });
+  useQuery({ queryKey: ["board-activity"], queryFn: api.boardActivity, refetchInterval: live ? 5000 : 5000 });
 export const useProjects = () =>
   useQuery({
     queryKey: ["projects"],

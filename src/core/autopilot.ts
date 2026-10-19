@@ -296,6 +296,7 @@ function launch(repo: Repo, job: Job, cwd: string, prompt: string) {
     .filter(Boolean).join(" · ");
   repo.db.prepare("UPDATE autopilot_jobs SET reviewer_identity=? WHERE id=?")
     .run(identity, job.id);
+  repo.event("auto_review_started", `Automatic review started by ${identity}`, job.task_id);
   writeFileSync(
     file,
     prompt + (!command.codex && !command.gw ? claudeContextRule : contextRule),
