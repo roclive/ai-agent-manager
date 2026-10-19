@@ -126,6 +126,8 @@ it("detects rate limit text", () => {
     "Error: 14290",
     `Worker note: \"You've hit your session limit · resets 2:40am (Asia/Tokyo)\"`,
     `Historical output: You've hit your session limit · resets 2:40am (Asia/Tokyo)`,
+    "You've hit your session limit (historical log excerpt)",
+    "You've hit your session limit and the previous run failed",
     `> You've hit your session limit · resets 2:40am (Asia/Tokyo)`,
     '{"type":"item.completed","text":"Error: rate limit test"}',
     "Task description: You’ve hit your session limit · resets 2:40am (Asia/Tokyo)",

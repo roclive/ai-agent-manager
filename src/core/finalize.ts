@@ -48,7 +48,9 @@ export function rateLimited(text: string, exitCode: number | null = null) {
     }
     if (
       !structured &&
-      /^\s*you(?:'|’)ve hit your session limit\b.*$/i.test(line)
+      /^\s*you(?:'|’)ve hit your session limit\s*[·•-]\s*resets\s+\d{1,2}:\d{2}(?:\s*[ap]m)?\s+\([^\r\n()]+\)\s*$/i.test(
+        line,
+      )
     ) {
       // Claude emits this as a standalone top-level CLI message. Requiring
       // the phrase at the start of the whole line rejects quoted/embedded

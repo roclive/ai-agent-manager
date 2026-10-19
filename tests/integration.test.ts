@@ -167,6 +167,17 @@ it("classifies Claude's plain-text session limit and freezes only that provider"
   expect(f.repo.db.prepare("SELECT reason FROM provider_breakers WHERE provider='claude'").get()).toEqual({ reason: "Worker quota exhausted" });
   expect(f.repo.getSetting("cooldown_until")).toBe("");
 });
+it("does not classify an echoed historical session-limit phrase without the reset form", async () => {
+  f = fixture("printf \"You've hit your session limit (historical log excerpt)\\\\n\"; exit 1");
+  f.repo.setSetting("coding_executor", "claude");
+  const t = f.task({ max_attempts: 1 });
+  const id = dispatch(f.repo, t.identifier);
+  await waitExit(f.repo, id);
+  tick(f.repo);
+  expect(f.repo.runs()[0].status).toBe("failed");
+  expect(f.repo.task(t.id)).toMatchObject({ status: "blocked", attempts: 1 });
+  expect(f.repo.db.prepare("SELECT reason FROM provider_breakers WHERE provider='claude'").get()).toBeUndefined();
+});
 it("respects priority, max_parallel and dependencies; forced runs bypass deps and capacity", async () => {
   f = fixture("sleep 30");
   f.repo.setSetting("max_parallel", "1");
