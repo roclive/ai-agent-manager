@@ -28,6 +28,7 @@ import {
   parseStrictJson,
   parseStrictVerdict,
 } from "./review-gate.js";
+import { normalizeReviewer, reviewerMeta } from "./reviewers.js";
 
 type Job = {
   id: number;
@@ -152,7 +153,7 @@ export const claudeArgs: string[] = [
 ];
 export const healthSetting = (repo: Repo, key: string) =>
   repo.getSetting(`reviewer_${key}`) ||
-  (repo.getSetting("reviewer") === "claude" && llmBackend(repo) === "primary"
+  (normalizeReviewer(repo.getSetting("reviewer")).startsWith("claude") && llmBackend(repo) === "primary"
     ? repo.getSetting(`claude_${key}`)
     : "") ||
   "";
@@ -162,9 +163,11 @@ export function reviewerCommand(
   dir: string,
   provider?: string,
 ) {
+  const selected = normalizeReviewer(repo.getSetting("reviewer"));
+  const selectedMeta = reviewerMeta(selected);
   const gw = provider
     ? provider === "gw"
-    : repo.getSetting("reviewer") === "gw";
+    : selected === "gw";
   if (gw)
     return {
       cmd: process.env.AAM_FAKE_GW || process.execPath,
@@ -184,7 +187,7 @@ export function reviewerCommand(
     : llmBackend(repo) === "ollama";
   const codex = provider
     ? provider !== "claude"
-    : llmBackend(repo) === "ollama" || repo.getSetting("reviewer") !== "claude";
+    : llmBackend(repo) === "ollama" || !selected.startsWith("claude");
   return {
     gw: false,
     cmd: codex
@@ -194,7 +197,12 @@ export function reviewerCommand(
       ? [
           "exec",
           "--json",
-          ...(ollama ? [] : primaryCodexArgs(repo)),
+          ...(ollama
+            ? []
+            : primaryCodexArgs(
+                repo,
+                selectedMeta?.provider === "codex" ? selectedMeta.model : undefined,
+              )),
           "-s",
           repo.getSetting("codex_reviewer_sandbox") || "read-only",
           "-C",
@@ -209,7 +217,12 @@ export function reviewerCommand(
           resolve(dir, "last.md"),
           "-",
         ]
-      : claudeArgs,
+      : [
+          ...claudeArgs,
+          ...(selectedMeta?.provider === "claude" && selectedMeta.model
+            ? ["--model", selectedMeta.model]
+            : []),
+        ],
     cwd,
     env: cleanEnv(),
     codex,
@@ -305,7 +318,7 @@ function reserve(repo: Repo, kind: string, p: Project, taskId: number | null) {
     .transaction(() => {
       let selected: ProviderSelection;
       if (
-        repo.getSetting("reviewer") !== "gw" &&
+        normalizeReviewer(repo.getSetting("reviewer")) !== "gw" &&
         providerPolicyConfigured(repo.getSetting("provider_policy"))
       ) {
         selected = selectProviderFor(
@@ -315,11 +328,11 @@ function reserve(repo: Repo, kind: string, p: Project, taskId: number | null) {
         );
       } else {
         const provider =
-          repo.getSetting("reviewer") === "gw"
+          normalizeReviewer(repo.getSetting("reviewer")) === "gw"
             ? "gw"
             : llmBackend(repo) === "ollama"
               ? "ollama"
-              : repo.getSetting("reviewer") === "claude"
+              : normalizeReviewer(repo.getSetting("reviewer")).startsWith("claude")
                 ? "claude"
                 : "codex";
         selected = {
@@ -857,7 +870,7 @@ export function startAutopilot(repo: Repo) {
       continue;
     }
     if (
-      repo.getSetting("reviewer") === "gw" &&
+      normalizeReviewer(repo.getSetting("reviewer")) === "gw" &&
       prior.some((j) => j.status === "deferred")
     )
       continue;

@@ -7,6 +7,7 @@ import { useProjects } from "../lib/queries";
 import type { Project } from "../lib/types";
 import { ExecutorSelect } from "../components/ExecutorSelect";
 import { WorkerEffortSelect } from "../components/WorkerEffortSelect";
+import { ReviewerSelect } from "../components/ReviewerSelect";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { NativeSelect } from "../components/ui/select";
@@ -118,14 +119,8 @@ export function Settings() {
               </NativeSelect>
             </label>
             <label>
-              审查与规划模型
-              <NativeSelect
-                name="reviewer"
-                defaultValue={q.data.reviewer || "codex"}
-              >
-                <option value="codex">Codex</option>
-                <option value="claude">Claude</option>
-              </NativeSelect>
+              审查器（独立于编码执行器）
+              <ReviewerSelect value={q.data.reviewer || "codex-sol"} />
             </label>
             {[
               ["auto_review_concurrency", "自动审查并发数"],

@@ -13,7 +13,7 @@ export function useEventStream() {
       void client.invalidateQueries({ queryKey: ["runs"] });
       void client.invalidateQueries({ queryKey: ["projects"] });
       void client.invalidateQueries({ queryKey: ["status"] });
-      for (const key of ["events", "routines", "settings", "executors"])
+      for (const key of ["events", "routines", "settings", "executors", "reviewers"])
         void client.invalidateQueries({ queryKey: [key] });
     };
     stream.onopen = () => {
@@ -54,5 +54,11 @@ export const useExecutors = () =>
   useQuery({
     queryKey: ["executors"],
     queryFn: api.executors,
+    refetchInterval: 10000,
+  });
+export const useReviewers = () =>
+  useQuery({
+    queryKey: ["reviewers"],
+    queryFn: api.reviewers,
     refetchInterval: 10000,
   });

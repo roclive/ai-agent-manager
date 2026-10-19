@@ -454,6 +454,17 @@ it("project editor submits numeric opt-ins and project goal", async () => {
         JSON.stringify(
           init?.method === "PATCH"
             ? {}
+            : String(url) === "/api/reviewers"
+              ? {
+                  reviewer: "codex-sol",
+                  reviewer_ok: null,
+                  reviewer_checked_at: null,
+                  reviewer_error: "",
+                  reviewers: [
+                    { id: "codex-sol", label: "Codex (Sol)", provider: "codex", supported: true },
+                    { id: "claude", label: "Claude (Sonnet)", provider: "claude", supported: true },
+                  ],
+                }
             : String(url) === "/api/settings"
               ? {
                   max_parallel: "2",
@@ -483,8 +494,9 @@ it("project editor submits numeric opt-ins and project goal", async () => {
   );
   vi.stubGlobal("fetch", fetcher);
   setup(<Settings />, "/settings");
-  expect(await screen.findByLabelText("审查与规划模型")).toHaveValue("codex");
-  fireEvent.change(screen.getByLabelText("审查与规划模型"), {
+  expect(await screen.findByLabelText("审查器")).toHaveValue("codex-sol");
+  await screen.findByRole("option", { name: "Claude (Sonnet)" });
+  fireEvent.change(screen.getByLabelText("审查器"), {
     target: { value: "claude" },
   });
   fireEvent.click(screen.getByRole("button", { name: "保存设置" }));
