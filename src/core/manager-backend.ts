@@ -28,6 +28,10 @@ export interface ManagerDecision {
   task: Task;
   worker: ProviderSelection;
   reason: string;
+  /** Full eligible set observed by the scheduler for this choice. */
+  candidates?: readonly Task[];
+  /** Model failure that caused rules to make the final choice. */
+  fallback?: string;
 }
 
 export function recordManagerDecision(
@@ -346,8 +350,7 @@ export class LlmManagerBackend extends RulesBackend {
         reason: `rules fallback (${this.name}: ${reason}); ${decision.reason}`,
       };
       repo.event("manager_fallback", `${this.name} backend failed; using rules: ${reason}`);
-      recordManagerDecision(repo, this.name, candidates, result, reason);
-      return result;
+      return { ...result, candidates, fallback: reason };
     }
   }
 }

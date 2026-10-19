@@ -96,6 +96,21 @@ describe("manager decision backends", () => {
     tick(f.repo, undefined, backend);
     expect(f.repo.task(chosen.id).status).toBe("in_progress");
     expect(f.repo.task(first.id).status).toBe("ready");
+    const log = (f.repo.events() as {kind:string; message:string}[]).find(e => e.kind === "manager_decision")!;
+    expect(JSON.parse(log.message).candidates).toEqual([first.identifier, chosen.identifier]);
+  });
+
+  it("records exactly one decision with fallback details for a failed model choice", () => {
+    f = fixture();
+    f.repo.setSetting("max_parallel", "1");
+    f.repo.setSetting("manager_backend", "codex");
+    const first = f.task({ priority: "P0" });
+    const second = f.task({ priority: "P1" });
+    const backend = new LlmManagerBackend("codex", () => ({ status: 1, stdout: "", stderr: "offline" }));
+    tick(f.repo, undefined, backend);
+    const entries = (f.repo.events() as {kind:string; message:string}[]).filter(e => e.kind === "manager_decision");
+    expect(entries).toHaveLength(1);
+    expect(JSON.parse(entries[0].message)).toMatchObject({ candidates: [first.identifier, second.identifier], choice: { task: first.identifier }, fallback: "offline" });
   });
 
   it("preserves the worker selected by tick through reservation", () => {

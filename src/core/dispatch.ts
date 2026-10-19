@@ -104,7 +104,7 @@ export function dispatch(
     const decision = plannedDecision ?? choose(repo, t, backend);
     if (decision.task.id !== t.id) throw new Error("Manager decision task does not match dispatch task");
     selected = decision.worker;
-    recordManagerDecision(repo, backend.name, [t], decision);
+    recordManagerDecision(repo, backend.name, decision.candidates ?? [t], decision, decision.fallback);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     repo.event("quota_deferred", message, t.id);

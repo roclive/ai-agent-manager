@@ -19,7 +19,7 @@ import {
   localRunActive,
   stopLocalModelIfIdle,
 } from "./local-model.js";
-import { managerBackend, recordManagerDecision, type ManagerBackend } from "./manager-backend.js";
+import { managerBackend, type ManagerBackend } from "./manager-backend.js";
 export function tick(
   repo: Repo,
   _reviewRunner: Runner = runner,
@@ -88,9 +88,10 @@ export function tick(
         const t = decision.task;
         if (!candidates.some((candidate) => candidate.id === t.id))
           throw new Error("Manager selected a task outside its candidates");
+        const considered = [...candidates];
         candidates = candidates.filter((candidate) => candidate.id !== t.id);
         try {
-          dispatch(repo, t.identifier, false, backend, decision);
+          dispatch(repo, t.identifier, false, backend, { ...decision, candidates: considered });
         } catch (e) {
           if (e instanceof QuotaUnavailableError) continue;
           repo.updateTask(t.id, { status: "blocked", blocker: String(e) });
