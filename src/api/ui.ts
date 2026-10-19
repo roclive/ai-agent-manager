@@ -1,3 +1,4 @@
+import { slimRuns, runLive, liveRunning, statusCounts } from "./slim.js";
 import { promote, setIntegration } from "../core/integration.js";
 import {
   readFileSync,
@@ -139,34 +140,34 @@ export function uiRoutes(
     return c.json(repo.task(t.id));
   });
   app.get("/api/runs", (c) => {
-    const limit = Number(c.req.query("limit") ?? 50);
-    if (!Number.isInteger(limit) || limit < 0 || limit > 10000)
-      throw new Error("Invalid limit");
+    const num = (v: string | undefined, d: number) => {
+      const n = Number(v ?? d);
+      if (!Number.isInteger(n) || n < 0 || n > 10000)
+        throw new Error("Invalid limit");
+      return n;
+    };
     const task = c.req.query("task");
-    const taskId = task ? repo.task(task).id : undefined;
+    const before = c.req.query("before");
     return c.json(
-      repo
-        .runs(taskId)
-        .filter(
-          (r) => !c.req.query("status") || r.status === c.req.query("status"),
-        )
-        .slice(0, limit)
-        .map((r) => {
-          const t = repo.task(r.task_id);
-          return {
-            ...r,
-            identifier: t.identifier,
-            title: t.title,
-            project_key: repo.project(t.project_id).key,
-            elapsed_s: Math.max(
-              0,
-              (Date.parse(r.ended_at ?? new Date().toISOString()) -
-                Date.parse(r.started_at)) /
-                1000,
-            ),
-          };
-        }),
+      slimRuns(repo, {
+        limit: num(c.req.query("limit"), 100),
+        task: task ? repo.task(task).id : undefined,
+        status: c.req.query("status") || undefined,
+        before: before === undefined ? undefined : num(before, 0),
+      }),
     );
+  });
+  app.get("/api/runs/:id", (c) => {
+    const r = repo.runs().find((r) => r.id === Number(c.req.param("id")));
+    if (!r) throw new Error("Run not found");
+    const t = repo.task(r.task_id);
+    return c.json({
+      ...r,
+      identifier: t.identifier,
+      title: t.title,
+      project_key: repo.project(t.project_id).key,
+      live: runLive(r),
+    });
   });
   app.get("/api/status", (c) => {
     let pid = 0;
@@ -193,11 +194,9 @@ export function uiRoutes(
       },
       cooldown_until: repo.getSetting("cooldown_until"),
       executors: executorsView(repo),
-      running_runs: repo.runs().filter((r) => r.status === "running").length,
+      running_runs: liveRunning(repo).length,
       max_parallel: Number(repo.getSetting("max_parallel")),
-      counts_by_status: Object.fromEntries(
-        statuses.map((s) => [s, repo.tasks({ status: s }).length]),
-      ),
+      counts_by_status: statusCounts(repo),
       autopilot: autopilotStatus(repo),
       keep_awake_pid: Number(repo.getSetting("keep_awake_pid")) || null,
       review_pending: repo.tasks({ status: "in_review" }).length,

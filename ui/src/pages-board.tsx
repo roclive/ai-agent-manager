@@ -9,6 +9,7 @@ import type { Task, TaskStatus } from "./lib/types";
 import { KanbanBoard } from "./components/KanbanBoard";
 import { NewTaskDialog } from "./components/NewTaskDialog";
 import { Button } from "./components/ui/button";
+import { Skeleton } from "./components/ui/skeleton";
 import { Input } from "./components/ui/input";
 import { GlobalExecutorSwitch } from "./components/ExecutorSelect";
 import { NativeSelect } from "./components/ui/select";
@@ -114,6 +115,12 @@ export function BoardPage({ project }: { project: string }) {
         </NativeSelect>
         <span className="filter-count">
           {filtered.length} 个任务 · {live ? "实时更新" : "每 5 秒更新"}
+          {!live && (
+            <span className="reconnecting" role="status">
+              {" "}
+              · 重新连接中…
+            </span>
+          )}
         </span>
       </div>
       {toast && (
@@ -124,8 +131,16 @@ export function BoardPage({ project }: { project: string }) {
           </Button>
         </div>
       )}
-      {tasks.isPending ? (
-        <p role="status">正在加载任务…</p>
+      {tasks.isPending || (!!project && projects.isPending) ? (
+        <div role="status" aria-label="正在加载任务…" className="board-skeleton">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} data-testid="task-skeleton">
+              <Skeleton className="h-6 w-24" />
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-20 w-full" />
+            </div>
+          ))}
+        </div>
       ) : tasks.isError ? (
         <div role="alert">
           无法加载任务：{tasks.error.message}

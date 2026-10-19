@@ -50,6 +50,23 @@ function dependencies(task: Task): string[] {
     return [];
   }
 }
+const isLive = (r: Run) => r.status === "running" && r.live !== false;
+// Lets the timer render from /api/tasks alone, before /api/runs arrives.
+function lastRunAsRun(t: Task): Run | undefined {
+  const r = t.last_run;
+  return r && r.status === "running" && r.live !== false
+    ? ({
+        id: r.id,
+        task_id: t.id,
+        worker: t.worker,
+        status: "running",
+        started_at: r.started_at,
+        ended_at: null,
+        summary: null,
+        live: true,
+      } as Run)
+    : undefined;
+}
 function Running({ run }: { run: Run }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -214,9 +231,9 @@ function KanbanColumn({
                 key={t.id}
                 task={t}
                 run={
-                  runs.find(
-                    (r) => r.task_id === t.id && r.status === "running",
-                  ) ?? t.runs?.find((r) => r.status === "running")
+                  runs.find((r) => r.task_id === t.id && isLive(r)) ??
+                  t.runs?.find(isLive) ??
+                  lastRunAsRun(t)
                 }
               />
             ))}

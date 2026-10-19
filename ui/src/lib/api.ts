@@ -38,7 +38,7 @@ export const api = {
   task: (id: string) => request<Task>(`/tasks/${encodeURIComponent(id)}`),
   runs: async () => {
     try {
-      return await request<Run[]>("/runs");
+      return await request<Run[]>("/runs?limit=100");
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) return [];
       throw e;

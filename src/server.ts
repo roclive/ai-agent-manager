@@ -4,6 +4,13 @@ import { dependencyWaiting } from "./core/dispatch.js";
 import { integrationStatus, integrate } from "./core/integration.js";
 import { cors } from "hono/cors";
 import { resolve, dirname } from "node:path";
+import {
+  statusCounts,
+  liveRunning,
+  lastRuns,
+  slimTask,
+  runLive,
+} from "./api/slim.js";
 import { uiRoutes, routineJSON, taskDetail } from "./api/ui.js";
 import { statuses } from "./db/index.js";
 import { Hono } from "hono";
@@ -61,29 +68,20 @@ export function createApp(
   app.onError((e, c) =>
     c.json({ error: e.message }, /not found/i.test(e.message) ? 404 : 400),
   );
-  app.get("/api/projects", (c) =>
-    c.json(
+  app.get("/api/projects", (c) => {
+    const live = liveRunning(repo);
+    return c.json(
       repo.projects().map((p) => ({
         ...p,
         ...integrationStatus(p),
-        counts: Object.fromEntries(
-          statuses.map((s) => [
-            s,
-            repo.tasks({ project: p.key, status: s }).length,
-          ]),
-        ),
-        running: repo
-          .runs()
-          .filter(
-            (r) =>
-              r.status === "running" &&
-              repo.task(r.task_id).project_id === p.id,
-          ).length,
+        counts: statusCounts(repo, p.id),
+        running: live.filter((r) => r.project_id === p.id).length,
       })),
-    ),
-  );
-  app.get("/api/tasks", (c) =>
-    c.json(
+    );
+  });
+  app.get("/api/tasks", (c) => {
+    const last = lastRuns(repo);
+    return c.json(
       repo
         .tasks({
           status: c.req.query("status"),
@@ -97,14 +95,33 @@ export function createApp(
             a.priority.localeCompare(b.priority) ||
             a.id - b.id,
         )
-        .map((t) => ({
-          ...t,
-          dependency_waiting: dependencyWaiting(repo, t),
-          latest_worker: repo.latestWorker(t.id),
-          effective_executor: resolveExecutor(repo, t),
-        })),
-    ),
-  );
+        .map((t) => {
+          const r = last.get(t.id);
+          return {
+            ...slimTask(t),
+            dependency_waiting: dependencyWaiting(repo, t),
+            latest_worker: r
+              ? {
+                  run_id: r.id,
+                  kind: r.worker_kind,
+                  model: r.worker_model,
+                  label: r.worker_label,
+                }
+              : null,
+            last_run: r
+              ? {
+                  id: r.id,
+                  status: r.status,
+                  started_at: r.started_at,
+                  worker_label: r.worker_label,
+                  live: runLive(r),
+                }
+              : null,
+            effective_executor: resolveExecutor(repo, t),
+          };
+        }),
+    );
+  });
   app.post("/api/tasks", async (c) => {
     const input = await c.req.json();
     const task = repo.addTask(input);

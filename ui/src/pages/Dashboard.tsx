@@ -54,7 +54,10 @@ export function Dashboard({ project }: { project: string }) {
     (t) => !project || t.project_id === projectId,
   );
   const running = (runs.data ?? []).filter(
-    (r) => r.status === "running" && rows.some((t) => t.id === r.task_id),
+    (r) =>
+      r.status === "running" &&
+      r.live !== false &&
+      rows.some((t) => t.id === r.task_id),
   );
   return (
     <>

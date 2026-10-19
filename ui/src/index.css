@@ -918,3 +918,17 @@ summary {
   padding: 3px 7px;
   white-space: nowrap;
 }
+
+.board-skeleton {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.board-skeleton > div {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+.reconnecting {
+  color: var(--muted-foreground, #888);
+}

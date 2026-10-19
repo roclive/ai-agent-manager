@@ -51,6 +51,13 @@ export interface Task {
   created_at: string;
   updated_at: string;
   runs?: Run[];
+  last_run?: {
+    id: number;
+    status: Run["status"];
+    started_at: string;
+    worker_label: string | null;
+    live?: boolean;
+  } | null;
   latest_worker?: {
     run_id: number;
     kind: string | null;
@@ -94,6 +101,11 @@ export interface Run {
   exit_code?: number | null;
   test_exit_code?: number | null;
   elapsed_s?: number;
+  live?: boolean;
+  pid?: number | null;
+  identifier?: string;
+  title?: string;
+  project_key?: string;
   summary: string | null;
 }
 export interface Routine {

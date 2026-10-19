@@ -1,4 +1,5 @@
 import { it, expect, afterEach, vi } from "vitest";
+import { spawn } from "node:child_process";
 import { mkdirSync, writeFileSync, symlinkSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { createApp } from "../src/server.js";
@@ -353,10 +354,94 @@ it("exposes worker identity on runs, task detail and task list", async () => {
   await req(`/api/tasks/${t.id}/run`, "POST", {});
   const run = f.repo.runs()[0];
   const runs = await (await req(`/api/runs?task=${t.identifier}`)).json();
-  expect(runs[0]).toMatchObject({ worker_kind: "fake", worker_label: expect.any(String) });
+  expect(runs[0]).toMatchObject({
+    worker_kind: "fake",
+    worker_label: expect.any(String),
+  });
   const detail = await (await req(`/api/tasks/${t.id}`)).json();
   expect(detail.latest_worker).toMatchObject({ kind: "fake" });
   const list = await (await req("/api/tasks")).json();
   expect(list[0].latest_worker).toMatchObject({ run_id: run.id });
   await req(`/api/tasks/${t.id}/cancel`, "POST");
+});
+it("keeps list payloads slim and reconciles running runs with live pids", async () => {
+  const { req } = setup();
+  const big = "x".repeat(5000);
+  const ids: number[] = [];
+  for (let i = 0; i < 150; i++)
+    ids.push(
+      f.task({ title: `Task ${i}`, description: big, feedback: big }).id,
+    );
+  const insert = f.repo.db.prepare(
+    "INSERT INTO runs(task_id,worker,pid,status,started_at,log_path,last_message_path,summary) VALUES(?,?,?,?,?,?,?,?)",
+  );
+  for (let i = 0; i < 1000; i++)
+    insert.run(
+      ids[i % 150],
+      "codex",
+      null,
+      "succeeded",
+      new Date(1e12 + i * 1000).toISOString(),
+      "/nope/log",
+      "/nope/last.md",
+      big,
+    );
+  const sleeper = spawn("sleep", ["30"]);
+  insert.run(
+    ids[0],
+    "codex",
+    sleeper.pid!,
+    "running",
+    new Date().toISOString(),
+    "/l",
+    "/m",
+    "",
+  );
+  insert.run(
+    ids[1],
+    "codex",
+    2147483646,
+    "running",
+    new Date().toISOString(),
+    "/l",
+    "/m",
+    "",
+  );
+  const tasksRes = await req("/api/tasks");
+  const tasksText = await tasksRes.text();
+  expect(tasksText.length).toBeLessThan(200_000);
+  const tasks = JSON.parse(tasksText);
+  expect(tasks).toHaveLength(150);
+  expect(tasks[0].description.length).toBeLessThanOrEqual(301);
+  expect(
+    tasks.find((t: { id: number }) => t.id === ids[0]).last_run,
+  ).toMatchObject({
+    status: "running",
+    live: true,
+  });
+  const runsText = await (await req("/api/runs")).text();
+  expect(runsText.length).toBeLessThan(200_000);
+  const runs = JSON.parse(runsText);
+  expect(runs.length).toBe(100);
+  expect(
+    runs.filter(
+      (r: { live: boolean; status: string }) =>
+        r.status === "running" && r.live,
+    ),
+  ).toHaveLength(1);
+  expect(
+    JSON.parse(await (await req("/api/runs?limit=5&status=succeeded")).text()),
+  ).toHaveLength(5);
+  expect((await (await req("/api/status")).json()).running_runs).toBe(1);
+  const full = await (
+    await req(`/api/runs/${runs[runs.length - 1].id}`)
+  ).json();
+  expect(full.summary.length).toBe(5000);
+  expect(
+    (await (await req(`/api/tasks/${ids[2]}`)).json()).description,
+  ).toHaveLength(5000);
+  const projects = await (await req("/api/projects")).json();
+  expect(projects[0].running).toBe(1);
+  expect(projects[0].counts.ready).toBe(150);
+  sleeper.kill();
 });
