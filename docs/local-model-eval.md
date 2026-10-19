@@ -17,8 +17,8 @@ in the repository manifest, including optional documentation.
 | Candidate | Fixed revision | Weight bytes | All repository bytes | Status |
 |---|---|---:|---:|---|
 | mlx-community/LFM2.5-8B-A1B-MLX-4bit | 146590a491db88581884033023f51f6b49a27b89 | 4,764,265,165 | 4,782,228,614 | Exists; exceeds 4GB; download approval pending |
-| mlx-community/LFM2.5-2.6B-4bit | 72a08228cf703cd7dc0187abf4edbbd8e935f864 | 1,517,625,850 | 1,535,593,294 | Exists; within 4GB; load not attempted |
-| Gemma4 E4B MLX 4-bit (AAM-60) | unknown | unknown | unknown | Comparison pending: no AAM-60 result in this worktree |
+| mlx-community/LFM2.5-2.6B-4bit | 72a08228cf703cd7dc0187abf4edbbd8e935f864 | 1,517,625,850 | 1,535,593,294 | Cached complete at pinned revision; within 4GB; load not attempted |
+| Gemma4 E4B MLX 4-bit (AAM-60) | unknown | unknown | unknown | Comparison pending: no AAM-60 result found; no HF Gemma MLX snapshot cached |
 
 Sources: [8B config](https://huggingface.co/mlx-community/LFM2.5-8B-A1B-MLX-4bit/blob/146590a491db88581884033023f51f6b49a27b89/config.json),
 [2.6B config](https://huggingface.co/mlx-community/LFM2.5-2.6B-4bit/blob/72a08228cf703cd7dc0187abf4edbbd8e935f864/config.json).
@@ -66,18 +66,31 @@ spend its entire short output budget thinking; a future empty visible answer mus
 raw reasoning/content, finish_reason and token usage rather than be scored successful.
 [Tool-use guide](https://docs.liquid.ai/lfm/key-concepts/tool-use).
 
-## Why runtime results are pending
+## Cache and prior evidence inspection
 
-The worker is explicitly restricted to writing inside this worktree, while task policy
-requires model downloads in the user cache. No cache was written or inspected outside
-the worktree. The 8B artifact also independently exceeds the 4GB limit, even considering
-weights alone, and needs a user decision. No OptiQ artifact was downloaded or evaluated.
+The read-only HF cache inspection found the complete
+`mlx-community/LFM2.5-2.6B-4bit` snapshot at revision
+`72a08228cf703cd7dc0187abf4edbbd8e935f864`. Its `model.safetensors` is
+1,517,625,850 bytes; the snapshot contains the manifest files and totals
+1,535,593,294 bytes, matching the pinned HF API manifest. The similarly named
+`LiquidAI/LFM2.5-2.6B-MLX-4bit` cache is a separate repository/revision and is not
+substituted for the requested candidate. No Gemma MLX HF snapshot was present in the
+cache. No files were downloaded or modified during this inspection.
 
-A read-only process snapshot found three pre-existing `hf download` processes for LFM
-2.6B (PIDs 34270, 34271, 37558). They predated this worker's inspection and are not owned
-by it. None was stopped, signalled, or assumed to have completed. This is an additional
-reason to coordinate a shared-lock run with the manager rather than start competing work.
-No active omlx process appeared in that snapshot. AAM-38 was not restarted.
+No AAM-60 result or prompt set was present in this worktree or the inspected local AAM
+records. `docs/local-llm-smoke.md` records that the Ollama tag `gemma4:e4b-mlx` was
+pulled/present at 9.46 GB on disk, but was never loaded or benchmarked because the
+then-current memory check said “not run: memory”. That is not an MLX-native AAM-60
+runtime result and supplies no comparable coding, latency, or residency measurements.
+Gemma comparison therefore remains specifically pending its AAM-60 evidence (or a
+separately authorized native MLX evaluation); the cache inspection itself is complete.
+
+The 8B artifact independently exceeds the 4GB cap even considering weights alone, so it
+requires a user decision before download. No OptiQ artifact was downloaded or evaluated.
+
+A read-only process snapshot found no active LFM download or omlx process. Earlier
+observations in the prior report of three `hf download` processes are historical only;
+this worker did not signal or stop any process. AAM-38 was not restarted.
 
 Host observation: arm64, 17,179,869,184 bytes RAM. At inspection, vm_stat page size was
 16,384; free=5,849, inactive=287,789, speculative=9,273, giving 4,962,893,824 bytes by
@@ -101,9 +114,10 @@ must not be summed blindly. No ending measurement here is labelled peak.
 
 ## Next authorized run and recommendation
 
-First resolve cache-write permission and the 8B size decision; check exact cached
-revision and missing bytes without duplicating other downloads. Use the shared local
-model lock, one owned server/process group and one request at a time. Record AAM-26
+The 2.6B pinned artifact is already complete in the user cache, so no download is
+needed for its bounded load smoke. Before loading it, coordinate the shared local model
+lock with the manager. The 8B size decision remains required before any download. Use
+one owned server/process group and one request at a time. Record AAM-26
 memory observations before/after; no sudo purge or user-app cleanup. Prefer omlx with
 this pinned environment, verify actual native MLX backend, and save bounded-load errors.
 Use a 180-second total smoke deadline and 45-second per-request deadline; a supervisor

@@ -55,4 +55,15 @@ describe('AAM-39 pinned native MLX evidence', () => {
       expect(model.backend).toBeNull();
     }
   });
+
+  it('records cache and Gemma comparison findings without claiming runtime validation', () => {
+    const report = readFileSync(new URL('../docs/local-model-eval.md', import.meta.url), 'utf8');
+    expect(report).toContain('complete');
+    expect(report).toContain('72a08228cf703cd7dc0187abf4edbbd8e935f864');
+    expect(report).toContain('1,517,625,850 bytes');
+    expect(report).toContain('No Gemma MLX HF snapshot was present');
+    expect(report).toContain('not an MLX-native AAM-60');
+    expect(report).not.toContain('explicitly restricted to writing inside this worktree');
+    expect(report).toContain('no download is');
+  });
 });
