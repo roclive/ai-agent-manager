@@ -18,8 +18,9 @@ import {
 
 import { providerLlmArgs, recordBackend } from "./llm.js";
 import { effortSupported, workerEffort } from "./worker-effort.js";
-import { managerBackend, type ManagerBackend } from "./manager-backend.js";
+import { managerBackend, type ManagerBackend, type ManagerDecision } from "./manager-backend.js";
 import { resolveExecutor } from "./executors.js";
+import type { ProviderSelection } from "./providers.js";
 export function dependenciesDone(repo: Repo, t: Task) {
   return (JSON.parse(t.depends_on) as string[]).every((id) => {
     try {
@@ -67,6 +68,7 @@ export function dispatch(
   id: string,
   force = false,
   backend: ManagerBackend = managerBackend(repo),
+  plannedDecision?: ManagerDecision,
 ) {
   const t = repo.task(id);
   if (repo.runs(t.id).some((r) => r.status === "running"))
@@ -82,10 +84,11 @@ export function dispatch(
   if (globalCooldownBlocks(repo, t))
     throw new Error("Workers are in cooldown");
 
-  let selected;
+  let selected: ProviderSelection;
   let identity!: WorkerIdentity;
   try {
-    const decision = choose(repo, t, backend);
+    const decision = plannedDecision ?? choose(repo, t, backend);
+    if (decision.task.id !== t.id) throw new Error("Manager decision task does not match dispatch task");
     selected = decision.worker;
     repo.event("manager_decision", decision.reason, t.id);
   } catch (error) {
@@ -123,8 +126,9 @@ export function dispatch(
   const reserve = repo.db.transaction(() => {
     // Selection and reservation share the same immediate write transaction, so
     // concurrent dispatchers cannot both spend the last available capacity.
-    const decision = choose(repo, t, backend);
-    const current = decision.worker;
+    // Keep the manager's chosen worker authoritative. Revalidate current worker
+    // availability and reservation capacity, but never run a second decision.
+    const current = selected;
     // Re-check the single-run lock inside the write transaction.
     if (current.id === FALLBACK_PROVIDER && localRunActive(repo))
       throw new Error("No provider available (local model run active)");

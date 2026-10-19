@@ -60,7 +60,7 @@ describe("manager decision backends", () => {
     const decide = vi.fn(rules.decide.bind(rules));
     const backend: ManagerBackend = { name: "rules", decide };
     dispatch(f.repo, task.identifier, false, backend);
-    expect(decide).toHaveBeenCalledTimes(2);
+    expect(decide).toHaveBeenCalledTimes(1);
     expect(decide.mock.calls.every(([tasks]) => tasks[0]?.id === task.id)).toBe(true);
     expect(f.repo.events().some((event) => (event as { kind: string }).kind === "manager_decision")).toBe(true);
   });
@@ -83,6 +83,32 @@ describe("manager decision backends", () => {
     };
     tick(f.repo, undefined, backend);
     expect(f.repo.task(chosen.id).status).toBe("in_progress");
+    expect(f.repo.task(first.id).status).toBe("ready");
+  });
+
+  it("preserves the worker selected by tick through reservation", () => {
+    f = fixture();
+    f.repo.setSetting("max_parallel", "1");
+    const first = f.task({ priority: "P0", worker: "codex" });
+    const selected = f.task({ priority: "P1", worker: "codex" });
+    const rules = new RulesBackend();
+    let calls = 0;
+    const backend: ManagerBackend = {
+      name: "rules",
+      decide(candidates, context) {
+        calls += 1;
+        if (calls === 1) {
+          const task = candidates.find((candidate) => candidate.id === selected.id)!;
+          return { task, worker: { ...rules.decide([task], context).worker, id: "opencode", worker: "opencode" }, reason: "choose opencode" };
+        }
+        return rules.decide(candidates, context);
+      },
+    };
+    tick(f.repo, undefined, backend);
+    const run = f.repo.runs(selected.id)[0];
+    expect(run.worker).toBe("opencode");
+    expect(run.provider).toBe("opencode");
+    expect(calls).toBe(1);
     expect(f.repo.task(first.id).status).toBe("ready");
   });
   it("defers unavailable routing and still dispatches the next candidate", () => {

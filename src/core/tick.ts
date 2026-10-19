@@ -90,7 +90,7 @@ export function tick(
           throw new Error("Manager selected a task outside its candidates");
         candidates = candidates.filter((candidate) => candidate.id !== t.id);
         try {
-          dispatch(repo, t.identifier, false, backend);
+          dispatch(repo, t.identifier, false, backend, decision);
         } catch (e) {
           if (e instanceof QuotaUnavailableError) continue;
           repo.updateTask(t.id, { status: "blocked", blocker: String(e) });
