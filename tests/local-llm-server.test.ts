@@ -266,12 +266,18 @@ it("passes an explicit task-completion idle timer to the omlx watchdog", () => {
   f = fixture();
   f.repo.setSetting("local_llm_server", "omlx");
   startLocalLlm(f.repo, f.task().id);
+  f.repo.setSetting("keep_warm", "1");
   expect(starts()[0].env.OMLX_IDLE_SINCE_FILE).toBe(
     resolve(f.repo.home, "local-model.idle-since"),
   );
   const script = readFileSync(resolve("scripts/omlx-start.sh"), "utf8");
   expect(script).toContain('IDLE_MS=$(cat "$IDLE_SINCE_FILE"');
   expect(script).not.toContain('stat -f %m "$LOG"');
+  writeFileSync(resolve(f.repo.home, "local-model.idle-since"), "1\n");
+  writeFileSync(resolve(f.repo.home, "local-model.active"), `${f.task().id}\n`);
+  stopLocalModelAfterTask(f.repo);
+  expect(existsSync(resolve(f.repo.home, "local-model.active"))).toBe(false);
+  expect(Number(readFileSync(resolve(f.repo.home, "local-model.idle-since"), "utf8"))).toBeGreaterThan(1);
 });
 
 it("daemon startup preserves a deliberately warm omlx server", () => {
@@ -287,6 +293,17 @@ it("daemon startup preserves a deliberately warm omlx server", () => {
   cleanupLocalModelOnDaemonStart(f.repo);
   expect(stopsRun()).toHaveLength(1);
   expect(f.repo.getSetting("local_llm_active_profile")).toBe("");
+});
+
+it("daemon startup preserves keep_warm even with the opencode fallback worker", () => {
+  f = fixture();
+  enableOmlx();
+  f.repo.setSetting("fallback_worker", "opencode");
+  f.repo.setSetting("keep_warm", "1");
+  f.repo.setSetting("local_llm_active_profile", "0");
+  cleanupLocalModelOnDaemonStart(f.repo);
+  expect(stopsRun()).toHaveLength(0);
+  expect(f.repo.getSetting("local_llm_active_profile")).toBe("0");
 });
 
 it("switching provider away from omlx still unloads a server this module started", () => {

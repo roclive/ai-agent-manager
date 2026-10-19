@@ -86,10 +86,7 @@ export async function fireScheduledRoutine(repo: Repo, id: number) {
 }
 
 export function cleanupLocalModelOnDaemonStart(repo: Repo) {
-  if (
-    repo.getSetting("fallback_worker") === "opencode" &&
-    repo.getSetting("keep_warm") !== "1"
-  )
+  if (repo.getSetting("keep_warm") !== "1")
     stopLocalModelIfIdle(repo);
 }
 
