@@ -133,6 +133,7 @@ export class Repo {
     }[];
     for (const [name, declaration] of Object.entries({
       provider: "TEXT",
+      reviewer_identity: "TEXT",
       reservation_amount: "REAL NOT NULL DEFAULT 0",
     }))
       if (!autopilotColumns.some((c) => c.name === name))

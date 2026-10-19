@@ -23,11 +23,13 @@ function renderBoard(activity: unknown, actionResponse: Response = new Response(
 
 it("distinguishes active coding and review and renders review worktree", async () => {
   renderBoard({ active: [
-    { kind: "coding", task_id: 1, identifier: "T-1", title: "Code", identity: "Codex Sol", worktree_path: "/wt/T-1", branch: "aam/T-1", started_at: "2026-01-01" },
-    { kind: "review", task_id: 2, identifier: "T-2", title: "Review", identity: "Claude", worktree_path: "/wt/T-2", branch: "aam/T-2", started_at: "2026-01-01" },
+    { kind: "coding", status: "running", activity_id: 1, task_id: 1, identifier: "T-1", title: "Code", identity: "Codex Sol", worktree_path: "/wt/T-1", branch: "aam/T-1", started_at: "2026-01-01" },
+    { kind: "review", status: "pending", activity_id: 2, task_id: 2, identifier: "T-2", title: "Review", identity: "Claude", worktree_path: "/wt/T-2", branch: "aam/T-2", started_at: "2026-01-01" },
   ], idle: null, eligible_ready: [] });
   expect(await screen.findByText("编码执行中")).toBeInTheDocument();
   expect(screen.getByText("自动审查中")).toBeInTheDocument();
+  expect(screen.getByText("状态：待完成（pending）")).toBeInTheDocument();
+  expect(screen.getByText("状态：运行中（running）")).toBeInTheDocument();
   expect(screen.getByText("工作树：/wt/T-2")).toBeInTheDocument();
   expect(screen.getByText("分支：aam/T-2")).toBeInTheDocument();
 });

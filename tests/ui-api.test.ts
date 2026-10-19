@@ -217,16 +217,30 @@ it("reports only live coding and pending review work with worktree details", asy
   ).run(coding.id, process.pid, new Date().toISOString());
   const reviewTask = f.task({ status: "in_review", branch: "aam/T-2", worktree_path: "/tmp/T-2" });
   f.repo.db.prepare(
-    "INSERT INTO autopilot_jobs(kind,project_id,task_id,started_at,status,provider) VALUES ('review',1,?,?,'pending','claude')",
+    "INSERT INTO autopilot_jobs(kind,project_id,task_id,started_at,status,provider,reviewer_identity) VALUES ('review',1,?,?,'pending','claude','claude · opus')",
   ).run(reviewTask.id, new Date().toISOString());
   f.task({ status: "in_review" });
+  // Existing jobs keep their recorded identity when the configured reviewer changes.
+  f.repo.setSetting("reviewer", "codex-sol");
   const body = await (await req("/api/board/activity")).json();
   expect(body.active).toEqual(expect.arrayContaining([
     expect.objectContaining({ kind: "coding", identifier: coding.identifier, identity: "Codex Sol", worktree_path: "/tmp/T-1" }),
-    expect.objectContaining({ kind: "review", identifier: reviewTask.identifier, identity: "claude", branch: "aam/T-2" }),
+    expect.objectContaining({ kind: "review", identifier: reviewTask.identifier, identity: "claude · opus", status: "pending", branch: "aam/T-2" }),
   ]));
   expect(body.active).toHaveLength(2);
   expect(body.idle).toBeNull();
+});
+it("does not infer legacy review identity from current settings", async () => {
+  const { req } = setup();
+  const task = f.task({ status: "in_review" });
+  f.repo.setSetting("reviewer", "codex-sol");
+  f.repo.db.prepare(
+    "INSERT INTO autopilot_jobs(kind,project_id,task_id,started_at,status) VALUES ('review',1,?,?,'pending')",
+  ).run(task.id, new Date().toISOString());
+  const body = await (await req("/api/board/activity")).json();
+  expect(body.active).toEqual([
+    expect.objectContaining({ kind: "review", status: "pending", identity: null }),
+  ]);
 });
 it("does not report dead coding processes or completed review jobs as active", async () => {
   const { req } = setup();
@@ -285,7 +299,7 @@ it("starts only eligible fake review work without starting an opted-in planner",
   const response = await req("/api/board/review", "POST");
   expect(response.status).toBe(200);
   expect((await response.json()).active).toEqual([
-    expect.objectContaining({ kind: "review", status: "pending", task_id: task.id, worktree_path: f.path }),
+    expect.objectContaining({ kind: "review", status: "pending", task_id: task.id, worktree_path: f.path, identity: "claude · sonnet" }),
   ]);
   expect(f.repo.db.prepare("SELECT kind FROM autopilot_jobs").all()).toEqual([{ kind: "review" }]);
   await new Promise(resolve => setTimeout(resolve, 300));

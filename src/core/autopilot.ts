@@ -288,6 +288,14 @@ function launch(repo: Repo, job: Job, cwd: string, prompt: string) {
   recordBackend(repo, dir, job.provider || undefined);
   const file = resolve(dir, "prompt.txt");
   const command = reviewerCommand(repo, cwd, dir, job.provider || undefined);
+  // Snapshot the command's model; changing settings must not relabel active jobs.
+  const modelFlag = command.args.findIndex(arg => arg === "-m" || arg === "--model");
+  const model = command.gw ? repo.getSetting("gw_model")
+    : modelFlag >= 0 ? command.args[modelFlag + 1] : undefined;
+  const identity = [job.provider || (command.codex ? "codex" : "claude"), model]
+    .filter(Boolean).join(" · ");
+  repo.db.prepare("UPDATE autopilot_jobs SET reviewer_identity=? WHERE id=?")
+    .run(identity, job.id);
   writeFileSync(
     file,
     prompt + (!command.codex && !command.gw ? claudeContextRule : contextRule),

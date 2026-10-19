@@ -167,6 +167,7 @@ export function BoardPage({ project }: { project: string }) {
             <div className="activity-work" key={`${item.kind}-${item.activity_id}`}>
               <strong>{item.kind === "coding" ? "编码执行中" : "自动审查中"}</strong>
               <Link to={`?task=${encodeURIComponent(item.identifier)}`}>{item.identifier} {item.title}</Link>
+              <span>状态：{item.status === "pending" ? "待完成（pending）" : "运行中（running）"}</span>
               {item.identity && <span>{item.kind === "review" ? "审查者" : "执行者"}：{item.identity}</span>}
               {item.worktree_path && <span title={item.worktree_path}>工作树：{item.worktree_path}</span>}
               {item.branch && <span>分支：{item.branch}</span>}

@@ -3,7 +3,7 @@ import { dependenciesDone, dispatchAvailability, globalCooldownBlocks, resolutio
 import { reviewWaitReason } from "./autopilot.js";
 import { runLive } from "../api/slim.js";
 
-type ReviewJob = { id: number; task_id: number; started_at: string; provider: string | null };
+type ReviewJob = { id: number; task_id: number; started_at: string; provider: string | null; reviewer_identity: string | null };
 export type BoardActivityItem = {
   kind: "coding" | "review";
   status: "running" | "pending";
@@ -41,14 +41,14 @@ export function boardActivity(repo: Repo) {
     });
   }
   const reviewJobs = repo.db.prepare(
-    "SELECT id,task_id,started_at,provider FROM autopilot_jobs WHERE kind='review' AND status='pending' AND task_id IS NOT NULL ORDER BY id",
+    "SELECT id,task_id,started_at,provider,reviewer_identity FROM autopilot_jobs WHERE kind='review' AND status='pending' AND task_id IS NOT NULL ORDER BY id",
   ).all() as ReviewJob[];
   for (const job of reviewJobs) {
     const task = repo.task(job.task_id);
     active.push({
       kind: "review", status: "pending", activity_id: job.id, task_id: task.id, identifier: task.identifier, title: task.title,
       started_at: job.started_at, worktree_path: task.worktree_path, branch: task.branch,
-      identity: job.provider || repo.getSetting("reviewer") || null,
+      identity: job.reviewer_identity || job.provider || null,
     });
   }
 

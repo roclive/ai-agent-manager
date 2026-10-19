@@ -131,3 +131,6 @@ Validation so far: merged core suite 121 passed before the final provider-isolat
 - Activity is based on live coding runs and pending automatic-review jobs, rather than task status alone. API items retain the underlying running/pending status and run/job ID.
 - Idle review guidance mirrors the normal launcher’s cooldown, health, concurrency, daily budget and retry/stall gates. Board review requests only start reviews, without starting unrelated planner work. Provider reservation and quota checks remain authoritative at execution time; rejected actions surface their normal API error without changing settings.
 - Pending coding rows still reserve dispatch capacity until the normal tick reaps them, even if their process is no longer live.
+
+- Follow-up: automatic jobs snapshot the actual command provider/model at launch; the board displays this identity and the stored pending/running status. Legacy jobs without a snapshot show only their recorded provider rather than guessing from current reviewer settings.
+- This worktree predates AAM-69. No worker/reviewer model defaults or global routing were changed here. Integration must retain AAM-69’s shared model-defaults.ts and migration and run the combined regressions before deployment. No deployment is performed by this worker.
