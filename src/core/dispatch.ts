@@ -6,25 +6,20 @@ import { ensureWorktree } from "./worktree.js";
 import { prompt, promptPrefixHash, spawnWorker } from "../workers/index.js";
 import { detectIdentity, type WorkerIdentity } from "../workers/identity.js";
 import { checkQuota, QuotaUnavailableError } from "./usage.js";
-import {
-  reserveProvider,
-  releaseProvider,
-  selectProvider,
-} from "./providers.js";
+import { reserveProvider, releaseProvider } from "./providers.js";
 import { providerPolicyConfigured } from "./provider-policy.js";
 import {
   FALLBACK_PROVIDER,
-  fallbackActive,
   fallbackModel,
-  fallbackSelection,
   localModelWait,
   recordLocalModelMemory,
   localRunActive,
 } from "./local-model.js";
 
-import { resolveExecutor, selectExecutor } from "./executors.js";
 import { providerLlmArgs, recordBackend } from "./llm.js";
 import { effortSupported, workerEffort } from "./worker-effort.js";
+import { managerBackend, type ManagerBackend } from "./manager-backend.js";
+import { resolveExecutor } from "./executors.js";
 export function dependenciesDone(repo: Repo, t: Task) {
   return (JSON.parse(t.depends_on) as string[]).every((id) => {
     try {
@@ -55,12 +50,8 @@ export function resolutionBusy(repo: Repo, t: Task) {
 // Low-quota fallback bypasses provider policy and quota: it is the last resort.
 // An explicitly chosen coding executor is authoritative: neither the legacy low-quota
 // fallback nor quota-aware routing may substitute another worker for it.
-function choose(repo: Repo, t: Task) {
-  const effective = resolveExecutor(repo, t);
-  if (effective.value !== "auto") return selectExecutor(repo, effective);
-  return fallbackActive(repo)
-    ? fallbackSelection(repo)
-    : selectProvider(repo, t);
+function choose(repo: Repo, t: Task, backend: ManagerBackend) {
+  return backend.decide([t], { repo });
 }
 // The legacy single cooldown only gates quota-aware ("auto") routing; explicit executors
 // carry their own per-executor cooldown (provider_breakers).
@@ -71,7 +62,12 @@ export function globalCooldownBlocks(repo: Repo, t: Task) {
     resolveExecutor(repo, t).value === "auto"
   );
 }
-export function dispatch(repo: Repo, id: string, force = false) {
+export function dispatch(
+  repo: Repo,
+  id: string,
+  force = false,
+  backend: ManagerBackend = managerBackend(repo),
+) {
   const t = repo.task(id);
   if (repo.runs(t.id).some((r) => r.status === "running"))
     throw new Error("Task already running");
@@ -89,7 +85,9 @@ export function dispatch(repo: Repo, id: string, force = false) {
   let selected;
   let identity!: WorkerIdentity;
   try {
-    selected = choose(repo, t);
+    const decision = choose(repo, t, backend);
+    selected = decision.worker;
+    repo.event("manager_decision", decision.reason, t.id);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     repo.event("quota_deferred", message, t.id);
@@ -125,7 +123,8 @@ export function dispatch(repo: Repo, id: string, force = false) {
   const reserve = repo.db.transaction(() => {
     // Selection and reservation share the same immediate write transaction, so
     // concurrent dispatchers cannot both spend the last available capacity.
-    const current = choose(repo, t);
+    const decision = choose(repo, t, backend);
+    const current = decision.worker;
     // Re-check the single-run lock inside the write transaction.
     if (current.id === FALLBACK_PROVIDER && localRunActive(repo))
       throw new Error("No provider available (local model run active)");

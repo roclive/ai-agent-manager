@@ -29,9 +29,12 @@ describe("docs/MANAGER.md audit", () => {
       .map((f) => f.slice(root.length + 1));
     expect(hits).toEqual(["src/db/index.ts"]);
   });
-  it("cited dispatch routing lines still match", () => {
-    const source = readFileSync(resolve(root, "src/core/dispatch.ts"), "utf8");
-    const choose = source.match(/function choose\([^]*?\n}/)?.[0];
-    expect(choose).toMatch(/function choose[\s\S]*selectExecutor/);
+  it("documents the extracted manager routing policy", () => {
+    const dispatch = readFileSync(resolve(root, "src/core/dispatch.ts"), "utf8");
+    const backend = readFileSync(resolve(root, "src/core/manager-backend.ts"), "utf8");
+    expect(dispatch).toContain("backend.decide([t], { repo })");
+    expect(backend).toContain("selectExecutor(repo, effective)");
+    expect(doc).toContain("manager_backend");
+    expect(doc).toContain("src/core/manager-backend.ts");
   });
 });

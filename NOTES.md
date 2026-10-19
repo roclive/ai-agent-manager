@@ -125,3 +125,11 @@ Validation so far: merged core suite 121 passed before the final provider-isolat
   daemon-guard is locally installed policy and has no canonical generator in this repository.
 
 - Reviewer/planner subprocess stdout and stderr now stream directly to private log files, removing the former 1 MiB pipe buffer cap. Result collection permits responses up to 64 MiB and bounds diagnostic tails to 256 KiB. Oversized final responses retain logs and pause automatic retries for the unchanged task with a visible review_stalled event; no task attempt is consumed. Task updates after remediation resume review.
+
+## AAM-49 manager backend
+
+- `ManagerBackend.decide(candidates, context)` separates manager task/worker decisions from dispatch. Rules retains database priority/sequence ordering and existing executor, fallback and provider routing. Dispatch still reserves provider capacity in an immediate transaction.
+- `manager_backend` defaults to `rules`. `claude`, `codex`, and `local-small` are extension slots using rules until model adapters are implemented; selecting them does not call a model. This task specifies only the RulesBackend implementation.
+- Regression coverage includes unavailable routing continuing to other tasks and resolution eligibility changing after a dispatch. The supplied previous review contained passing logs without individual findings.
+
+- Validation: core 247/247 passed with `npm test -- --maxWorkers=1 --testTimeout=60000`; core typecheck passed. UI 45/45 passed with `npm test -- --maxWorkers=1`; UI typecheck passed. Default parallel runs hit subprocess/UI wait timeouts under concurrent machine load; the single-worker default-timeout run passed 246/247 with one 15.8-second test exceeding 15 seconds. No assertions or repository timeout settings were changed.

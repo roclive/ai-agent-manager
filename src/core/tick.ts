@@ -19,7 +19,12 @@ import {
   localRunActive,
   stopLocalModelIfIdle,
 } from "./local-model.js";
-export function tick(repo: Repo, _reviewRunner: Runner = runner) {
+import { managerBackend, type ManagerBackend } from "./manager-backend.js";
+export function tick(
+  repo: Repo,
+  _reviewRunner: Runner = runner,
+  backend: ManagerBackend = managerBackend(repo),
+) {
   return withLock(repo, () => {
     repo.setSetting("last_tick_at", new Date().toISOString());
     const localBefore = repo
@@ -50,16 +55,42 @@ export function tick(repo: Repo, _reviewRunner: Runner = runner) {
     if (localBefore && !localRunActive(repo)) stopLocalModelIfIdle(repo);
     reconcileIntegration(repo);
     {
-      for (const t of repo.tasks({ status: "ready" })) {
+      let candidates = repo
+        .tasks({ status: "ready" })
+        .filter(
+          (t) =>
+            dependenciesDone(repo, t) &&
+            !resolutionBusy(repo, t) &&
+            !globalCooldownBlocks(repo, t),
+        );
+      while (candidates.length) {
         if (
           repo.runs().filter((r) => r.status === "running").length >=
           Number(repo.getSetting("max_parallel"))
         )
           break;
-        if (!dependenciesDone(repo, t) || resolutionBusy(repo, t)) continue;
-        if (globalCooldownBlocks(repo, t)) continue;
+        // Earlier dispatches can make integration-resolution candidates busy.
+        candidates = candidates.filter(
+          (t) => dependenciesDone(repo, t) && !resolutionBusy(repo, t) && !globalCooldownBlocks(repo, t),
+        );
+        if (!candidates.length) break;
+        let decision;
         try {
-          dispatch(repo, t.identifier);
+          decision = backend.decide(candidates, { repo });
+        } catch (error) {
+          // Routing failures used to be caught inside dispatch. Keep the task
+          // ready and continue checking other candidates, even for malformed
+          // legacy policy rows or unavailable executors.
+          const deferred = candidates.shift()!;
+          repo.event("quota_deferred", String(error), deferred.id);
+          continue;
+        }
+        const t = decision.task;
+        if (!candidates.some((candidate) => candidate.id === t.id))
+          throw new Error("Manager selected a task outside its candidates");
+        candidates = candidates.filter((candidate) => candidate.id !== t.id);
+        try {
+          dispatch(repo, t.identifier, false, backend);
         } catch (e) {
           if (e instanceof QuotaUnavailableError) continue;
           repo.updateTask(t.id, { status: "blocked", blocker: String(e) });
