@@ -88,6 +88,23 @@ it("validates and persists independent worker and reviewer controls", () => {
   ).toBe("Claude (sonnet, low)");
 });
 
+it("honors the legacy Claude reviewer fast-mode opt-out when the new setting is absent", () => {
+  f = fixture();
+  f.repo.setSetting("reviewer", "claude-opus");
+  f.repo.db.prepare("DELETE FROM settings WHERE key='reviewer_fast_mode'").run();
+  f.repo.db
+    .prepare("INSERT INTO settings (key, value) VALUES ('claude_fast_mode', '0')")
+    .run();
+
+  expect(setting(claudeReviewerArgs(f.repo)).fastMode).toBe(false);
+
+  // A persisted reviewer-specific value takes precedence over the legacy one.
+  f.repo.db
+    .prepare("INSERT INTO settings (key, value) VALUES ('reviewer_fast_mode', '1')")
+    .run();
+  expect(setting(claudeReviewerArgs(f.repo)).fastMode).toBe(true);
+});
+
 it("environment overrides both commands and the recorded identity", () => {
   f = fixture();
   vi.stubEnv("AAM_CLAUDE_MODEL", "haiku");

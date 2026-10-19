@@ -1,4 +1,5 @@
 import { reviewerClaudeSettings } from "./claude-settings.js";
+import { reviewerHealthSetting } from "./reviewer-settings.js";
 import { DEFAULT_SOL_MODEL } from "./model-defaults.js";
 import type { Repo } from "../db/index.js";
 import { executorInstalled } from "./executors.js";
@@ -36,16 +37,7 @@ export function reviewerMeta(value: string | undefined) {
   return META[normalizeReviewer(value) as Reviewer]!;
 }
 
-export const reviewerHealthSetting = (repo: Repo, key: string) =>
-  repo.getSetting(`reviewer_${key}`) ||
-  (normalizeReviewer(repo.getSetting("reviewer")).startsWith("claude") &&
-  !(
-    repo.getSetting("ollama_fallback_enabled") === "1" &&
-    repo.getSetting("llm_backend") === "ollama"
-  )
-    ? repo.getSetting(`claude_${key}`)
-    : "") ||
-  "";
+export { reviewerHealthSetting };
 
 export function reviewersView(repo: Repo) {
   const ok = reviewerHealthSetting(repo, "ok");

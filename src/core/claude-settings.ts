@@ -1,4 +1,5 @@
 import type { Repo } from "../db/index.js";
+import { reviewerHealthSetting } from "./reviewer-settings.js";
 
 export function claudeSettings(options: {
   model?: string;
@@ -20,6 +21,6 @@ export function reviewerClaudeSettings(repo: Repo) {
   return claudeSettings({
     model: repo.getSetting("reviewer_model"),
     effort: repo.getSetting("reviewer_effort"),
-    fast: repo.getSetting("reviewer_fast_mode") !== "0",
+    fast: reviewerHealthSetting(repo, "fast_mode") !== "0",
   });
 }
