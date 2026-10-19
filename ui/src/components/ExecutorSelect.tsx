@@ -1,6 +1,8 @@
+import { useEffect, useState } from "react";
 import { useExecutors } from "../lib/queries";
 import { NativeSelect } from "./ui/select";
 import type { EffectiveExecutor, ExecutorInfo } from "../lib/types";
+import { normalizeExecutor } from "../lib/executor";
 
 export const sourceText = { task: "任务", project: "项目", global: "全局" };
 
@@ -54,13 +56,19 @@ export function ExecutorSelect({
   inheritLabel?: string;
 }) {
   const q = useExecutors();
+  // Keep persisted pre-variant values visibly selected. Without this, a legacy
+  // `codex` override is rendered as the first (inherit) option and an unrelated
+  // form save silently clears the override.
+  const normalizedValue = normalizeExecutor(value);
+  const [formValue, setFormValue] = useState(normalizedValue);
+  useEffect(() => setFormValue(normalizedValue), [normalizedValue]);
+  const selectedValue = onChange ? normalizedValue : formValue;
   return (
     <NativeSelect
       aria-label={label}
       name={name}
-      {...(onChange
-        ? { value, onChange: (e) => onChange(e.target.value) }
-        : { defaultValue: value })}
+      value={selectedValue}
+      onChange={(e) => onChange ? onChange(e.target.value) : setFormValue(e.target.value)}
     >
       <ExecutorOptions executors={q.data?.executors ?? []} inheritLabel={inheritLabel} />
     </NativeSelect>

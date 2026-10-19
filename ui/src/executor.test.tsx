@@ -8,7 +8,7 @@ const view = {
   executor_fallback: [],
   reviewer: "codex",
   executors: [
-    { id: "codex", label: "Codex", installed: true, install_hint: "npm i -g @openai/codex", cooldown_until: new Date(Date.now() + 600000).toISOString() },
+    { id: "codex-sol", label: "Codex (Sol)", installed: true, install_hint: "npm i -g @openai/codex", cooldown_until: new Date(Date.now() + 600000).toISOString(), model: "gpt-5.6-sol" },
     { id: "claude", label: "Claude (Sonnet)", installed: true, install_hint: "", cooldown_until: null },
     { id: "claude-opus", label: "Claude (Opus)", installed: true, install_hint: "", cooldown_until: null, model: "opus" },
     { id: "codex-luna", label: "Codex (Luna)", installed: true, install_hint: "", cooldown_until: null, model: "gpt-5.6-luna" },
@@ -34,9 +34,9 @@ it("lists executors, disables uninstalled ones with hint, and reports changes", 
   const hermes = screen.getByRole("option", { name: /Hermes.*not installed/ }) as HTMLOptionElement;
   expect(hermes.disabled).toBe(true);
   expect(hermes.textContent).toContain("curl install.sh");
-  expect(screen.getByText("Codex 冷却中")).toBeInTheDocument();
-  fireEvent.change(select, { target: { value: "codex" } });
-  expect(onChange).toHaveBeenCalledWith("codex");
+  expect(screen.getByText("Codex (Sol) 冷却中")).toBeInTheDocument();
+  fireEvent.change(select, { target: { value: "codex-sol" } });
+  expect(onChange).toHaveBeenCalledWith("codex-sol");
 });
 
 it("offers an inherit option and shows effective executor with source", async () => {
@@ -144,8 +144,11 @@ it("kanban pending cards use effective executor, keep historical worker on activ
 });
 
 it("shows model variants and maps legacy codex to Codex (Sol)", async () => {
-  wrap(<ExecutorSelect label="x" value="" name="e" />);
+  wrap(<form aria-label="settings"><ExecutorSelect label="x" inheritLabel="inherit" value="codex" name="e" /></form>);
   await screen.findByRole("option", { name: "Claude (Opus)" });
   expect(screen.getByRole("option", { name: "Codex (Luna)" })).toBeInTheDocument();
+  const select = screen.getByLabelText("x") as HTMLSelectElement;
+  expect(select.value).toBe("codex-sol");
+  expect(new FormData(select.form!).get("e")).toBe("codex-sol");
   expect(effectiveExecutor({ executor: "codex", project_id: 1 } as never, [], undefined)).toEqual({ value: "codex-sol", source: "task" });
 });
