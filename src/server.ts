@@ -96,7 +96,11 @@ export function createApp(
             a.priority.localeCompare(b.priority) ||
             a.id - b.id,
         )
-        .map((t) => ({ ...t, dependency_waiting: dependencyWaiting(repo, t) })),
+        .map((t) => ({
+          ...t,
+          dependency_waiting: dependencyWaiting(repo, t),
+          latest_worker: repo.latestWorker(t.id),
+        })),
     ),
   );
   app.post("/api/tasks", async (c) => {

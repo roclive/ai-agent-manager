@@ -1,4 +1,5 @@
 // Adapted from paperclipai/paperclip (MIT)
+import { WorkerBadge } from "../components/WorkerBadge";
 import { ProjectChip } from "../components/ProjectChip";
 import { TaskDrawer } from "../components/TaskDrawer";
 import {
@@ -173,7 +174,8 @@ export function Dashboard({ project }: { project: string }) {
                 {rows.find((t) => t.id === r.task_id)?.title}
               </Link>
               <span>
-                {r.worker} · 已运行{" "}
+                <WorkerBadge kind={r.worker_kind} label={r.worker_label ?? r.worker} /> ·
+                已运行{" "}
                 {Math.floor((Date.now() - Date.parse(r.started_at)) / 60000)}{" "}
                 分钟
               </span>

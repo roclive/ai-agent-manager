@@ -1,4 +1,5 @@
 // Adapted from paperclipai/paperclip (MIT)
+import { WorkerBadge } from "./WorkerBadge";
 import { ProjectChip } from "./ProjectChip";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -130,7 +131,14 @@ function KanbanCard({ task, run }: { task: Task; run?: Run }) {
           )}
       </Link>
       <div className="card-tags">
-        <Badge variant="secondary">{task.worker}</Badge>
+        {task.latest_worker ? (
+          <WorkerBadge
+            kind={task.latest_worker.kind}
+            label={task.latest_worker.label}
+          />
+        ) : (
+          <Badge variant="secondary">{task.worker}</Badge>
+        )}
         <span>{roleLabels[task.role]}</span>
         <span className="ml-auto">
           {task.attempts}/{task.max_attempts} 次

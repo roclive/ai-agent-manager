@@ -220,6 +220,7 @@ export function cli(repo: Repo) {
       const runs = repo.runs(repo.task(id).id);
       const r = o.run ? runs.find((r) => r.id === Number(o.run)) : runs[0];
       if (!r) throw new Error("Run not found");
+      process.stderr.write(`worker: ${r.worker_label ?? r.worker}\n`);
       output(tail(r.log_path, Number(o.tail)));
     });
   app

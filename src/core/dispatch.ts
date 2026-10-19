@@ -4,6 +4,7 @@ import { Repo, type Task } from "../db/index.js";
 import { git } from "./process.js";
 import { ensureWorktree } from "./worktree.js";
 import { prompt, promptPrefixHash, spawnWorker } from "../workers/index.js";
+import { detectIdentity, type WorkerIdentity } from "../workers/identity.js";
 import { checkQuota, QuotaUnavailableError } from "./usage.js";
 import {
   reserveProvider,
@@ -74,6 +75,7 @@ export function dispatch(repo: Repo, id: string, force = false) {
     throw new Error("Workers are in cooldown");
 
   let selected;
+  let identity!: WorkerIdentity;
   try {
     selected = choose(repo, t);
   } catch (error) {
@@ -115,11 +117,26 @@ export function dispatch(repo: Repo, id: string, force = false) {
     // Re-check the single-run lock inside the write transaction.
     if (current.id === FALLBACK_PROVIDER && localRunActive(repo))
       throw new Error("No provider available (local model run active)");
+    identity = detectIdentity(current.worker, {
+      modelArgs: providerLlmArgs(repo, current.id),
+      ...(current.id === FALLBACK_PROVIDER
+        ? { model: fallbackModel(repo) }
+        : {}),
+    });
     const result = repo.db
       .prepare(
-        "INSERT INTO runs(task_id,worker,provider,status,started_at,start_sha,log_path,last_message_path) VALUES (?,?,?,'running',?,?,'','')",
+        "INSERT INTO runs(task_id,worker,provider,worker_kind,worker_model,worker_label,status,started_at,start_sha,log_path,last_message_path) VALUES (?,?,?,?,?,?,'running',?,?,'','')",
       )
-      .run(t.id, current.worker, current.id, started, startSha);
+      .run(
+        t.id,
+        current.worker,
+        current.id,
+        identity.kind,
+        identity.model,
+        identity.label,
+        started,
+        startSha,
+      );
     const runId = Number(result.lastInsertRowid);
     reserveProvider(repo, runId, current);
     const previous = repo.runs(t.id).find((r) => r.id !== runId && r.provider);
@@ -152,7 +169,7 @@ export function dispatch(repo: Repo, id: string, force = false) {
   const runDir = resolve(repo.home, "runs", String(idRun));
   try {
     mkdirSync(runDir, { recursive: true });
-    recordBackend(repo, runDir, selected.id);
+    recordBackend(repo, runDir, selected.id, identity);
     const promptFile = resolve(runDir, "prompt.md");
     writeFileSync(
       promptFile,
@@ -194,7 +211,7 @@ export function dispatch(repo: Repo, id: string, force = false) {
     repo.updateTask(t.id, { status: "in_progress" });
     repo.event(
       "dispatch",
-      `Started ${worker} run ${idRun} via ${selected.id}`,
+      `Started ${identity.kind} run ${idRun}${identity.model ? ` (${identity.model})` : ""} via ${selected.id}`,
       t.id,
     );
     return idRun;
