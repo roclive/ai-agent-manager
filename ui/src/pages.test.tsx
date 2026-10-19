@@ -461,34 +461,44 @@ it("project editor submits numeric opt-ins and project goal", async () => {
                   reviewer_checked_at: null,
                   reviewer_error: "",
                   reviewers: [
-                    { id: "codex-sol", label: "Codex (Sol)", provider: "codex", supported: true },
-                    { id: "claude", label: "Claude (Sonnet)", provider: "claude", supported: true },
+                    {
+                      id: "codex-sol",
+                      label: "Codex (Sol)",
+                      provider: "codex",
+                      supported: true,
+                    },
+                    {
+                      id: "claude",
+                      label: "Claude (Sonnet)",
+                      provider: "claude",
+                      supported: true,
+                    },
                   ],
                 }
-            : String(url) === "/api/settings"
-              ? {
-                  max_parallel: "2",
-                  worker_timeout_min: "45",
-                  default_worker: "codex",
-                  review_mode: "manual",
-                  auto_review_concurrency: "3",
-                  auto_review_daily_max: "80",
-                  planner_daily_max: "10",
-                  keep_awake: "1",
-                }
-              : [
-                  {
-                    id: 1,
-                    key: "T",
-                    name: "Test",
-                    repo_path: "/tmp/test",
-                    base_branch: "main",
-                    auto_review: 0,
-                    autopilot: 0,
-                    goal: "",
-                    autopilot_rank: 100,
-                  },
-                ],
+              : String(url) === "/api/settings"
+                ? {
+                    max_parallel: "2",
+                    worker_timeout_min: "45",
+                    default_worker: "codex",
+                    review_mode: "manual",
+                    auto_review_concurrency: "3",
+                    auto_review_daily_max: "80",
+                    planner_daily_max: "10",
+                    keep_awake: "1",
+                  }
+                : [
+                    {
+                      id: 1,
+                      key: "T",
+                      name: "Test",
+                      repo_path: "/tmp/test",
+                      base_branch: "main",
+                      auto_review: 0,
+                      autopilot: 0,
+                      goal: "",
+                      autopilot_rank: 100,
+                    },
+                  ],
         ),
       ),
   );
@@ -496,9 +506,34 @@ it("project editor submits numeric opt-ins and project goal", async () => {
   setup(<Settings />, "/settings");
   expect(await screen.findByLabelText("审查器")).toHaveValue("codex-sol");
   await screen.findByRole("option", { name: "Claude (Sonnet)" });
+  expect(screen.getByLabelText("Claude 工作执行器快速模式")).toHaveValue("1");
+  expect(screen.getByLabelText("Claude 审查模型")).toHaveValue("opus");
+  expect(screen.getByLabelText("Claude 审查思考强度")).toHaveValue("max");
+  expect(screen.getByLabelText("Claude 审查快速模式")).toHaveValue("1");
+  fireEvent.change(screen.getByLabelText("Claude 工作执行器快速模式"), {
+    target: { value: "0" },
+  });
+  fireEvent.change(screen.getByLabelText("Claude 审查模型"), {
+    target: { value: "sonnet" },
+  });
+  fireEvent.change(screen.getByLabelText("Claude 审查思考强度"), {
+    target: { value: "xhigh" },
+  });
+  fireEvent.change(screen.getByLabelText("Claude 审查快速模式"), {
+    target: { value: "0" },
+  });
   fireEvent.change(screen.getByLabelText("审查器"), {
     target: { value: "claude" },
   });
+  expect(screen.getByLabelText("Claude 审查模型")).toHaveValue("sonnet");
+  fireEvent.change(screen.getByLabelText("Claude 审查模型"), {
+    target: { value: "opus" },
+  });
+  expect(screen.getByLabelText("审查器")).toHaveValue("claude-opus");
+  fireEvent.change(screen.getByLabelText("审查器"), {
+    target: { value: "claude" },
+  });
+  expect(screen.getByLabelText("Claude 审查模型")).toHaveValue("sonnet");
   fireEvent.click(screen.getByRole("button", { name: "保存设置" }));
   await waitFor(() =>
     expect(fetcher.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(
@@ -511,7 +546,13 @@ it("project editor submits numeric opt-ins and project goal", async () => {
         fetcher.mock.calls.find(([, init]) => init?.method === "PUT")![1]?.body,
       ),
     ),
-  ).toMatchObject({ reviewer: "claude" });
+  ).toMatchObject({
+    reviewer: "claude",
+    worker_fast_mode: "0",
+    reviewer_model: "sonnet",
+    reviewer_effort: "xhigh",
+    reviewer_fast_mode: "0",
+  });
   fireEvent.click(await screen.findByRole("button", { name: "编辑" }));
   fireEvent.click(screen.getByLabelText("自动审查"));
   fireEvent.click(screen.getByLabelText("自动驾驶"));

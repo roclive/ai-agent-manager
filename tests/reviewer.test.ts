@@ -27,7 +27,12 @@ it("routes each persisted reviewer model without changing the coding executor", 
   f.repo.setSetting("reviewer", "claude-opus");
   let command = reviewerCommand(f.repo, f.root, resolve(f.root, "review"));
   expect(command.cmd).toBe(process.env.AAM_FAKE_CLAUDE || "claude");
-  expect(command.args.slice(-2)).toEqual(["--model", "opus"]);
+  expect(command.args.slice(-4)).toEqual([
+    "--model",
+    "opus",
+    "--effort",
+    "max",
+  ]);
   expect(f.repo.getSetting("coding_executor")).toBe("codex-luna");
   f.repo.setSetting("reviewer", "codex-sol");
   command = reviewerCommand(f.repo, f.root, resolve(f.root, "review"));
@@ -333,10 +338,21 @@ it("reads Codex planner results from last.md and creates tasks", async () => {
   ]);
 });
 it("parses verdicts from Claude's outer JSON and rejects tool transcripts and junk", () => {
-  const wrap = (result: string) => JSON.stringify({ type: "result", is_error: false, result });
-  expect(parseVerdict(wrap('{"verdict":"approve","notes":"ok"}'))).toMatchObject({ verdict: "approve" });
-  expect(parseVerdict(wrap('```json\n{"verdict":"reject","notes":"bad"}\n```'))).toMatchObject({ verdict: "reject" });
-  expect(parseVerdict(wrap('<invoke name="Read"><parameter name="file_path">a.ts</parameter></invoke>'))).toBeNull();
+  const wrap = (result: string) =>
+    JSON.stringify({ type: "result", is_error: false, result });
+  expect(
+    parseVerdict(wrap('{"verdict":"approve","notes":"ok"}')),
+  ).toMatchObject({ verdict: "approve" });
+  expect(
+    parseVerdict(wrap('```json\n{"verdict":"reject","notes":"bad"}\n```')),
+  ).toMatchObject({ verdict: "reject" });
+  expect(
+    parseVerdict(
+      wrap(
+        '<invoke name="Read"><parameter name="file_path">a.ts</parameter></invoke>',
+      ),
+    ),
+  ).toBeNull();
   expect(parseVerdict("not json {oops")).toBeNull();
   expect(parseVerdict(wrap('{"verdict":"maybe","notes":"x"}'))).toBeNull();
 });
@@ -353,14 +369,27 @@ it("tells Claude it has no tools and backs off then surfaces repeated unparseabl
     { mode: 0o755 },
   );
   process.env.AAM_FAKE_CLAUDE = fake;
-  const t = f.task({ status: "in_review", worktree_path: f.path, branch: "main" });
+  const t = f.task({
+    status: "in_review",
+    worktree_path: f.path,
+    branch: "main",
+  });
   const count = () =>
-    (f.repo.db.prepare("SELECT COUNT(*) n FROM autopilot_jobs WHERE task_id=?").get(t.id) as { n: number }).n;
+    (
+      f.repo.db
+        .prepare("SELECT COUNT(*) n FROM autopilot_jobs WHERE task_id=?")
+        .get(t.id) as { n: number }
+    ).n;
   const drain = async () => {
     for (let i = 0; i < 100; i++) {
       await new Promise((r) => setTimeout(r, 20));
       collectAutopilot(f.repo);
-      if (!f.repo.db.prepare("SELECT 1 FROM autopilot_jobs WHERE status='pending'").get()) break;
+      if (
+        !f.repo.db
+          .prepare("SELECT 1 FROM autopilot_jobs WHERE status='pending'")
+          .get()
+      )
+        break;
     }
   };
   startAutopilot(f.repo);
@@ -394,5 +423,7 @@ it("tells Claude it has no tools and backs off then surfaces repeated unparseabl
   expect(count()).toBe(4);
   expect(stalledReviews(f.repo)).toEqual([t.identifier]);
   expect(autopilotStatus(f.repo).stalled_reviews).toEqual([t.identifier]);
-  expect(f.repo.db.prepare("SELECT 1 FROM events WHERE kind='review_stalled'").get()).toBeTruthy();
+  expect(
+    f.repo.db.prepare("SELECT 1 FROM events WHERE kind='review_stalled'").get(),
+  ).toBeTruthy();
 });

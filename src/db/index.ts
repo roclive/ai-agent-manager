@@ -176,6 +176,10 @@ export class Repo {
       max_parallel: "2",
       worker_timeout_min: "45",
       worker_effort: "default",
+      worker_fast_mode: "1",
+      reviewer_model: "opus",
+      reviewer_effort: "max",
+      reviewer_fast_mode: "1",
       default_worker: "codex",
       coding_executor: "auto",
       executor_fallback: "",
@@ -215,8 +219,18 @@ export class Repo {
       claude_error: "",
     }))
       this.db.prepare("INSERT OR IGNORE INTO settings VALUES (?,?)").run(k, v);
+    // Explicit reviewer variants are authoritative when migrating older settings.
+    const reviewer = this.getSetting("reviewer");
+    if (reviewer?.startsWith("claude"))
+      this.db
+        .prepare("UPDATE settings SET value=? WHERE key='reviewer_model'")
+        .run(reviewer === "claude" ? "sonnet" : reviewer.slice(7));
     // Upgrade the previous built-in Sol default; preserve other explicit models.
-    this.db.prepare("UPDATE settings SET value=? WHERE key='primary_model' AND value='gpt-5.6-sol'").run(DEFAULT_SOL_MODEL);
+    this.db
+      .prepare(
+        "UPDATE settings SET value=? WHERE key='primary_model' AND value='gpt-5.6-sol'",
+      )
+      .run(DEFAULT_SOL_MODEL);
   }
   close() {
     if (this.db.open) this.db.close();
@@ -253,10 +267,20 @@ export class Repo {
     )
       throw new Error("Expected integer from 1 to 5");
     if (
-      key === "worker_effort" &&
-      !["default", "low", "medium", "high"].includes(value)
+      ["worker_effort", "reviewer_effort"].includes(key) &&
+      !["default", "low", "medium", "high", "xhigh", "max"].includes(value)
     )
       throw new Error("Invalid worker effort");
+    if (
+      ["worker_fast_mode", "reviewer_fast_mode"].includes(key) &&
+      !["0", "1"].includes(value)
+    )
+      throw new Error("Expected 0 or 1");
+    if (
+      key === "reviewer_model" &&
+      !["opus", "sonnet", "haiku"].includes(value)
+    )
+      throw new Error("Invalid Claude reviewer model");
     if (key === "coding_executor" && !EXECUTOR_VALUES.includes(value))
       throw new Error("Invalid coding executor");
     if (key === "executor_fallback" && !validFallback(value))
@@ -369,14 +393,33 @@ export class Repo {
         !Number.isFinite(Date.parse(value)))
     )
       throw new Error("Invalid setting value");
-    if (key === "reviewer" && this.getSetting(key) !== value) {
+    if (
+      [
+        "reviewer",
+        "reviewer_model",
+        "reviewer_effort",
+        "reviewer_fast_mode",
+      ].includes(key) &&
+      this.getSetting(key) !== value
+    ) {
       this.db
         .prepare(
-          "UPDATE settings SET value='' WHERE key LIKE 'reviewer_%' OR key LIKE 'claude_%'",
+          "UPDATE settings SET value='' WHERE key IN ('reviewer_ok','reviewer_checked_at','reviewer_error','claude_ok','claude_checked_at','claude_error')",
         )
         .run();
     }
     this.db.prepare("UPDATE settings SET value=? WHERE key=?").run(value, key);
+    if (key === "reviewer" && value.startsWith("claude"))
+      this.db
+        .prepare("UPDATE settings SET value=? WHERE key='reviewer_model'")
+        .run(value === "claude" ? "sonnet" : value.slice(7));
+    if (
+      key === "reviewer_model" &&
+      this.getSetting("reviewer")?.startsWith("claude")
+    )
+      this.db
+        .prepare("UPDATE settings SET value=? WHERE key='reviewer'")
+        .run(value === "sonnet" ? "claude" : `claude-${value}`);
   }
   projects() {
     return this.db

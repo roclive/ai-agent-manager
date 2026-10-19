@@ -1,3 +1,4 @@
+import { reviewerClaudeSettings } from "./claude-settings.js";
 import { rateLimited } from "./finalize.js";
 import {
   llmArgs,
@@ -156,6 +157,16 @@ export const claudeArgs: string[] = [
   "You have no tools. Never emit tool calls or <invoke> blocks. Answer in one turn using only the task, diff and test output in the prompt, and reply with the final JSON object only.",
 ];
 export const healthSetting = reviewerHealthSetting;
+export function claudeReviewerArgs(repo: Repo): string[] {
+  const config = reviewerClaudeSettings(repo);
+  const args = [...claudeArgs];
+  args[args.indexOf("--settings") + 1] = JSON.stringify({
+    disableAllHooks: true,
+    fastMode: config.fast,
+  });
+  return [...args, "--model", config.model, "--effort", config.effort];
+}
+
 export function reviewerCommand(
   repo: Repo,
   cwd: string,
@@ -164,9 +175,7 @@ export function reviewerCommand(
 ) {
   const selected = normalizeReviewer(repo.getSetting("reviewer"));
   const selectedMeta = reviewerMeta(selected);
-  const gw = provider
-    ? provider === "gw"
-    : selected === "gw";
+  const gw = provider ? provider === "gw" : selected === "gw";
   if (gw)
     return {
       cmd: process.env.AAM_FAKE_GW || process.execPath,
@@ -200,7 +209,9 @@ export function reviewerCommand(
             ? []
             : primaryCodexArgs(
                 repo,
-                selectedMeta?.provider === "codex" ? selectedMeta.model : undefined,
+                selectedMeta?.provider === "codex"
+                  ? selectedMeta.model
+                  : undefined,
               )),
           "-s",
           repo.getSetting("codex_reviewer_sandbox") || "read-only",
@@ -216,12 +227,7 @@ export function reviewerCommand(
           resolve(dir, "last.md"),
           "-",
         ]
-      : [
-          ...claudeArgs,
-          ...(selectedMeta?.provider === "claude" && selectedMeta.model
-            ? ["--model", selectedMeta.model]
-            : []),
-        ],
+      : claudeReviewerArgs(repo),
     cwd,
     env: cleanEnv(),
     codex,
@@ -333,7 +339,9 @@ function reserve(repo: Repo, kind: string, p: Project, taskId: number | null) {
             ? "gw"
             : llmBackend(repo) === "ollama"
               ? "ollama"
-              : normalizeReviewer(repo.getSetting("reviewer")).startsWith("claude")
+              : normalizeReviewer(repo.getSetting("reviewer")).startsWith(
+                    "claude",
+                  )
                 ? "claude"
                 : "codex";
         selected = {

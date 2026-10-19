@@ -128,7 +128,7 @@ it("builds pi, hermes and claude adapter commands", () => {
   expect(h.args.join(" ")).toContain("hermes chat --quiet -q");
   expect(h.args).toContain("/r/prompt.md");
   const c = claude.command(ctx);
-  expect(c.args.slice(1)).toEqual(["/w", "/r/prompt.md", "sonnet", "default"]);
+  expect(c.args.slice(1)).toEqual(["/w", "/r/prompt.md", "opus", "max", "true", "45"]);
   expect(c.args[0]).toMatch(/scripts\/claude-worker\.sh$/);
   expect(command("pi", ctx).cmd).toBe("pi");
   expect(() => command("nope", ctx)).toThrow();
@@ -142,15 +142,15 @@ it("passes worker effort as separate CLI arguments and leaves defaults unchanged
   expect(codex.command({ ...ctx, effort: "high" }).args).toContain(
     'model_reasoning_effort="high"',
   );
-  expect(claude.command({ ...ctx, model: "opus", effort: "medium" }).args.slice(-4))
-    .toEqual(["/w", "/r/prompt.md", "opus", "medium"]);
+  expect(claude.command({ ...ctx, model: "opus", effort: "medium" }).args.slice(-6))
+    .toEqual(["/w", "/r/prompt.md", "opus", "medium", "true", "45"]);
 });
 
 it("persists supported effort and only dispatches it to Claude or Codex", () => {
   f = fixture();
   f.repo.setSetting("worker_effort", "high");
   expect(executorsView(f.repo).worker_effort).toBe("high");
-  expect(() => f.repo.setSetting("worker_effort", "max")).toThrow(/Invalid worker effort/);
+  expect(() => f.repo.setSetting("worker_effort", "invalid")).toThrow(/Invalid worker effort/);
   expect(executorsView(f.repo).executors.find((e) => e.id === "claude")?.effort_supported)
     .toBe(true);
   expect(executorsView(f.repo).executors.find((e) => e.id === "opencode")?.effort_supported)
@@ -188,7 +188,7 @@ it("model variants build the right command, identity and accounting", () => {
   expect(luna.args).toContain("--model");
   expect(luna.args[luna.args.indexOf("--model") + 1]).toBe("gpt-6-luna");
   const opus = command("claude", { ...ctx, model: "opus" });
-  expect(opus.args.slice(-4)).toEqual(["/w", "/p", "opus", "default"]);
+  expect(opus.args.slice(-6)).toEqual(["/w", "/p", "opus", "max", "true", "45"]);
 });
 
 it("legacy codex ids alias to Codex (Sol) and the API lists distinct variants", () => {

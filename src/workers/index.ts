@@ -1,3 +1,5 @@
+import { CLAUDE_WORKER_SCRIPT, isClaudeWorkerScript } from "./claude-script.js";
+import { claudeSettings } from "../core/claude-settings.js";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { openSync, closeSync, writeFileSync, readFileSync } from "node:fs";
@@ -13,7 +15,9 @@ export interface Context {
   provider?: string;
   // Only set for the low-quota fallback; other opencode runs keep the pinned default model.
   model?: string;
-  effort?: "default" | "low" | "medium" | "high";
+  effort?: "default" | "low" | "medium" | "high" | "xhigh" | "max";
+  fast?: boolean;
+  timeoutMin?: number;
 }
 export interface Command {
   cmd: string;
@@ -66,17 +70,22 @@ export const opencode: Adapter = {
 };
 export const claude: Adapter = {
   name: "claude",
-  // The script reads the prompt itself; model and effort are separate argv entries.
-  command: (c) => ({
-    cmd: "sh",
-    args: [
-      fileURLToPath(new URL("../../scripts/claude-worker.sh", import.meta.url)),
-      c.worktree,
-      c.promptFile,
-      c.model || "sonnet",
-      c.effort || "default",
-    ],
-  }),
+  // The script reads the prompt itself; configuration travels as separate argv entries.
+  command: (c) => {
+    const config = claudeSettings(c);
+    return {
+      cmd: "sh",
+      args: [
+        CLAUDE_WORKER_SCRIPT,
+        c.worktree,
+        c.promptFile,
+        config.model,
+        config.effort,
+        String(config.fast),
+        String(c.timeoutMin ?? 45),
+      ],
+    };
+  },
 };
 // pi (https://github.com/badlogic/pi-mono): -p is non-interactive; @file attaches the prompt file.
 export const pi: Adapter = {
@@ -100,6 +109,8 @@ export const hermes: Adapter = {
   }),
 };
 export function command(worker: string, ctx: Context): Command {
+  if (process.env.AAM_FAKE_WORKER && isClaudeWorkerScript(process.env.AAM_FAKE_WORKER))
+    return claude.command({ ...ctx, model: worker === "claude" ? ctx.model : undefined });
   if (process.env.AAM_FAKE_WORKER)
     return {
       cmd: process.env.AAM_FAKE_WORKER,

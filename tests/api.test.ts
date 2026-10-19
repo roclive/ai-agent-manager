@@ -58,7 +58,9 @@ it("serves task, routine, event and settings operations with validation", async 
       })
     ).status,
   ).toBe(201);
-  expect(f.repo.routines().find((routine) => routine.name === "usage")).toMatchObject({action:"collect_usage"});
+  expect(
+    f.repo.routines().find((routine) => routine.name === "usage"),
+  ).toMatchObject({ action: "collect_usage" });
   const routines = await (await req("routines")).json();
   expect(
     (await req("routines", "PATCH", { id: routines[0].id, enabled: false }))
@@ -156,19 +158,32 @@ it("records events for successful HTTP edits and skips rejected mutations", asyn
 
 it("waits for collect-usage run-now persistence before responding", async () => {
   f = fixture();
-  f.repo.addRoutine("usage-now", "0 * * * *", "collect_usage", {provider:"fake"});
-  const routine = f.repo.routines()[0];
-  const response = await createApp(f.repo).request(`/api/routines/${routine.id}/run`, {
-    method:"POST",
-    headers:{"X-AAM":"1"},
+  f.repo.addRoutine("usage-now", "0 * * * *", "collect_usage", {
+    provider: "fake",
   });
+  const routine = f.repo.routines()[0];
+  const response = await createApp(f.repo).request(
+    `/api/routines/${routine.id}/run`,
+    {
+      method: "POST",
+      headers: { "X-AAM": "1" },
+    },
+  );
   expect(response.status).toBe(200);
-  expect(await response.json()).toMatchObject({id:routine.id,last_run_at:expect.any(String)});
+  expect(await response.json()).toMatchObject({
+    id: routine.id,
+    last_run_at: expect.any(String),
+  });
   expect(f.repo.usageSnapshots()).toHaveLength(2);
-  expect(f.repo.events()).toEqual(expect.arrayContaining([
-    expect.objectContaining({kind:"usage_collected"}),
-    expect.objectContaining({kind:"routine",message:expect.stringContaining("collected 2 snapshots")}),
-  ]));
+  expect(f.repo.events()).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ kind: "usage_collected" }),
+      expect.objectContaining({
+        kind: "routine",
+        message: expect.stringContaining("collected 2 snapshots"),
+      }),
+    ]),
+  );
 });
 it("paginates and filters activity without losing older matching events", async () => {
   f = fixture();
@@ -254,15 +269,26 @@ it("exposes executor settings, validates them and reports the effective executor
   expect(view.coding_executor).toBe("claude");
   expect(view.worker_effort).toBe("medium");
   expect(view.executors.map((e: { id: string }) => e.id)).toContain("hermes");
-  expect((await req("executors", "PUT", { coding_executor: "x" })).status).toBe(400);
-  expect((await req("executors", "PUT", { worker_effort: "max" })).status).toBe(400);
+  expect((await req("executors", "PUT", { coding_executor: "x" })).status).toBe(
+    400,
+  );
+  expect(
+    (await req("executors", "PUT", { worker_effort: "invalid" })).status,
+  ).toBe(400);
   expect((await (await req("executors")).json()).worker_effort).toBe("medium");
-  expect((await req("executors", "PUT", { reviewer: "codex" })).status).toBe(400);
+  expect((await req("executors", "PUT", { reviewer: "codex" })).status).toBe(
+    400,
+  );
   await req("projects/T", "PATCH", { coding_executor: "pi" });
-  expect((await (await req(`tasks/${t.identifier}`)).json()).effective_executor).toEqual({ value: "pi", source: "project" });
+  expect(
+    (await (await req(`tasks/${t.identifier}`)).json()).effective_executor,
+  ).toEqual({ value: "pi", source: "project" });
   await req(`tasks/${t.identifier}`, "PATCH", { executor: "codex" });
   const list = await (await req("tasks")).json();
-  expect(list[0].effective_executor).toEqual({ value: "codex-sol", source: "task" });
+  expect(list[0].effective_executor).toEqual({
+    value: "codex-sol",
+    source: "task",
+  });
 });
 
 it("round-trips every model variant through global, project and task APIs", async () => {
@@ -279,15 +305,22 @@ it("round-trips every model variant through global, project and task APIs", asyn
     const global = await req("executors", "PUT", { coding_executor: executor });
     expect(global.status).toBe(200);
     expect((await global.json()).coding_executor).toBe(executor);
-    expect((await (await req("executors")).json()).coding_executor).toBe(executor);
+    expect((await (await req("executors")).json()).coding_executor).toBe(
+      executor,
+    );
 
     await req("projects/T", "PATCH", { coding_executor: executor });
-    expect((await (await req("projects")).json())[0].coding_executor).toBe(executor);
+    expect((await (await req("projects")).json())[0].coding_executor).toBe(
+      executor,
+    );
 
     await req(`tasks/${task.identifier}`, "PATCH", { executor });
     const persisted = await (await req(`tasks/${task.identifier}`)).json();
     expect(persisted.executor).toBe(executor);
-    expect(persisted.effective_executor).toEqual({ value: executor, source: "task" });
+    expect(persisted.effective_executor).toEqual({
+      value: executor,
+      source: "task",
+    });
   }
 });
 
@@ -305,11 +338,22 @@ it("persists and validates reviewer variants independently from the coding execu
   expect(changed.status).toBe(200);
   expect(await changed.json()).toMatchObject({ reviewer: "claude-opus" });
   expect((await (await req("reviewers")).json()).reviewer).toBe("claude-opus");
-  expect((await (await req("executors")).json()).coding_executor).toBe("codex-luna");
+  expect((await (await req("executors")).json()).coding_executor).toBe(
+    "codex-luna",
+  );
   await req("executors", "PUT", { coding_executor: "claude" });
   expect((await (await req("reviewers")).json()).reviewer).toBe("claude-opus");
-  expect((await req("reviewers", "PUT", { reviewer: "opencode" })).status).toBe(400);
-  expect((await req("reviewers", "PUT", { reviewer: "codex-sol", review_mode: "manual" })).status).toBe(400);
+  expect((await req("reviewers", "PUT", { reviewer: "opencode" })).status).toBe(
+    400,
+  );
+  expect(
+    (
+      await req("reviewers", "PUT", {
+        reviewer: "codex-sol",
+        review_mode: "manual",
+      })
+    ).status,
+  ).toBe(400);
 });
 
 it("reloads legacy Claude reviewer health through the reviewers API", async () => {
@@ -328,4 +372,24 @@ it("reloads legacy Claude reviewer health through the reviewers API", async () =
     reviewer_checked_at: "2026-10-19T12:00:00.000Z",
     reviewer_error: "legacy health failure",
   });
+});
+
+it("resolves conflicting model settings by explicit reviewer identity regardless of payload order", async () => {
+  f = fixture();
+  const app = createApp(f.repo);
+  for (const body of [
+    { reviewer: "claude", reviewer_model: "opus" },
+    { reviewer_model: "opus", reviewer: "claude" },
+  ]) {
+    const response = await app.request("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "X-AAM": "1" },
+      body: JSON.stringify(body),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      reviewer: "claude",
+      reviewer_model: "sonnet",
+    });
+  }
 });

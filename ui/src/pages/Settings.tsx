@@ -26,6 +26,8 @@ export function Settings() {
   });
   const projects = useProjects(),
     action = useAction();
+  const [reviewerChoice, setReviewerChoice] = useState<string | null>(null);
+  const [reviewerModel, setReviewerModel] = useState<string | null>(null);
   const [promoting, setPromoting] = useState<Project | null>(null);
   const [editing, setEditing] = useState<Project | null>(null);
   return (
@@ -86,7 +88,8 @@ export function Settings() {
               </NativeSelect>
             </label>
             <label>
-              编码执行器（全局默认，自动审查驳回后重派也使用它；具体模型由 AAM 保存的此选项决定，不读取 Codex 桌面应用的模型选择）
+              编码执行器（全局默认，自动审查驳回后重派也使用它；具体模型由 AAM
+              保存的此选项决定，不读取 Codex 桌面应用的模型选择）
               <ExecutorSelect
                 name="coding_executor"
                 label="全局编码执行器"
@@ -109,6 +112,16 @@ export function Settings() {
               />
             </label>
             <label>
+              Claude 工作执行器快速模式
+              <NativeSelect
+                name="worker_fast_mode"
+                defaultValue={q.data.worker_fast_mode || "1"}
+              >
+                <option value="1">开启</option>
+                <option value="0">关闭</option>
+              </NativeSelect>
+            </label>
+            <label>
               审查模式
               <NativeSelect
                 name="review_mode"
@@ -120,7 +133,62 @@ export function Settings() {
             </label>
             <label>
               审查器（独立于编码执行器）
-              <ReviewerSelect value={q.data.reviewer || "codex-sol"} />
+              <ReviewerSelect
+                value={reviewerChoice ?? q.data.reviewer ?? "codex-sol"}
+                onChange={(value) => {
+                  setReviewerChoice(value);
+                  if (value.startsWith("claude"))
+                    setReviewerModel(
+                      value === "claude" ? "sonnet" : value.slice(7),
+                    );
+                }}
+              />
+            </label>
+            <label>
+              Claude 审查模型
+              <NativeSelect
+                name="reviewer_model"
+                value={reviewerModel ?? q.data.reviewer_model ?? "opus"}
+                onChange={(event) => {
+                  const value = event.currentTarget.value;
+                  setReviewerModel(value);
+                  if (
+                    (reviewerChoice ?? q.data!.reviewer ?? "").startsWith(
+                      "claude",
+                    )
+                  )
+                    setReviewerChoice(
+                      value === "sonnet" ? "claude" : `claude-${value}`,
+                    );
+                }}
+              >
+                <option value="opus">Opus</option>
+                <option value="sonnet">Sonnet</option>
+                <option value="haiku">Haiku</option>
+              </NativeSelect>
+            </label>
+            <label>
+              Claude 审查思考强度
+              <NativeSelect
+                name="reviewer_effort"
+                defaultValue={q.data.reviewer_effort || "max"}
+              >
+                {["low", "medium", "high", "xhigh", "max"].map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </NativeSelect>
+            </label>
+            <label>
+              Claude 审查快速模式
+              <NativeSelect
+                name="reviewer_fast_mode"
+                defaultValue={q.data.reviewer_fast_mode || "1"}
+              >
+                <option value="1">开启</option>
+                <option value="0">关闭</option>
+              </NativeSelect>
             </label>
             {[
               ["auto_review_concurrency", "自动审查并发数"],

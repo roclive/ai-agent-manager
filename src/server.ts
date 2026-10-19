@@ -321,7 +321,11 @@ export function createApp(
   app.put("/api/settings", async (c) => {
     const p = await c.req.json<Record<string, unknown>>();
     repo.db.transaction(() => {
-      for (const [k, v] of Object.entries(p)) repo.setSetting(k, String(v));
+      // When both controls are supplied, the explicit reviewer identity wins.
+      for (const [k, v] of Object.entries(p))
+        if (k !== "reviewer") repo.setSetting(k, String(v));
+      if (Object.hasOwn(p, "reviewer"))
+        repo.setSetting("reviewer", String(p.reviewer));
     })();
     repo.event("settings", `Updated via UI: ${Object.keys(p).join(", ")}`);
     return c.json(repo.settings());
@@ -330,7 +334,14 @@ export function createApp(
   app.put("/api/executors", async (c) => {
     const p = await c.req.json<Record<string, unknown>>();
     const keys = Object.keys(p);
-    if (keys.some((k) => !["coding_executor", "executor_fallback", "worker_effort"].includes(k)))
+    if (
+      keys.some(
+        (k) =>
+          !["coding_executor", "executor_fallback", "worker_effort"].includes(
+            k,
+          ),
+      )
+    )
       throw new Error("Unsupported executor field");
     repo.db.transaction(() => {
       for (const k of keys)

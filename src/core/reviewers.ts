@@ -1,13 +1,34 @@
+import { reviewerClaudeSettings } from "./claude-settings.js";
 import { DEFAULT_SOL_MODEL } from "./model-defaults.js";
 import type { Repo } from "../db/index.js";
 import { executorInstalled } from "./executors.js";
-import { normalizeReviewer, REVIEWERS, type Reviewer } from "./reviewer-names.js";
+import {
+  normalizeReviewer,
+  REVIEWERS,
+  type Reviewer,
+} from "./reviewer-names.js";
 
-const META: Record<Reviewer, { label: string; provider: string; model?: string }> = {
-  "codex-sol": { label: "Codex (Sol)", provider: "codex", model: DEFAULT_SOL_MODEL },
-  "codex-luna": { label: "Codex (Luna)", provider: "codex", model: "gpt-6-luna" },
+const META: Record<
+  Reviewer,
+  { label: string; provider: string; model?: string }
+> = {
+  "codex-sol": {
+    label: "Codex (Sol)",
+    provider: "codex",
+    model: DEFAULT_SOL_MODEL,
+  },
+  "codex-luna": {
+    label: "Codex (Luna)",
+    provider: "codex",
+    model: "gpt-6-luna",
+  },
   claude: { label: "Claude (Sonnet)", provider: "claude", model: "sonnet" },
   "claude-opus": { label: "Claude (Opus)", provider: "claude", model: "opus" },
+  "claude-haiku": {
+    label: "Claude (Haiku)",
+    provider: "claude",
+    model: "haiku",
+  },
   gw: { label: "Gateway reviewer", provider: "gw" },
 };
 
@@ -18,8 +39,10 @@ export function reviewerMeta(value: string | undefined) {
 export const reviewerHealthSetting = (repo: Repo, key: string) =>
   repo.getSetting(`reviewer_${key}`) ||
   (normalizeReviewer(repo.getSetting("reviewer")).startsWith("claude") &&
-  !(repo.getSetting("ollama_fallback_enabled") === "1" &&
-    repo.getSetting("llm_backend") === "ollama")
+  !(
+    repo.getSetting("ollama_fallback_enabled") === "1" &&
+    repo.getSetting("llm_backend") === "ollama"
+  )
     ? repo.getSetting(`claude_${key}`)
     : "") ||
   "";
@@ -34,7 +57,22 @@ export function reviewersView(repo: Repo) {
     reviewers: REVIEWERS.map((id) => ({
       id,
       ...META[id],
-      supported: id === "gw" ? Boolean(repo.getSetting("gw_model")) : executorInstalled(id),
+      ...(id === normalizeReviewer(repo.getSetting("reviewer")) &&
+      META[id].provider === "claude" &&
+      process.env.AAM_CLAUDE_MODEL
+        ? {
+            model: reviewerClaudeSettings(repo).model,
+            label: `Claude (${reviewerClaudeSettings(repo).model})`,
+          }
+        : {}),
+      supported:
+        id === "gw"
+          ? Boolean(repo.getSetting("gw_model"))
+          : executorInstalled(
+              id.startsWith("claude")
+                ? "claude"
+                : (id as Parameters<typeof executorInstalled>[0]),
+            ),
     })),
   };
 }
