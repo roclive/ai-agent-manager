@@ -20,10 +20,8 @@ import { NewTaskDialog } from "./components/NewTaskDialog";
 import { Button } from "./components/ui/button";
 import { Skeleton } from "./components/ui/skeleton";
 import { Input } from "./components/ui/input";
-import {
-  ExecutorFilter,
-  GlobalExecutorSwitch,
-} from "./components/ExecutorSelect";
+import { ExecutorFilter } from "./components/ExecutorSelect";
+import { BoardExecutorReviewer } from "./components/BoardExecutorReviewer";
 import { NativeSelect } from "./components/ui/select";
 export function BoardPage({ project }: { project: string }) {
   const live = useEventStream();
@@ -102,8 +100,8 @@ export function BoardPage({ project }: { project: string }) {
           <h1>看板</h1>
           <p>跟进任务，从待办到完成。</p>
         </div>
-        <GlobalExecutorSwitch
-          onChange={(value) =>
+        <BoardExecutorReviewer
+          onExecutorChange={(value) =>
             void api
               .setExecutors({ coding_executor: value })
               .then(() => client.invalidateQueries({ queryKey: ["executors"] }))
@@ -115,6 +113,7 @@ export function BoardPage({ project }: { project: string }) {
               .then(() => client.invalidateQueries({ queryKey: ["executors"] }))
               .catch((e: Error) => setToast(`切换思考强度失败：${e.message}`))
           }
+          onError={setToast}
         />
         <Button onClick={() => setCreating("backlog")}>
           <Plus />

@@ -33,6 +33,11 @@ export const api = {
   requestReview: () => request<BoardActivity>("/board/review", { method: "POST" }),
   executors: () => request<ExecutorsView>("/executors"),
   reviewers: () => request<ReviewersView>("/reviewers"),
+  setReviewer: (reviewer: string) =>
+    request<ReviewersView>("/reviewers", {
+      method: "PUT",
+      body: JSON.stringify({ reviewer }),
+    }),
   setExecutors: (body: Record<string, unknown>) =>
     request<ExecutorsView>("/executors", {
       method: "PUT",
