@@ -13,6 +13,10 @@ import { quotaFallback, readBackend } from "./llm.js";
 import { freezeProvider, releaseProvider } from "./providers.js";
 import { resolveExecutor } from "./executors.js";
 import { providerPolicyConfigured } from "./provider-policy.js";
+import {
+  localFallbackNeedsFinalProfile,
+  recordLocalModelSuccess,
+} from "./local-model.js";
 export function read(path: string) {
   try {
     return readFileSync(path, "utf8");
@@ -253,8 +257,18 @@ export function finalize(repo: Repo, run: Run, terminal?: "timeout" | "lost") {
   const lost = terminal === "lost";
   const lostCount = t.lost_count + (lost ? 1 : 0);
   const attempts = t.attempts + (success || lost ? 0 : 1);
+  const failureStatus = terminal || "failed";
+  const needsFinalLocalProfile = localFallbackNeedsFinalProfile(
+    repo,
+    t.id,
+    run.provider,
+    failureStatus,
+    summary,
+  );
   const blocked =
-    !success && (lost ? lostCount >= 3 : attempts >= t.max_attempts);
+    !success &&
+    !needsFinalLocalProfile &&
+    (lost ? lostCount >= 3 : attempts >= t.max_attempts);
   repo.db.transaction(() => {
     releaseProvider(repo, run.id);
     repo.db
@@ -287,5 +301,7 @@ export function finalize(repo: Repo, run: Run, terminal?: "timeout" | "lost") {
         : `Run ${run.id}: ${terminal || (success ? "succeeded" : "failed")}`,
       t.id,
     );
+    if (success && run.provider === "opencode-fallback")
+      recordLocalModelSuccess(repo, t.id);
   })();
 }

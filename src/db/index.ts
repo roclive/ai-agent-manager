@@ -217,6 +217,10 @@ export class Repo {
       fallback_active: "0",
       opencode_fallback_model: "ollama/gemma4:e4b-mlx",
       local_model_min_free_gb: "0",
+      local_llm_server: "ollama",
+      keep_warm: "0",
+      local_llm_active_profile: "",
+      local_llm_idle_timeout_min: "10",
       reviewer_ok: "",
       reviewer_checked_at: "",
       reviewer_error: "",
@@ -312,6 +316,15 @@ export class Repo {
       !(Number.isFinite(Number(value)) && Number(value) >= 0)
     )
       throw new Error("Expected nonnegative number");
+    if (key === "local_llm_server" && !["ollama", "omlx"].includes(value))
+      throw new Error("Expected ollama or omlx");
+    if (key === "keep_warm" && !["0", "1"].includes(value))
+      throw new Error("Expected 0 or 1");
+    if (
+      key === "local_llm_idle_timeout_min" &&
+      (!Number.isInteger(Number(value)) || Number(value) < 1)
+    )
+      throw new Error("Expected positive integer");
     if (key === "llm_backend" && !["primary", "ollama"].includes(value))
       throw new Error("Invalid LLM backend");
     if (key === "gw_base_url") {

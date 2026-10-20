@@ -85,6 +85,11 @@ export async function fireScheduledRoutine(repo: Repo, id: number) {
   await fireRoutine(repo, current);
 }
 
+export function cleanupLocalModelOnDaemonStart(repo: Repo) {
+  if (repo.getSetting("keep_warm") !== "1")
+    stopLocalModelIfIdle(repo);
+}
+
 export function daemon(repo: Repo, interval = 60) {
   if (!Number.isFinite(interval) || interval <= 0)
     throw new Error("Interval must be positive");
@@ -133,7 +138,7 @@ export function daemon(repo: Repo, interval = 60) {
       }
     }
     // A previous daemon may have died mid-run and left the model resident.
-    if (repo.getSetting("fallback_worker") === "opencode") stopLocalModelIfIdle(repo);
+    cleanupLocalModelOnDaemonStart(repo);
     const heartbeat = () => {
       try {
         awake.check();

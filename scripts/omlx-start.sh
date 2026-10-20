@@ -9,6 +9,8 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 STATE=${OMLX_STATE_DIR:-$HOME/.omlx/aam}
 PIDFILE=$STATE/omlx.pid
 LOG=$STATE/omlx.log
+ACTIVE_RUN_FILE=${OMLX_ACTIVE_RUN_FILE:-$STATE/local-run.active}
+IDLE_SINCE_FILE=${OMLX_IDLE_SINCE_FILE:-$STATE/idle-since}
 DRY=0
 while [ $# -gt 0 ]; do
   case $1 in
@@ -22,11 +24,12 @@ OMLX_BIN=${OMLX_BIN:-omlx}
 
 [ "$OMLX_HOST" = 127.0.0.1 ] || { echo "refusing: host must be 127.0.0.1" >&2; exit 1; }
 
-# Total RAM (GB) and hard memory ceiling.
+# Total RAM (GB) is informational. Keep the configured reserve visible in the
+# server command, but do not refuse a forced launch based on machine memory.
 MEM_BYTES=${OMLX_MEM_BYTES:-$(/usr/sbin/sysctl -n hw.memsize)}
 TOTAL_GB=$((MEM_BYTES / 1073741824))
 LIMIT_GB=$((TOTAL_GB - OMLX_SYSTEM_RESERVE_GB))
-[ "$LIMIT_GB" -ge 2 ] || { echo "refusing: only ${TOTAL_GB}GB RAM, cannot keep ${OMLX_SYSTEM_RESERVE_GB}GB for system" >&2; exit 1; }
+[ "$LIMIT_GB" -ge 0 ] || LIMIT_GB=0
 
 # Locate existing weights (no download).
 WEIGHTS=
@@ -66,16 +69,21 @@ if [ "$FREE_GB" -lt "$OMLX_SYSTEM_RESERVE_GB" ] && [ "${OMLX_FORCE:-0}" != 1 ]; 
   exit 1
 fi
 
+# Own process group (PGID = PID) so omlx-stop.sh can clean up the whole server tree.
+set -m
 "$@" >>"$LOG" 2>&1 &
 PID=$!
 echo "$PID" >"$PIDFILE"
 
-# Idle watchdog: stop the server (unloading the model) when the log is quiet for OMLX_IDLE_MINUTES.
+# Idle watchdog: task completion writes epoch milliseconds to IDLE_SINCE_FILE. This avoids
+# counting a long quiet request as idle merely because the server log has not changed.
 (
   while kill -0 "$PID" 2>/dev/null; do
     sleep 60
-    NOW=$(date +%s); M=$(stat -f %m "$LOG" 2>/dev/null || echo "$NOW")
-    if [ $((NOW - M)) -ge $((OMLX_IDLE_MINUTES * 60)) ]; then
+    NOW_MS=$(($(date +%s) * 1000))
+    IDLE_MS=$(cat "$IDLE_SINCE_FILE" 2>/dev/null || echo "$NOW_MS")
+    case $IDLE_MS in *[!0-9]*|'') IDLE_MS=$NOW_MS ;; esac
+    if [ ! -f "$ACTIVE_RUN_FILE" ] && [ -f "$IDLE_SINCE_FILE" ] && [ $((NOW_MS - IDLE_MS)) -ge $((OMLX_IDLE_MINUTES * 60000)) ]; then
       OMLX_STATE_DIR=$STATE "$ROOT/scripts/omlx-stop.sh" >/dev/null 2>&1
       break
     fi

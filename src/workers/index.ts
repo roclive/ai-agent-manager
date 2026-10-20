@@ -18,6 +18,8 @@ export interface Context {
   effort?: "default" | "low" | "medium" | "high" | "xhigh" | "max";
   fast?: boolean;
   timeoutMin?: number;
+  localBaseUrl?: string;
+  localContext?: number;
 }
 export interface Command {
   cmd: string;
@@ -65,6 +67,7 @@ export const opencode: Adapter = {
       c.promptFile,
       ...(c.provider || c.model ? [c.provider || ""] : []),
       ...(c.model ? [c.model] : []),
+      ...(c.localBaseUrl ? [c.localBaseUrl, String(c.localContext || 32768)] : []),
     ],
   }),
 };

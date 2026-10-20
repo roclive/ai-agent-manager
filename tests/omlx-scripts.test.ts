@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { expect, it } from "vitest";
@@ -34,6 +34,53 @@ it("real start refuses when weights are missing", () => {
   expect(r.stderr).toContain("never downloads");
 });
 
+it("forced start has no total-RAM refusal when the configured reserve exceeds RAM", () => {
+  const e = env(true) as NodeJS.ProcessEnv;
+  e.OMLX_MEM_BYTES = String(4 * 1073741824);
+  e.OMLX_SYSTEM_RESERVE_GB = "6";
+  e.OMLX_FORCE = "1";
+  // A missing executable fails only after the memory guard; distinguish that
+  // expected launch failure from the removed total-RAM refusal.
+  e.OMLX_BIN = "/nonexistent/omlx";
+  const { mkdirSync, existsSync } = require("node:fs");
+  mkdirSync(e.OMLX_STATE_DIR!, { recursive: true });
+  const r = spawnSync(start, [], { env: e, encoding: "utf8" });
+  expect(r.status).not.toBe(1);
+  expect(r.stderr).not.toContain("cannot keep");
+  expect(existsSync(join(e.OMLX_STATE_DIR!, "omlx.pid"))).toBe(true);
+});
+
+it("idle watchdog requires absence of an active local run", () => {
+  const source = readFileSync(start, "utf8");
+  expect(source).toContain('ACTIVE_RUN_FILE=${OMLX_ACTIVE_RUN_FILE:-$STATE/local-run.active}');
+  expect(source).toMatch(/\[ ! -f "\$ACTIVE_RUN_FILE" \].*OMLX_IDLE_MINUTES/);
+});
+
 it("stop is idempotent without pid file", () => {
   expect(execFileSync(stop, [], { env: env(true), encoding: "utf8" })).toContain("not running");
+});
+
+it("stop never signals a stale pid that belongs to another process", async () => {
+  const { spawn } = await import("node:child_process");
+  const { existsSync, readFileSync } = await import("node:fs");
+  const e = env(true) as NodeJS.ProcessEnv;
+  const victim = spawn("sleep", ["30"], { stdio: "ignore" });
+  try {
+    mkdirSync(e.OMLX_STATE_DIR!, { recursive: true });
+    writeFileSync(join(e.OMLX_STATE_DIR!, "omlx.pid"), String(victim.pid));
+    const out = execFileSync(stop, [], { env: e, encoding: "utf8" });
+    expect(out).toContain("not signaled");
+    expect(() => process.kill(victim.pid!, 0)).not.toThrow();
+    expect(existsSync(join(e.OMLX_STATE_DIR!, "omlx.pid"))).toBe(false);
+    void readFileSync;
+  } finally {
+    victim.kill("SIGKILL");
+  }
+});
+
+it("stop removes a non-numeric pid file without signaling", () => {
+  const e = env(true) as NodeJS.ProcessEnv;
+  mkdirSync(e.OMLX_STATE_DIR!, { recursive: true });
+  writeFileSync(join(e.OMLX_STATE_DIR!, "omlx.pid"), "-1\n");
+  expect(execFileSync(stop, [], { env: e, encoding: "utf8" })).toContain("stale");
 });

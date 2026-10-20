@@ -12,9 +12,15 @@ import { providerPolicyConfigured } from "./provider-policy.js";
 import {
   FALLBACK_PROVIDER,
   fallbackModel,
+  localLlmModel,
+  fallbackSelection,
   localModelWait,
   recordLocalModelMemory,
   localRunActive,
+  startLocalLlm,
+  stopLocalModelAfterTask,
+  localLlmBaseUrl,
+  markLocalModelActive,
 } from "./local-model.js";
 
 import { providerLlmArgs, recordBackend } from "./llm.js";
@@ -217,6 +223,8 @@ export function dispatch(
       promptPrefixHash(repo.project(t.project_id)),
       t.id,
     );
+    if (fallback) markLocalModelActive(repo, t.id);
+    const localProfile = fallback ? startLocalLlm(repo, t.id) : 0;
     const pid = spawnWorker(worker, {
       worktree,
       promptFile,
@@ -232,7 +240,11 @@ export function dispatch(
       fast: repo.getSetting("worker_fast_mode") !== "0",
       timeoutMin: Number(repo.getSetting("worker_timeout_min") || 45),
       ...(selected.id === FALLBACK_PROVIDER
-        ? { model: fallbackModel(repo) }
+        ? {
+            model: selected.model || localLlmModel(repo),
+            localBaseUrl: localLlmBaseUrl(repo),
+            localContext: localProfile >= 2 ? 8192 : 32768,
+          }
         : selected.model
           ? { model: selected.model }
           : {}),
@@ -261,6 +273,8 @@ export function dispatch(
       )
       .run(new Date().toISOString(), String(e), idRun);
     releaseProvider(repo, idRun);
+    // omlx may already be up (spawn failed afterwards): honor keep_warm on this task-end path.
+    if (selected.id === FALLBACK_PROVIDER) stopLocalModelAfterTask(repo);
     throw e;
   }
 }
