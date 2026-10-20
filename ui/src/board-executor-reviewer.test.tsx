@@ -42,10 +42,12 @@ it("summarizes current choices and disables unsupported reviewers", async () => 
 });
 
 it("changing reviewer sends only reviewer PUT and leaves executor unchanged", async () => {
+  let reviewerGets = 0;
+  let savedReviewer = reviewers.reviewer;
   const fetcher = vi.fn(async (url: string, init?: RequestInit) => new Response(JSON.stringify(
     String(url) === "/api/reviewers" && init?.method === "PUT"
-      ? { ...reviewers, reviewer: JSON.parse(String(init.body)).reviewer }
-      : String(url) === "/api/reviewers" ? reviewers : executors,
+      ? (savedReviewer = JSON.parse(String(init.body)).reviewer, { ...reviewers, reviewer: savedReviewer, reviewer_ok: false })
+      : String(url) === "/api/reviewers" ? (reviewerGets++, { ...reviewers, reviewer: savedReviewer, reviewer_ok: savedReviewer === "gw" ? false : true }) : executors,
   )));
   renderControl(fetcher);
   fireEvent.click(await screen.findByRole("button", { name: /编码: Codex Luna/ }));
@@ -55,6 +57,8 @@ it("changing reviewer sends only reviewer PUT and leaves executor unchanged", as
   })));
   expect(fetcher.mock.calls.filter((call) => call[1]?.method === "PUT")).toHaveLength(1);
   expect(fetcher.mock.calls.find((call) => call[1]?.method === "PUT")?.[0]).toBe("/api/reviewers");
+  await waitFor(() => expect(reviewerGets).toBeGreaterThan(1));
+  await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("未就绪"));
 });
 
 it("changing coding executor invokes only the executor callback", async () => {
