@@ -20,6 +20,7 @@ import {
   startLocalLlm,
   stopLocalModelAfterTask,
   localLlmBaseUrl,
+  localLlmContext,
   markLocalModelActive,
 } from "./local-model.js";
 
@@ -244,7 +245,7 @@ export function dispatch(
         ? {
             model: selected.model || localLlmModel(repo),
             localBaseUrl: localLlmBaseUrl(repo),
-            localContext: localProfile >= 2 ? 8192 : 32768,
+            localContext: localProfile >= 2 ? 8192 : localLlmContext(repo),
           }
         : selected.model
           ? { model: selected.model }

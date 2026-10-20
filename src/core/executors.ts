@@ -37,7 +37,7 @@ export const EXECUTOR_META: Record<Executor, Meta> = {
   claude: { label: "Claude (Sonnet)", bin: "claude", worker: "claude", hint: "npm i -g @anthropic-ai/claude-code", model: "sonnet" },
   "claude-opus": { label: "Claude (Opus)", bin: "claude", worker: "claude", hint: "npm i -g @anthropic-ai/claude-code", provider: "claude", model: "opus" },
   opencode: { label: "opencode", bin: "opencode", worker: "opencode", hint: "brew install sst/tap/opencode" },
-  "opencode-local": { label: "opencode (local gemma4)", bin: "opencode", worker: "opencode", hint: "brew install sst/tap/opencode; start omlx/Ollama (docs/omlx-server.md)" },
+  "opencode-local": { label: "opencode (local LFM2.5 2.6B MLX 4-bit)", bin: "opencode", worker: "opencode", hint: "brew install sst/tap/opencode; start omlx (docs/omlx-server.md)" },
   pi: { label: "pi", bin: "pi", worker: "pi", hint: "npm i -g @mariozechner/pi-coding-agent" },
   hermes: { label: "Hermes Agent (Nous)", bin: "hermes", worker: "hermes", hint: "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash" },
 };

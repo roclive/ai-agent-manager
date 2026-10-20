@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 
-const kinds = new Set(["opencode", "ollama", "litellm", "chat"]);
+const kinds = new Set(["opencode", "ollama", "omlx", "litellm", "chat"]);
 
 function requiredBoolean(value, field) {
   if (typeof value !== "boolean") throw new Error(`${field} must be boolean`);
@@ -90,7 +90,7 @@ export function parseCodingProviders(value) {
       )
         throw new Error(`${at}.baseUrl is invalid`);
     }
-    if (["ollama", "litellm"].includes(provider.kind) && !provider.baseUrl)
+    if (["ollama", "omlx", "litellm"].includes(provider.kind) && !provider.baseUrl)
       throw new Error(`${at}.baseUrl is required for ${provider.kind}`);
     return {
       id: provider.id,

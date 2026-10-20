@@ -6,10 +6,10 @@ export const FALLBACK_CONTEXT = 32768;
 // `ollama/<name>` routes through the OpenAI-compatible Ollama endpoint; any other
 // provider/model value is passed to opencode untouched and uses its own configuration.
 export function fallbackProvider(id, model, baseUrl = FALLBACK_BASE_URL, contextWindow = FALLBACK_CONTEXT) {
-  const local = model.startsWith("ollama/");
+  const local = model.startsWith("ollama/") || model.startsWith("omlx/");
   return {
     id,
-    kind: local ? "ollama" : "opencode",
+    kind: model.startsWith("omlx/") ? "omlx" : local ? "ollama" : "opencode",
     model,
     codingWorker: true,
     tools: true,

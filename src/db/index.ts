@@ -217,7 +217,7 @@ export class Repo {
       ollama_base_url: "http://127.0.0.1:11434/api/codex/v1",
       fallback_worker: "none",
       fallback_active: "0",
-      opencode_fallback_model: "ollama/gemma4:e4b-mlx",
+      opencode_fallback_model: "omlx/LFM2.5-2.6B-4bit",
       local_model_min_free_gb: "0",
       local_llm_server: "ollama",
       keep_warm: "0",

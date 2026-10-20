@@ -50,7 +50,7 @@ it("has safe defaults and validates the new settings", () => {
   f = fixture();
   expect(f.repo.getSetting("fallback_worker")).toBe("none");
   expect(f.repo.getSetting("opencode_fallback_model")).toBe(
-    "ollama/gemma4:e4b-mlx",
+    "omlx/LFM2.5-2.6B-4bit",
   );
   expect(f.repo.getSetting("local_model_min_free_gb")).toBe("0");
   expect(() => f.repo.setSetting("fallback_worker", "codex")).toThrow();
@@ -84,8 +84,10 @@ it("builds the opencode command with -m only for the fallback", () => {
   ]);
   const provider = fallbackProvider(
     "opencode-fallback",
-    "ollama/gemma4:e4b-mlx",
+    "omlx/LFM2.5-2.6B-4bit",
+    "http://127.0.0.1:8000/v1",
   );
+  expect(provider.kind).toBe("omlx");
   const config = JSON.parse(
     openCodeConfigContent(
       { version: 1, auto: false, providers: [], route: [] },
@@ -93,13 +95,9 @@ it("builds the opencode command with -m only for the fallback", () => {
       undefined,
     )!,
   );
-  expect(config.provider.ollama.npm).toBe("@ai-sdk/openai-compatible");
-  expect(config.provider.ollama.options.baseURL).toBe(
-    "http://127.0.0.1:11434/v1",
-  );
-  expect(config.provider.ollama.models["gemma4:e4b-mlx"].limit.context).toBe(
-    32768,
-  );
+  expect(config.provider.omlx.npm).toBe("@ai-sdk/openai-compatible");
+  expect(config.provider.omlx.options.baseURL).toBe("http://127.0.0.1:8000/v1");
+  expect(config.provider.omlx.models["LFM2.5-2.6B-4bit"].limit.context).toBe(32768);
 });
 
 it("activates only with fallback_worker=opencode and owner file or fallback_active", () => {

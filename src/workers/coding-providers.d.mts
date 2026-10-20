@@ -4,7 +4,7 @@ export type Health = {
 };
 export type CodingProvider = {
   id: string;
-  kind: "opencode" | "ollama" | "litellm" | "chat";
+  kind: "opencode" | "ollama" | "omlx" | "litellm" | "chat";
   model: string;
   codingWorker: boolean;
   tools: boolean | "unknown";

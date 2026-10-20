@@ -345,11 +345,11 @@ it("switching provider away from omlx still unloads a server this module started
 
 it("omlx route sends the served model id, ollama keeps the tag", () => {
   f = fixture();
-  expect(localLlmModel(f.repo)).toBe("ollama/gemma4:e4b-mlx");
+  expect(localLlmModel(f.repo)).toBe("ollama/LFM2.5-2.6B-4bit");
   f.repo.setSetting("local_llm_server", "omlx");
-  expect(localLlmModel(f.repo)).toBe("ollama/gemma4-e4b-mlx");
+  expect(localLlmModel(f.repo)).toBe("omlx/LFM2.5-2.6B-4bit");
   const env = readFileSync(resolve("config/omlx.env"), "utf8");
-  expect(env).toContain("OMLX_MODEL_NAME=gemma4-e4b-mlx");
+  expect(env).toContain("OMLX_MODEL_NAME=LFM2.5-2.6B-4bit");
 });
 
 it("worker spawn failure after omlx start stops omlx when keep_warm=0", () => {

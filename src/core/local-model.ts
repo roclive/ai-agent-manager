@@ -61,7 +61,25 @@ export function localLlmServer(repo: Repo): LocalLlmServer {
 }
 
 export function localLlmBaseUrl(repo: Repo) {
-  return localLlmServer(repo) === "omlx" ? OMLX_BASE_URL : OLLAMA_BASE_URL;
+  if (localLlmServer(repo) !== "omlx") return OLLAMA_BASE_URL;
+  try {
+    const text = readFileSync(fileURLToPath(new URL("../../config/omlx.env", import.meta.url)), "utf8");
+    const host = text.match(/^OMLX_HOST=(.*)$/m)?.[1]?.trim() || "127.0.0.1";
+    const port = text.match(/^OMLX_PORT=(\d+)$/m)?.[1] || "8000";
+    return `http://${host}:${port}/v1`;
+  } catch {
+    return OMLX_BASE_URL;
+  }
+}
+
+export function localLlmContext(repo: Repo) {
+  if (localLlmServer(repo) !== "omlx") return 32768;
+  try {
+    const text = readFileSync(fileURLToPath(new URL("../../config/omlx.env", import.meta.url)), "utf8");
+    return Number(text.match(/^OMLX_CONTEXT_WINDOW=(\d+)$/m)?.[1]) || 131072;
+  } catch {
+    return 131072;
+  }
 }
 
 // Server-side launch ladder. Profile 2 (8192 context) only changes the client, so the server
@@ -248,7 +266,7 @@ export function recordLocalModelSuccess(repo: Repo, taskId: number) {
 }
 
 export function isLocalModel(model: string) {
-  return model.replace(/^ollama\//, "") === LOCAL_MODEL;
+  return model.replace(/^(ollama|omlx)\//, "") === LOCAL_MODEL || model.startsWith("omlx/");
 }
 
 export function fallbackActive(repo: Repo) {
@@ -269,13 +287,16 @@ export function fallbackModel(repo: Repo) {
 }
 
 // omlx serves the model directory name (config/omlx.env OMLX_MODEL_NAME), not the Ollama tag.
-export const OMLX_SERVED_MODEL = "gemma4-e4b-mlx";
+export const OMLX_SERVED_MODEL = "LFM2.5-2.6B-4bit";
 
 /** Model id the worker must send to the active local server. */
 export function localLlmModel(repo: Repo) {
   const model = fallbackModel(repo);
-  if (localLlmServer(repo) !== "omlx" || !isLocalModel(model)) return model;
-  return `${model.startsWith("ollama/") ? "ollama/" : ""}${OMLX_SERVED_MODEL}`;
+  if (isLocalModel(model)) {
+    const prefix = localLlmServer(repo) === "omlx" ? "omlx/" : "ollama/";
+    return `${prefix}${OMLX_SERVED_MODEL}`;
+  }
+  return model;
 }
 
 export function fallbackSelection(repo: Repo): ProviderSelection {

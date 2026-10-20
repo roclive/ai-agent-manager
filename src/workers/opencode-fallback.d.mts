@@ -7,7 +7,7 @@ export function fallbackProvider(
   contextWindow?: number,
 ): {
   id: string;
-  kind: "opencode" | "ollama";
+  kind: "opencode" | "ollama" | "omlx";
   model: string;
   codingWorker: boolean;
   tools: boolean;
