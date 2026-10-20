@@ -50,8 +50,10 @@ export const localModelHost = {
 export type LocalLlmServer = "ollama" | "omlx";
 export type LocalLlmProfile = 0 | 1 | 2 | 3;
 const OMLX_BASE_URL = "http://127.0.0.1:8000/v1";
-const START_WAIT_ATTEMPTS = 60;
-const START_WAIT_STEP_MS = 2_000;
+// Startup is synchronous in dispatch. Keep the entire probe budget short so a
+// broken local server cannot hold the scheduler for minutes per fallback level.
+const START_WAIT_ATTEMPTS = 6;
+const START_WAIT_STEP_MS = 500;
 const OLLAMA_BASE_URL = "http://127.0.0.1:11434/v1";
 
 export function localLlmServer(repo: Repo): LocalLlmServer {
@@ -200,6 +202,9 @@ export function startLocalLlm(repo: Repo, taskId: number) {
   for (const attempt of SERVER_LEVELS.filter((l) => l >= level)) {
     stopOmlx(); // never leave a half-loaded server behind (pid/process group), idempotent
     const command = omlxStartCommand(attempt);
+    // The watchdog starts with the server process. Publish the same marker
+    // before launching it, otherwise keep_warm can look idle during a task.
+    markLocalModelActive(repo, taskId);
     const result = localModelHost.run(command.cmd, command.args, {
       ...process.env,
       ...command.env,
@@ -213,6 +218,7 @@ export function startLocalLlm(repo: Repo, taskId: number) {
     repo.event("local_llm_retry", `omlx profile ${attempt} failed: ${failure}`, taskId);
   }
   stopOmlx();
+  clearLocalModelActive(repo);
   repo.setSetting("local_llm_active_profile", "");
   throw new Error(`omlx start failed at every profile: ${failure}`);
 }

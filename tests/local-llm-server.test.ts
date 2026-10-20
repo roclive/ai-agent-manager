@@ -110,6 +110,27 @@ it("starts once when not healthy and records the effective profile", () => {
   expect(kinds()).toContain("local_llm_start");
 });
 
+it("creates the watchdog active marker before starting omlx and keeps its path aligned", () => {
+  f = fixture();
+  f.repo.setSetting("local_llm_server", "omlx");
+  const task = f.task();
+  let markerExistedAtStart = false;
+  localModelHost.run = (cmd, args, env) => {
+    runs.push({ cmd, args, env });
+    if (cmd.endsWith("omlx-start.sh")) {
+      markerExistedAtStart = existsSync(env.OMLX_ACTIVE_RUN_FILE!);
+      healthy = true;
+    }
+    return { status: 0, stdout: "", stderr: "" };
+  };
+  startLocalLlm(f.repo, task.id);
+  expect(markerExistedAtStart).toBe(true);
+  expect(starts()[0].env.OMLX_ACTIVE_RUN_FILE).toBe(
+    resolve(f.repo.home, "local-model.active"),
+  );
+  expect(readFileSync(resolve(f.repo.home, "local-model.active"), "utf8")).toBe(`${task.id}\n`);
+});
+
 it("reuses a healthy server at least as safe, restarts one running a weaker profile", () => {
   f = fixture();
   f.repo.setSetting("local_llm_server", "omlx");
@@ -151,6 +172,8 @@ it("treats a server that never becomes healthy as a failure and stops it", () =>
   expect(starts()).toHaveLength(3);
   expect(runs[runs.length - 1].cmd).toMatch(/omlx-stop\.sh$/);
   expect(f.repo.getSetting("local_llm_active_profile")).toBe("");
+  expect(existsSync(resolve(f.repo.home, "local-model.active"))).toBe(false);
+  expect(probes.length).toBeLessThanOrEqual(21); // bounded across all three profiles
 });
 
 it("only resource failures escalate the profile, not ordinary code failures", () => {
