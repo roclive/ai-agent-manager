@@ -76,6 +76,22 @@ describe('AAM-39 pinned native MLX evidence', () => {
     expect(report).toContain('No recommendation for unattended AAM-37');
   });
 
+  it('states that live model execution and comparable AAM-60 evidence are still unresolved', () => {
+    const report = readFileSync(new URL('../docs/local-model-eval.md', import.meta.url), 'utf8');
+    expect(report).toContain('**P1 live evaluation:** still unresolved.');
+    expect(report).toContain('no AAM-60 Gemma MLX');
+    expect(report).toContain('no AAM-60 Gemma MLX');
+    expect(report).toContain('results, frozen prompt set, or Gemma MLX model cache');
+    expect(report).toContain('No inference process was started');
+    expect(report).toContain('local_model_preference`: **none validated**');
+  });
+
+  it('keeps the recorded core test total consistent with the observed Vitest output', () => {
+    const report = readFileSync(new URL('../docs/local-model-eval.md', import.meta.url), 'utf8');
+    expect(report).toContain('**245 tests / 27 files**');
+    expect(report).not.toContain('**244 tests / 27 files**');
+  });
+
   it('does not claim a safe runtime attempt when host headroom and scoped monitoring are unavailable', () => {
     const report = readFileSync(new URL('../docs/local-model-eval.md', import.meta.url), 'utf8');
     expect(report).toContain('Current recheck (2026-10-19)');

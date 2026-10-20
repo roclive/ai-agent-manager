@@ -175,9 +175,31 @@ test loads a model or invokes a real worker. Offline test success cannot satisfy
 pending hardware checks.
 
 Validation on this worktree: core `npm test -- --maxWorkers=1 --testTimeout=60000
---hookTimeout=60000` passed **244 tests / 27 files**, exit 0; `npm run typecheck`
+--hookTimeout=60000` passed **245 tests / 27 files**, exit 0; `npm run typecheck`
 passed, exit 0. UI `npm test -- --maxWorkers=1 --testTimeout=60000
 --hookTimeout=60000` passed **45 tests / 8 files**, exit 0; `npm run typecheck`
 passed, exit 0. `git diff --check` passed. These offline results include a regression
 that keeps the pending live-smoke finding open; they are not real MLX inference
 acceptance.
+
+## Review recheck (2026-10-20)
+
+- **P1 live evaluation:** still unresolved. This recheck found no AAM-60 Gemma MLX
+  results, frozen prompt set, or Gemma MLX model cache. The cached LFM 2.6B artifact
+  remains available, but no inference was started. At inspection, the host reported
+  5.13 GiB by the AAM-26 free+inactive+speculative formula and 1,119 MiB swap used;
+  active Codex workers were present, including this task, and unrelated Claude/Codex
+  application processes were running. There is no candidate-only physical-footprint
+  sampler in the documented AAM-26 helper, and no established shared model lock was
+  found. These conditions do not support safe, scoped peak measurement, so the smoke,
+  coding benchmark, and Gemma comparison remain **not run**, not model failures.
+  No process was signalled and no model was downloaded or unloaded. The 8B candidate
+  remains over the 4GB limit. The P1 review finding is therefore not satisfied and
+  `local_model_preference` remains none validated; AAM-37 unattended coding is not
+  recommended based on this evidence.
+- **P3 test count:** the latest core Vitest output on this worktree reports 245 tests
+  across 27 files, exit 0. The stale 244 count is corrected above. A regression now
+  checks that the report preserves 245 and rejects the old count.
+- Added report regressions also assert that absent AAM-60 evidence and unrun live
+  inference remain explicit. These offline checks document the unresolved P1; they do
+  not claim that a model was loaded or evaluated.
