@@ -1,0 +1,11 @@
+BUG: the aam UI (and API/CLI/events) show the coding worker as "codex" even when Claude (scripts/claude-worker.sh via AAM_FAKE_WORKER) actually ran the task. User request 2026-10-19: fix it, and from now on always show WHO actually did the coding.
+
+Evidence: `.aam/runs/<id>/backend.json` for Claude-worker runs still says {"backend":"ollama","model":"gemma4:31b:cloud"} (Codex manager's fallback record), and the UI derives the worker label from task.worker / the run's backend rather than from the executor that was really spawned (see AAM_FAKE_WORKER handling in src/workers and src/core/dispatch.ts; also src/ui or ui/ components showing the worker/agent name on kanban cards, task detail and run list).
+
+Do:
+1. Record the REAL executor per run at spawn time: columns/fields `runs.worker_kind` (codex|claude|opencode|fake|other), `runs.worker_model` and `runs.worker_label` (human label e.g. "Claude (sonnet)", "Codex (gpt-5.6-sol)", "opencode (gemma4 e4b)"). Migration for the DB (existing runs: derive from backend.json/worker.log heuristics, else 'unknown'). When AAM_FAKE_WORKER is set, identify the adapter: let adapter scripts declare identity via a first-line header comment `# aam-worker: claude sonnet` or a `--identity` flag; scripts/claude-worker.sh gets that header (keep it working). Unknown custom scripts show their basename.
+2. Do not derive the label from the LLM backend setting (ollama/subscription) of the manager; keep `backend.json` for what it is but add the real worker identity to it.
+3. UI: kanban card, task detail, run list/run detail, activity/events and the project page show the real worker label with a small colored badge per kind (Claude / Codex / opencode / local). A task that is re-run by another worker shows the latest run's worker plus history. CLI `aam task show`/`aam logs` and the API JSON include the same fields.
+4. Events: dispatch events say e.g. "Started claude run 307 (sonnet)" not "codex run 307 (ollama)".
+5. Tests: unit tests for identity detection (codex, claude header, opencode, fake script w/o header), migration/backfill, API field, and a UI component test for the badge; update existing tests. All of `npm test`, `npm run typecheck`, `cd ui && npm test && npm run typecheck` must pass.
+Constraints: no push; do not touch the live runtime copy (.aam/runtime) — work in this worktree only.

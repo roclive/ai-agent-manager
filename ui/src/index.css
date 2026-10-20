@@ -441,8 +441,24 @@ main {
   border-radius: 7px;
   transition: background 150ms;
 }
+.kanban-column.over {
+  outline: 2px solid rgba(var(--tone), 0.72);
+  outline-offset: -2px;
+  border-radius: 8px;
+}
+.kanban-column.over > header {
+  background: rgba(var(--tone), 0.18);
+}
 .kanban-column.over .column-body {
-  background: rgba(var(--tone), 0.14);
+  background: rgba(var(--tone), 0.18);
+}
+.drop-target-label {
+  color: rgb(var(--tone));
+  font-size: 10px;
+  font-weight: 700;
+}
+.collapsed .drop-target-label {
+  writing-mode: vertical-rl;
 }
 .kanban-column.collapsed {
   width: 48px;
@@ -495,6 +511,22 @@ main {
 }
 .drag-handle {
   touch-action: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  min-height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--muted-foreground);
+  cursor: grab;
+}
+.drag-handle:hover {
+  color: var(--foreground);
+  background: var(--accent);
+}
+.drag-handle:active {
+  cursor: grabbing;
 }
 .task-title {
   font-size: 13px;

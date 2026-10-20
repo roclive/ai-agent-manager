@@ -144,10 +144,11 @@ function KanbanCard({
           {...listeners}
           className="drag-handle"
           aria-describedby={`drag-hint-${task.id}`}
-          aria-label={`拖动 ${task.identifier}`}
+          aria-label={`拖动 ${task.identifier} 到任意状态栏`}
+          title="拖动到任意状态栏以更改任务状态"
         >
           <span className="keyboard-drag-hint" id={`drag-hint-${task.id}`}>
-            按空格开始拖动，方向键移动，再按空格放下。
+            按空格开始拖动，方向键选择目标任务或状态栏，再按空格放下。
           </span>
           <GripVertical size={14} />
         </button>
@@ -236,6 +237,7 @@ function KanbanColumn({
           {statusLabels[status]}
           {collapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
         </button>
+        {isOver && <span className="drop-target-label">放到这里</span>}
         <span className="column-count">{tasks.length}</span>
         <Button
           size="icon"

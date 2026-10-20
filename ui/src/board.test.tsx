@@ -8,7 +8,7 @@ import { ThemeToggle } from "./lib/theme";
 import { StatusIcon } from "./components/StatusIcon";
 import { PriorityIcon } from "./components/PriorityIcon";
 import { Layout } from "./components/Layout";
-import type { Task } from "./lib/types";
+import { statuses, type Task } from "./lib/types";
 const task = (
   id: number,
   status: Task["status"] = "ready",
@@ -64,6 +64,18 @@ describe("board grouping and drag-end planning", () => {
     await applyDrop(tasks, 1, patch, write, update);
     expect(write).toHaveBeenCalledWith(1, { status: "ready", sort_order: 15 });
     expect(update.mock.calls[0][0][0].status).toBe("ready");
+  });
+  it("allows dragging tasks between every pair of status columns", () => {
+    for (const source of statuses) {
+      for (const destination of statuses) {
+        if (source === destination) continue;
+        const patch = planDrop([task(1, source)], 1, destination);
+        expect(patch, `${source} → ${destination}`).toEqual({
+          status: destination,
+          sort_order: 1024,
+        });
+      }
+    }
   });
   it("reorders down/up and drops into empty columns", () => {
     const tasks = [task(1), task(2), task(3)];

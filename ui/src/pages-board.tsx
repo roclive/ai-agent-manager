@@ -98,7 +98,7 @@ export function BoardPage({ project }: { project: string }) {
       <div className="page-heading">
         <div>
           <h1>看板</h1>
-          <p>跟进任务，从待办到完成。</p>
+          <p>跟进任务，从待办到完成。拖动任务卡片到任意状态栏即可调整状态。</p>
         </div>
         <BoardExecutorReviewer
           onExecutorChange={(value) =>

@@ -1,0 +1,9 @@
+Test Claude Code / aam driving a LOCAL coding worker: opencode + gemma4:e4b-mlx (user request 2026-10-19). First free memory, then smoke-test, with measurements.
+
+Memory first (user: "把python进程的3.02GB释放一下，用来装gemma4 e4b-mlx"):
+1. Identify the ~3.02 GB python process (candidates: `omlx serve` pid 654 python@3.11 Python.app, or a `.venv` python; use `ps -axo pid,rss,command`, `footprint <pid>` / `vmmap -summary`, since RSS alone under-reports MLX/GPU memory). Record owner, command and why it is running. Free it ONLY if it is a disposable helper (stop the specific process or its launchd job gracefully). Do NOT kill: aam daemon/UI (launchd com.aam.*), OntoKB api (:8765), Paperclip, Claude/Codex/ChatGPT apps. If unsure which, record the finding and stop rather than guess.
+2. Show before/after `vm_stat`-based available memory (free+inactive+speculative) and `memory_pressure`. Need >= 12 GB available before loading the model.
+
+Test:
+3. Serve gemma4:e4b-mlx locally (Ollama OpenAI endpoint http://127.0.0.1:11434/v1 as in AAM-22, or omlx once AAM-24 exists — use whichever works now) and run ONE trivial aam task through the AAM-22 fallback path (`fallback_worker=opencode`, owner `opencode-fallback`) in a scratch project/worktree, then restore settings/owner to claude. Record model identity, tokens/s, wall time, peak memory (footprint), whether the code change passed tests, and that the model was unloaded afterwards (`ollama stop` / server stop). Also check how Claude Code itself can use the local model: (a) opencode as worker is the supported route; (b) document whether pointing Claude Code at a local Anthropic-compatible endpoint is viable (ANTHROPIC_BASE_URL) — evidence only, no secrets.
+4. Write results to `docs/local-llm-smoke.md`. Must not auto-start from health checks; single run lock and 12 GB guard stay on. If memory is still insufficient after step 1, record "not run: memory" with numbers — do not claim success.
