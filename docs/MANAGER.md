@@ -26,7 +26,7 @@ integration branch, integrated (`src/core/dispatch.ts:27-40`). No prompt or LLM
 call participates in this choice.
 
 The scheduler adds no intelligence to this decision. It calls `tick()` on the
-configured interval and from heartbeat routines (`src/scheduler.ts`, there is no `src/core/scheduler.ts`: `:38-46`,
+configured interval and from heartbeat routines (`src/scheduler.ts:38-46`,
 `src/scheduler.ts:137-146`). A `create_task` routine merely inserts its payload;
 it does not use an LLM (`src/scheduler.ts:46-48`).
 

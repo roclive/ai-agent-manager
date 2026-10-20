@@ -86,8 +86,10 @@ runtime result and supplies no comparable coding, latency, or residency measurem
 Gemma comparison therefore remains specifically pending its AAM-60 evidence (or a
 separately authorized native MLX evaluation); the cache inspection itself is complete.
 
-The 8B artifact independently exceeds the 4GB cap even considering weights alone, so it
-requires a user decision before download. No OptiQ artifact was downloaded or evaluated.
+The 8B artifact independently exceeds the 4GB cap even considering weights alone. **Decision
+required from the user:** whether to authorize downloading its 4,764,265,165-byte weight
+artifact despite the per-model 4GB cap. Until that decision, it is not downloaded or
+evaluated. No OptiQ artifact was downloaded or evaluated.
 
 A read-only process snapshot found no active LFM download or omlx process. Earlier
 observations in the prior report of three `hf download` processes are historical only;
@@ -157,7 +159,7 @@ needs one bounded 8k retrieval check. Record opencode separately from backend qu
 
 `local_model_preference`: **none validated**. No preference order can be recommended until
 the pending live smoke and comparable Gemma results exist. Proposed evaluation
-order is 8B (after size approval), then 2.6B; its smaller weight footprint makes 2.6B a
+order is 8B (only after explicit size approval), then 2.6B; its smaller weight footprint makes 2.6B a
 plausible memory candidate, not a measured winner. Do not promote either for AAM-37
 until the smoke and test-gated coding evidence pass. Reuse AAM-60 Gemma evidence when
 available. Formal model catalog and auto/manual routing remain with AAM-62/63,
@@ -197,6 +199,17 @@ acceptance.
   remains over the 4GB limit. The P1 review finding is therefore not satisfied and
   `local_model_preference` remains none validated; AAM-37 unattended coding is not
   recommended based on this evidence.
+- **P1 delivery:** not satisfied. This report and its offline regressions record missing
+  evidence; they do not substitute for load, JSON/tool-call, edit smoke, coding benchmark,
+  or comparable Gemma results. Completion remains blocked on bounded MLX runtime evidence.
+- **P1 scope:** resolved at the task branch base. The branch diff contains only the
+  AAM-39 evaluation report and evidence tests, plus the separately requested manager
+  citation correction and regression. No routing/catalog integration is included.
+- **P2 8B cap:** no download was made. The artifact is 4,764,265,165 bytes and requires
+  explicit user authorization to exceed the 4GB per-model limit. The cached 2.6B candidate
+  is within the cap, but the runtime attempt remains unsafe under observed host conditions.
+- **P3 citation:** fixed the malformed scheduler citation in `docs/MANAGER.md`; a regression
+  asserts the correct path and rejects the garbled fragment.
 - **P3 test count:** the latest core Vitest output on this worktree reports 245 tests
   across 27 files, exit 0. The stale 244 count is corrected above. A regression now
   checks that the report preserves 245 and rejects the old count.

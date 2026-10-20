@@ -86,6 +86,17 @@ describe('AAM-39 pinned native MLX evidence', () => {
     expect(report).toContain('local_model_preference`: **none validated**');
   });
 
+  it('records explicit review dispositions for live delivery, branch scope, and the 8B cap', () => {
+    const report = readFileSync(new URL('../docs/local-model-eval.md', import.meta.url), 'utf8');
+    expect(report).toContain('Decision\nrequired from the user:**');
+    expect(report).toContain('4,764,265,165-byte weight');
+    expect(report).toContain('**P1 delivery:** not satisfied.');
+    expect(report).toContain('**P1 scope:** resolved at the task branch base.');
+    expect(report).toContain('**P2 8B cap:** no download was made.');
+    expect(report).toContain('**P3 citation:** fixed');
+    expect(report).toContain('No routing/catalog integration is included.');
+  });
+
   it('keeps the recorded core test total consistent with the observed Vitest output', () => {
     const report = readFileSync(new URL('../docs/local-model-eval.md', import.meta.url), 'utf8');
     expect(report).toContain('**245 tests / 27 files**');
