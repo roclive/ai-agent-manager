@@ -597,16 +597,22 @@ it("project editor submits numeric opt-ins and project goal", async () => {
   });
 });
 
-it("shows projects only in the 项目 tab and restores the selected tab from the URL", async () => {
+it("shows project list only in the 项目 tab and restores the selected tab from the URL", async () => {
   const { Settings } = await import("./pages/Settings");
   vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(
     url.includes("/projects") ? [{ id: 1, key: "T", name: "Test", repo_path: "/tmp/test", base_branch: "main" }] :
       url.includes("/reviewers") ? { reviewer: "codex-sol", reviewers: [] } :
         url.includes("/manager") ? { backend: "rules", model: "", base_url: "", fallback_to_rules: false, daily_cap: "0" } : {},
   ))));
-  const c = setup(<Settings />, "/settings?tab=projects");
-  expect(await screen.findByRole("tab", { name: "项目" })).toHaveAttribute("aria-selected", "true");
+  const c = setup(<Settings />, "/settings");
+  expect(await screen.findByRole("tab", { name: "设置" })).toHaveAttribute("aria-selected", "true");
+  expect(screen.queryByText("/tmp/test")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("tab", { name: "项目" }));
   expect(await screen.findByText("/tmp/test")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("tab", { name: "设置" }));
+  expect(screen.queryByText("/tmp/test")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("tab", { name: "项目" }));
+  expect(await screen.findByRole("tab", { name: "项目" })).toHaveAttribute("aria-selected", "true");
   c.clear();
 });
 

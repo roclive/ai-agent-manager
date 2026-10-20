@@ -23,7 +23,7 @@ export function Settings() {
   const action = useAction();
   const [reviewerChoice, setReviewerChoice] = useState<string | null>(null);
   const [reviewerModel, setReviewerModel] = useState<string | null>(null);
-  const tab = selectedSettingsTab(location.search);
+  const [tab, setTab] = useState(() => selectedSettingsTab(location.search));
   const manager = useQuery({ queryKey: ["manager"], queryFn: () => request<{backend:string;model:string;base_url:string;fallback_to_rules:boolean;daily_cap:string}>('/manager') });
   return (
     <>
@@ -33,8 +33,8 @@ export function Settings() {
           <p>执行器、审查与项目配置。</p>
         </div>
       </div>
-      <Tabs value={tab} onValueChange={(value) => { const params = new URLSearchParams(location.search); if (value === "settings") params.delete("tab"); else params.set("tab", value); navigate({ pathname: location.pathname, search: params.toString() ? `?${params}` : "", hash: location.hash }, { replace: true }); }}>
-      <TabsList><TabsTrigger value="settings">设置</TabsTrigger><TabsTrigger value="projects">项目</TabsTrigger></TabsList>
+      <Tabs value={tab} onValueChange={(value) => changeTab(value)}>
+      <TabsList><TabsTrigger value="settings" onClick={() => changeTab("settings")}>设置</TabsTrigger><TabsTrigger value="projects" onClick={() => changeTab("projects")}>项目</TabsTrigger></TabsList>
       <TabsContent value="settings">
       <RoutingConsole />
       <UsageSnapshots />
@@ -252,6 +252,15 @@ export function Settings() {
       </Tabs>
     </>
   );
+
+  function changeTab(value: string) {
+    const next = value === "projects" ? "projects" : "settings";
+    setTab(next);
+    const params = new URLSearchParams(location.search);
+    if (next === "settings") params.delete("tab");
+    else params.set("tab", next);
+    navigate({ pathname: location.pathname, search: params.toString() ? `?${params}` : "", hash: location.hash }, { replace: true });
+  }
 }
 
 function selectedSettingsTab(search = window.location.search): "settings" | "projects" {
