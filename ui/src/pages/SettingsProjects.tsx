@@ -9,6 +9,7 @@ import { Load, useAction, ActionError } from "../components/PageSupport";
 
 export function SettingsProjects() {
   const projects = useProjects();
+  const projectList = Array.isArray(projects.data) ? projects.data : [];
   const action = useAction();
   const [promoting, setPromoting] = useState<Project | null>(null);
   const [editing, setEditing] = useState<Project | null>(null);
@@ -16,9 +17,9 @@ export function SettingsProjects() {
     <section className="page-section">
       <h2>项目</h2>
       <Load pending={projects.isPending} error={projects.error}>
-        {!projects.data?.length && <p>暂无项目</p>}
+        {!projects.isPending && !projects.error && !projectList.length && <p>暂无项目</p>}
         <div className="table-scroll"><table><thead><tr><th>项目</th><th>仓库路径</th><th>基础分支</th><th>测试命令</th><th>操作</th></tr></thead>
-          <tbody>{projects.data?.map((p) => <tr key={p.id}>
+          <tbody>{projectList.map((p) => <tr key={p.id}>
             <td>{p.key} {!!p.auto_review && <span className="badge">自动审查</span>} {!!p.autopilot && <span className="badge">自动驾驶</span>}</td>
             <td>{p.repo_path}</td><td>{p.base_branch}{p.integration_branch && <p>{p.integration_branch} · 领先 {p.ahead_of_base ?? "未知"} 个提交</p>}</td><td>{p.test_cmd || "—"}</td>
             <td>{p.integration_branch && <Button variant="outline" onClick={() => setPromoting(p)}>合并集成分支到 {p.base_branch}</Button>}<Button variant="ghost" onClick={() => setEditing(p)}>编辑</Button></td>

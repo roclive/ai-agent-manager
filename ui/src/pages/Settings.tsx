@@ -12,7 +12,10 @@ import { NativeSelect } from "../components/ui/select";
 import { Load, useAction, ActionError } from "../components/PageSupport";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { SettingsProjects } from "./SettingsProjects";
+import { useLocation, useNavigate } from "react-router-dom";
 export function Settings() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const q = useQuery({
     queryKey: ["settings"],
     queryFn: () => request<Record<string, string>>("/settings"),
@@ -20,7 +23,7 @@ export function Settings() {
   const action = useAction();
   const [reviewerChoice, setReviewerChoice] = useState<string | null>(null);
   const [reviewerModel, setReviewerModel] = useState<string | null>(null);
-  const [tab, setTab] = useState(() => new URLSearchParams(window.location.search).get("tab") === "projects" ? "projects" : "settings");
+  const tab = selectedSettingsTab(location.search);
   const manager = useQuery({ queryKey: ["manager"], queryFn: () => request<{backend:string;model:string;base_url:string;fallback_to_rules:boolean;daily_cap:string}>('/manager') });
   return (
     <>
@@ -30,9 +33,9 @@ export function Settings() {
           <p>执行器、审查与项目配置。</p>
         </div>
       </div>
-      <Tabs value={tab} onValueChange={(value) => { setTab(value); const url = new URL(window.location.href); if (value === "settings") url.searchParams.delete("tab"); else url.searchParams.set("tab", value); window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`); }}>
+      <Tabs value={tab} onValueChange={(value) => { const params = new URLSearchParams(location.search); if (value === "settings") params.delete("tab"); else params.set("tab", value); navigate({ pathname: location.pathname, search: params.toString() ? `?${params}` : "", hash: location.hash }, { replace: true }); }}>
       <TabsList><TabsTrigger value="settings">设置</TabsTrigger><TabsTrigger value="projects">项目</TabsTrigger></TabsList>
-      <TabsContent value="settings" forceMount>
+      <TabsContent value="settings">
       <RoutingConsole />
       <UsageSnapshots />
       <ActionError error={action.error} />
@@ -245,8 +248,12 @@ export function Settings() {
         )}
       </Load>
       </TabsContent>
-      <TabsContent value="projects" forceMount><SettingsProjects /></TabsContent>
+      <TabsContent value="projects"><SettingsProjects /></TabsContent>
       </Tabs>
     </>
   );
+}
+
+function selectedSettingsTab(search = window.location.search): "settings" | "projects" {
+  return new URLSearchParams(search).get("tab") === "projects" ? "projects" : "settings";
 }
