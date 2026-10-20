@@ -21,6 +21,9 @@ describe("docs/MANAGER.md audit", () => {
     expect(existsSync(resolve(root, "src/scheduler.ts"))).toBe(true);
     expect(existsSync(resolve(root, "src/core/scheduler.ts"))).toBe(false);
     expect(doc).toContain("src/scheduler.ts");
+    expect(doc).toContain("src/scheduler.ts:38-46");
+    expect(doc).not.toContain("there is no src/core/scheduler.ts");
+    expect(doc).not.toContain(": `:38-46`");
   });
   it("review_mode is only referenced in db defaults/validation", () => {
     const hits = walk(resolve(root, "src"))

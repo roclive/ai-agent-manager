@@ -1,0 +1,34 @@
+{
+  "LiquidAI/LFM2.5-8B-A1B": {
+    "revision": "5dd22602c2e9f6a097b1de4c4efe0658b605015c",
+    "README.md": {
+      "url": "https://huggingface.co/LiquidAI/LFM2.5-8B-A1B/resolve/5dd22602c2e9f6a097b1de4c4efe0658b605015c/README.md",
+      "sha256": "eb40f5396ef5200a14240f8c0523b269bcc114f40b153ac2fa9017dad391e59b"
+    },
+    "LICENSE": {
+      "url": "https://huggingface.co/LiquidAI/LFM2.5-8B-A1B/resolve/5dd22602c2e9f6a097b1de4c4efe0658b605015c/LICENSE",
+      "sha256": "4d28ca14dedc0b3d0fcc2b3339f0e79931faa33874f3d24f522183a8fc70068c"
+    },
+    "license": "lfm1.0",
+    "commercial_revenue_threshold_usd": 10000000,
+    "total_parameters_billion": 8.3,
+    "active_parameters_billion": 1.5,
+    "context_tokens": 128000
+  },
+  "LiquidAI/LFM2.5-2.6B": {
+    "revision": "654f9463ce32b05d0429d76fe1f580b27d4c1ac0",
+    "README.md": {
+      "url": "https://huggingface.co/LiquidAI/LFM2.5-2.6B/resolve/654f9463ce32b05d0429d76fe1f580b27d4c1ac0/README.md",
+      "sha256": "003ceb63ec63a5b06b17f5e7b7a7d907695f037ad18720cabbcf8d8d68813f24"
+    },
+    "LICENSE": {
+      "url": "https://huggingface.co/LiquidAI/LFM2.5-2.6B/resolve/654f9463ce32b05d0429d76fe1f580b27d4c1ac0/LICENSE",
+      "sha256": "4d28ca14dedc0b3d0fcc2b3339f0e79931faa33874f3d24f522183a8fc70068c"
+    },
+    "license": "lfm1.0",
+    "commercial_revenue_threshold_usd": 10000000,
+    "total_parameters_billion": 2.69,
+    "active_parameters_billion": null,
+    "context_tokens": 131072
+  }
+}

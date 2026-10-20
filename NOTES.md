@@ -161,3 +161,29 @@ Codex Luna mapping now uses gpt-6-luna for both worker and reviewer. Executor se
 - Regression coverage includes unavailable routing continuing to other tasks and resolution eligibility changing after a dispatch. The supplied previous review contained passing logs without individual findings.
 
 - Validation: core 247/247 passed with `npm test -- --maxWorkers=1 --testTimeout=60000`; core typecheck passed. UI 45/45 passed with `npm test -- --maxWorkers=1`; UI typecheck passed. Default parallel runs hit subprocess/UI wait timeouts under concurrent machine load; the single-worker default-timeout run passed 246/247 with one 15.8-second test exceeding 15 seconds. No assertions or repository timeout settings were changed.
+## AAM-39 native MLX preflight
+
+The supplied prior feedback has no actionable defect, only passing test logs. Added pinned
+HF metadata evidence and offline regressions for discovered metadata discrepancies.
+Runtime evaluation remains incomplete: the worker may write only in its worktree, whereas
+weights must go to the user cache; 8B also exceeds the 4GB cap and needs an explicit decision.
+Observed existing external LFM download processes were not touched. No real model/worker
+was invoked, no package upgraded, no routing changed. No AAM-60 evidence exists in this
+checkout; comparison stays pending rather than importing historical GGUF numbers.
+Validation: core 242/242 and UI 45/45 passed with maxWorkers=1; both typechecks
+passed. Core retry used 60-second test/hook deadlines after default-parallel resource
+contention; no production code or existing test assertions were changed.
+
+## AAM-39 runtime recheck
+
+- Reconfirmed the pinned 2.6B snapshot is complete in the user HF cache; no download
+  or cache mutation was needed. Did not start model inference: no shared AAM local-model
+  lock was available in this task worktree, and `aam memory --top` could not collect
+  process footprints (permission errors). Read-only host sample: 5.34 GiB using the
+  AAM-26 free+inactive+speculative formula, 1,338.31 MiB swap used; other AAM Codex
+  workers were active. No worker/model process was signalled. This is not a model memory
+  measurement and has no post-run sample.
+- Updated the evaluation report to leave the prior P2 live-smoke finding explicitly
+  unresolved and added an offline regression preventing metadata-only success from being
+  presented as runtime acceptance. Gemma comparison, coding benchmark, memory/throughput
+  measurements and AAM-37 recommendation remain pending.
