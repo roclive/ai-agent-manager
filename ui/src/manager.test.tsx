@@ -29,6 +29,8 @@ it("manager settings saves backend, local endpoint, fallback and daily cap", asy
   vi.stubGlobal("fetch", fetcher);
   mount(<Settings />);
   await waitForForm();
+  await screen.findByRole("tab", { name: "设置" });
+  await screen.findByText("Manager");
   fireEvent.change(screen.getByLabelText("Backend"), { target: { value: "local-small" } });
   fireEvent.change(screen.getByLabelText("Local model name"), { target: { value: "tiny-model" } });
   fireEvent.change(screen.getByLabelText("Local model base URL"), { target: { value: "http://localhost:1234/v1" } });
@@ -42,6 +44,8 @@ it("tests local connectivity and switches the manager to rules", async () => {
   vi.stubGlobal("fetch", fetcher);
   mount(<Settings />);
   await waitForForm();
+  await screen.findByRole("tab", { name: "设置" });
+  await screen.findByText("Manager");
   fireEvent.click(screen.getByRole("button", { name: "Test local connection" }));
   await waitFor(() => expect(fetcher).toHaveBeenCalledWith("/api/manager/test-connection", expect.objectContaining({ method: "POST", body: JSON.stringify({ model: "qwen2.5:3b", base_url: "http://127.0.0.1:11434/v1" }) })));
   fireEvent.click(screen.getByRole("button", { name: "Switch to rules" }));

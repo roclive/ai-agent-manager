@@ -44,7 +44,7 @@ const task = {
 };
 function setup(node: React.ReactNode, path = "/board?task=T-1") {
   const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false, gcTime: 0 } },
   });
   render(
     <QueryClientProvider client={client}>
@@ -73,6 +73,7 @@ function mock() {
 }
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
@@ -307,7 +308,8 @@ it("activity groups days, translates events and links task identifiers", async (
           JSON.stringify(
             url === "/api/tasks"
               ? [task]
-              : [
+              : url.startsWith("/api/events?")
+                ? [
                   {
                     id: 1,
                     ts: "2026-01-01T12:00:00Z",
@@ -315,7 +317,8 @@ it("activity groups days, translates events and links task identifiers", async (
                     kind: "dispatch",
                     message: '{"name":"heartbeat"}',
                   },
-                ],
+                ]
+                : [],
           ),
         ),
     ),
@@ -330,6 +333,18 @@ it("activity groups days, translates events and links task identifiers", async (
   expect(screen.getByText("派工", { selector: "span" })).toHaveClass(
     "event-kind",
   );
+  c.clear();
+});
+
+it("renders a routine heartbeat event message", async () => {
+  const { ActivityPage } = await import("./pages/Activity");
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(
+    url === "/api/tasks" ? [] : url.startsWith("/api/events?")
+      ? [{ id: 2, ts: "2026-01-01T12:00:00Z", task_id: null, kind: "routine_fire", message: '{"routine_id":1,"name":"heartbeat"}' }]
+      : [],
+  ))));
+  const c = setup(<ActivityPage project="" />, "/activity");
+  expect(await screen.findByText("「heartbeat」")).toBeInTheDocument();
   c.clear();
 });
 
@@ -449,13 +464,12 @@ it("restores the selected project across layout mounts", async () => {
 it("project editor submits numeric opt-ins and project goal", async () => {
   const { Settings } = await import("./pages/Settings");
   const fetcher = vi.fn(
-    async (url: string, init?: RequestInit) =>
-      new Response(
-        JSON.stringify(
-          init?.method === "PATCH"
-            ? {}
-            : String(url) === "/api/reviewers"
-              ? {
+    async (url: string, init?: RequestInit) => {
+      const path = String(url);
+      let data: unknown = [];
+      if (init?.method === "PATCH") data = {};
+      else if (path === "/api/reviewers") {
+        data = {
                   reviewer: "codex-sol",
                   reviewer_ok: null,
                   reviewer_checked_at: null,
@@ -474,9 +488,9 @@ it("project editor submits numeric opt-ins and project goal", async () => {
                       supported: true,
                     },
                   ],
-                }
-              : String(url) === "/api/settings"
-                ? {
+        };
+      } else if (path === "/api/settings") {
+        data = {
                     max_parallel: "2",
                     worker_timeout_min: "45",
                     default_worker: "codex",
@@ -485,8 +499,9 @@ it("project editor submits numeric opt-ins and project goal", async () => {
                     auto_review_daily_max: "80",
                     planner_daily_max: "10",
                     keep_awake: "1",
-                  }
-                : [
+        };
+      } else if (path === "/api/projects") {
+        data = [
                     {
                       id: 1,
                       key: "T",
@@ -498,12 +513,15 @@ it("project editor submits numeric opt-ins and project goal", async () => {
                       goal: "",
                       autopilot_rank: 100,
                     },
-                  ],
-        ),
-      ),
+        ];
+      }
+      return new Response(JSON.stringify(data));
+    },
   );
   vi.stubGlobal("fetch", fetcher);
   setup(<Settings />, "/settings");
+  expect(await screen.findByRole("tab", { name: "设置" })).toHaveAttribute("aria-selected", "true");
+  expect(screen.queryByText("/tmp/test")).not.toBeInTheDocument();
   expect(await screen.findByLabelText("审查器")).toHaveValue("codex-sol");
   await screen.findByRole("option", { name: "Claude (Sonnet)" });
   expect(screen.getByLabelText("Claude 工作执行器快速模式")).toHaveValue("1");
@@ -553,6 +571,8 @@ it("project editor submits numeric opt-ins and project goal", async () => {
     reviewer_effort: "xhigh",
     reviewer_fast_mode: "0",
   });
+  fireEvent.click(screen.getByRole("tab", { name: "项目" }));
+  expect(await screen.findByRole("button", { name: "编辑" })).toBeInTheDocument();
   fireEvent.click(await screen.findByRole("button", { name: "编辑" }));
   fireEvent.click(screen.getByLabelText("自动审查"));
   fireEvent.click(screen.getByLabelText("自动驾驶"));
@@ -575,6 +595,33 @@ it("project editor submits numeric opt-ins and project goal", async () => {
     goal: "Improve tests",
     autopilot_rank: 5,
   });
+});
+
+it("shows project list only in the 项目 tab and restores the selected tab from the URL", async () => {
+  const { Settings } = await import("./pages/Settings");
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(
+    url.includes("/projects") ? [{ id: 1, key: "T", name: "Test", repo_path: "/tmp/test", base_branch: "main" }] :
+      url.includes("/reviewers") ? { reviewer: "codex-sol", reviewers: [] } :
+        url.includes("/manager") ? { backend: "rules", model: "", base_url: "", fallback_to_rules: false, daily_cap: "0" } : {},
+  ))));
+  const c = setup(<Settings />, "/settings");
+  expect(await screen.findByRole("tab", { name: "设置" })).toHaveAttribute("aria-selected", "true");
+  expect(screen.queryByText("/tmp/test")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("tab", { name: "项目" }));
+  expect(await screen.findByText("/tmp/test")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("tab", { name: "设置" }));
+  expect(screen.queryByText("/tmp/test")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("tab", { name: "项目" }));
+  expect(await screen.findByRole("tab", { name: "项目" })).toHaveAttribute("aria-selected", "true");
+  c.clear();
+});
+
+it("does not crash or render malformed project list payloads", async () => {
+  const { SettingsProjects } = await import("./pages/SettingsProjects");
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ unexpected: true }))));
+  const c = setup(<SettingsProjects />, "/settings?tab=projects");
+  expect(await screen.findByText("暂无项目")).toBeInTheDocument();
+  c.clear();
 });
 
 it("shows Claude login failure on the autopilot dashboard", async () => {
