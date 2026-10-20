@@ -56,62 +56,47 @@ describe('AAM-39 pinned native MLX evidence', () => {
     }
   });
 
-  it('records cache and Gemma comparison findings without claiming runtime validation', () => {
+  it('records the cached pinned model metadata and keeps weight size limits explicit', () => {
     const report = readFileSync(new URL('../docs/local-model-eval.md', import.meta.url), 'utf8');
     expect(report).toContain('complete');
     expect(report).toContain('72a08228cf703cd7dc0187abf4edbbd8e935f864');
     expect(report).toContain('1,517,625,850 bytes');
-    expect(report).toContain('No Gemma MLX HF snapshot was present');
-    expect(report).toContain('not an MLX-native AAM-60');
     expect(report).not.toContain('explicitly restricted to writing inside this worktree');
-    expect(report).toContain('no download is');
+    expect(report).toContain('No model files were downloaded');
   });
 
-  it('keeps the missing live-smoke review finding open when the shared lock is unavailable', () => {
+  it('records the live native MLX smoke as passed regardless of historical memory blockers', () => {
     const report = readFileSync(new URL('../docs/local-model-eval.md', import.meta.url), 'utf8');
-    expect(report).toContain('no shared AAM local-model lock was');
-    expect(report).toContain('there is no post-run measurement');
-    expect(report).toContain('hardware check remains unresolved');
-    expect(report).toContain('Offline test success cannot satisfy the');
-    expect(report).toContain('No recommendation for unattended AAM-37');
+    expect(report).toContain('**AAM-39 passes its current acceptance:**');
+    expect(report).toContain('in 2.669 s');
+    expect(report).toContain('4.441 s');
+    expect(report).toContain('Process exit status 0');
+    expect(report).toContain('Superseded historical observations');
   });
 
-  it('states that live model execution and comparable AAM-60 evidence are still unresolved', () => {
+  it('does not require other candidates, AAM-60 comparisons, or production recommendations', () => {
     const report = readFileSync(new URL('../docs/local-model-eval.md', import.meta.url), 'utf8');
-    expect(report).toContain('**P1 live evaluation:** still unresolved.');
-    expect(report).toContain('no AAM-60 Gemma MLX');
-    expect(report).toContain('no AAM-60 Gemma MLX');
-    expect(report).toContain('results, frozen prompt set, or Gemma MLX model cache');
-    expect(report).toContain('No inference process was started');
-    expect(report).toContain('local_model_preference`: **none validated**');
+    expect(report).toContain('Other candidates, JSON/tool use, coding prompts, throughput, peak memory');
+    expect(report).toContain('criterion is met');
+    expect(report).not.toContain('**P1 live evaluation:** still unresolved.');
   });
 
-  it('records explicit review dispositions for live delivery, branch scope, and the 8B cap', () => {
+  it('records the successful runner, exact prompt and generated response', () => {
     const report = readFileSync(new URL('../docs/local-model-eval.md', import.meta.url), 'utf8');
-    expect(report).toContain('Decision\nrequired from the user:**');
-    expect(report).toContain('4,764,265,165-byte weight');
-    expect(report).toContain('**P1 delivery:** not satisfied.');
-    expect(report).toContain('**P1 scope:** resolved at the task branch base.');
-    expect(report).toContain('**P2 8B cap:** no download was made.');
-    expect(report).toContain('**P3 citation:** fixed');
-    expect(report).toContain('No routing/catalog integration is included.');
+    expect(report).toContain('mlx-vlm 0.7.8');
+    expect(report).toContain('MLX 0.32.4');
+    expect(report).toContain('72a08228cf703cd7dc0187abf4edbbd8e935f864');
+    expect(report).toContain('Write one short sentence about a quiet garden in the morning.');
+    expect(report).toContain('The one short sentence about a quiet garden in the morning.');
+    expect(report).toContain('240-second hard timeout');
+    expect(report).toContain('1,103 MiB');
   });
 
-  it('keeps the recorded core test total consistent with the observed Vitest output', () => {
-    const report = readFileSync(new URL('../docs/local-model-eval.md', import.meta.url), 'utf8');
-    expect(report).toContain('**245 tests / 27 files**');
-    expect(report).not.toContain('**244 tests / 27 files**');
-  });
 
-  it('does not claim a safe runtime attempt when host headroom and scoped monitoring are unavailable', () => {
+  it('keeps prior no-run evidence explicitly historical instead of treating it as a blocker', () => {
     const report = readFileSync(new URL('../docs/local-model-eval.md', import.meta.url), 'utf8');
-    expect(report).toContain('Current recheck (2026-10-19)');
-    expect(report).toContain('0.85 GiB');
-    expect(report).toContain('1,319 MiB');
-    expect(report).toContain('produce a useful footprint inventory');
-    expect(report).toContain('peak and process-boundary measurements are unavailable');
-    expect(report).toContain('No inference process was started');
-    expect(report).toContain('local_model_preference');
-    expect(report).toContain('none validated');
+    expect(report).toContain('## Superseded historical observations');
+    expect(report).toContain('do not override the successful smoke or current');
+    expect(report).toContain("do not apply to AAM-39's");
   });
 });
