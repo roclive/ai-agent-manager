@@ -15,6 +15,7 @@ it("manager settings saves backend, local endpoint, fallback and daily cap", asy
   const fetcher = vi.fn(async (url: string, init?: RequestInit) => new Response(JSON.stringify(String(url).endsWith("/manager") && !init?.method ? manager : {})));
   vi.stubGlobal("fetch", fetcher);
   mount(<Settings />);
+  await screen.findByRole("tab", { name: "设置" });
   await screen.findByText("Manager");
   fireEvent.change(screen.getByLabelText("Backend"), { target: { value: "local-small" } });
   fireEvent.change(screen.getByLabelText("Local model name"), { target: { value: "tiny-model" } });
@@ -28,6 +29,7 @@ it("tests local connectivity and switches the manager to rules", async () => {
   const fetcher = vi.fn(async (url: string, init?: RequestInit) => new Response(JSON.stringify(String(url).endsWith("/manager") && !init?.method ? manager : { ok: true })));
   vi.stubGlobal("fetch", fetcher);
   mount(<Settings />);
+  await screen.findByRole("tab", { name: "设置" });
   await screen.findByText("Manager");
   fireEvent.click(screen.getByRole("button", { name: "Test local connection" }));
   await waitFor(() => expect(fetcher).toHaveBeenCalledWith("/api/manager/test-connection", expect.objectContaining({ method: "POST", body: JSON.stringify({ model: "qwen2.5:3b", base_url: "http://127.0.0.1:11434/v1" }) })));
@@ -36,7 +38,7 @@ it("tests local connectivity and switches the manager to rules", async () => {
 });
 
 it("shows current manager backend and the last decision reason on dashboard", async () => {
-  vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(String(url).endsWith("/manager") ? manager : []))));
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(String(url).endsWith("/manager") ? manager : url.endsWith("/status") ? { daemon: { running: false } } : []))));
   mount(<Dashboard project="" />);
   expect(await screen.findByText("Manager · codex")).toBeTruthy();
   expect(await screen.findByText(/rules fallback \(codex: unavailable\); selected T-1/)).toBeTruthy();

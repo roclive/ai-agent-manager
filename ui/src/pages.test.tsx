@@ -307,7 +307,8 @@ it("activity groups days, translates events and links task identifiers", async (
           JSON.stringify(
             url === "/api/tasks"
               ? [task]
-              : [
+              : url === "/api/activity"
+                ? [
                   {
                     id: 1,
                     ts: "2026-01-01T12:00:00Z",
@@ -315,7 +316,8 @@ it("activity groups days, translates events and links task identifiers", async (
                     kind: "dispatch",
                     message: '{"name":"heartbeat"}',
                   },
-                ],
+                ]
+                : [],
           ),
         ),
     ),
@@ -486,7 +488,7 @@ it("project editor submits numeric opt-ins and project goal", async () => {
                     planner_daily_max: "10",
                     keep_awake: "1",
                   }
-                : [
+                : String(url) === "/api/projects" ? [
                     {
                       id: 1,
                       key: "T",
@@ -498,12 +500,14 @@ it("project editor submits numeric opt-ins and project goal", async () => {
                       goal: "",
                       autopilot_rank: 100,
                     },
-                  ],
+                  ] : [],
         ),
       ),
   );
   vi.stubGlobal("fetch", fetcher);
   setup(<Settings />, "/settings");
+  expect(await screen.findByRole("tab", { name: "设置" })).toHaveAttribute("aria-selected", "true");
+  expect(screen.queryByText("/tmp/test")).not.toBeInTheDocument();
   expect(await screen.findByLabelText("审查器")).toHaveValue("codex-sol");
   await screen.findByRole("option", { name: "Claude (Sonnet)" });
   expect(screen.getByLabelText("Claude 工作执行器快速模式")).toHaveValue("1");
@@ -553,6 +557,9 @@ it("project editor submits numeric opt-ins and project goal", async () => {
     reviewer_effort: "xhigh",
     reviewer_fast_mode: "0",
   });
+  fireEvent.click(screen.getByRole("tab", { name: "项目" }));
+  expect(await screen.findByText("/tmp/test")).toBeInTheDocument();
+  expect(new URLSearchParams(window.location.search).get("tab")).toBe("projects");
   fireEvent.click(await screen.findByRole("button", { name: "编辑" }));
   fireEvent.click(screen.getByLabelText("自动审查"));
   fireEvent.click(screen.getByLabelText("自动驾驶"));
