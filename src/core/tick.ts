@@ -59,6 +59,7 @@ export function tick(
         .tasks({ status: "ready" })
         .filter(
           (t) =>
+            !repo.project(t.project_id).hidden &&
             dependenciesDone(repo, t) &&
             !resolutionBusy(repo, t) &&
             !globalCooldownBlocks(repo, t),

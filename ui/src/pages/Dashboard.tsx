@@ -51,8 +51,9 @@ export function Dashboard({ project }: { project: string }) {
     refetchInterval: 5000,
   });
   const projectId = projects.data?.find((p) => p.key === project)?.id;
+  const visibleProjects = (projects.data ?? []).filter((p) => !p.hidden);
   const rows = (tasks.data ?? []).filter(
-    (t) => !project || t.project_id === projectId,
+    (t) => visibleProjects.some((p) => p.id === t.project_id) && (!project || t.project_id === projectId),
   );
   const running = (runs.data ?? []).filter(
     (r) =>

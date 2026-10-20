@@ -1,6 +1,8 @@
 import { it, expect, afterEach } from "vitest";
 import { createApp } from "../src/server.js";
 import { fixture } from "./helpers.js";
+import { tick } from "../src/core/tick.js";
+import { dispatch } from "../src/core/dispatch.js";
 let f: ReturnType<typeof fixture>;
 afterEach(() => f?.cleanup());
 it("serves task, routine, event and settings operations with validation", async () => {
@@ -154,6 +156,47 @@ it("records events for successful HTTP edits and skips rejected mutations", asyn
     kind: "routine",
     message: expect.stringContaining("Deleted"),
   });
+});
+
+it("hides projects without deleting tasks and disables project automation", async () => {
+  f = fixture();
+  f.repo.updateProject("T", { auto_review: 1, autopilot: 1 });
+  const task = f.task({ status: "ready" });
+  const app = createApp(f.repo);
+  const req = (path: string, method = "GET", body?: unknown) => app.request(`/api/${path}`, {
+    method, headers: { "Content-Type": "application/json", "X-AAM": "1" },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  expect((await req("projects")).status).toBe(200);
+  expect(await (await req("projects")).json()).toHaveLength(1);
+  expect((await req("projects", "POST", { key: "BAD", name: "Bad", repo_path: "/not/a/repo" })).status).toBe(400);
+  expect((await req("projects/T", "PATCH", { hidden: 1 })).status).toBe(200);
+  expect(f.repo.project("T")).toMatchObject({ hidden: 1, auto_review: 0, autopilot: 0 });
+  expect(f.repo.task(task.id).status).toBe("ready");
+  expect((f.repo.events() as { kind: string; message: string }[]).some((e) => e.kind === "project_hidden" && e.message.includes("auto_review=1") && e.message.includes("autopilot=1"))).toBe(true);
+  expect(await (await req("projects")).json()).toMatchObject([{ hidden: 1 }]);
+  expect((await req("projects/T", "PATCH", { auto_review: 1 })).status).toBe(400);
+  await req("projects/T", "PATCH", { hidden: 0 });
+  expect(f.repo.project("T")).toMatchObject({ hidden: 0, auto_review: 0, autopilot: 0 });
+});
+
+it("skips hidden projects during tick dispatch and idle promotion", () => {
+  f = fixture("sleep 30");
+  f.repo.updateProject("T", { auto_review: 1, autopilot: 1, goal: "keep planning" });
+  const hiddenReady = f.task({ status: "ready" });
+  const hiddenBacklog = f.task({ status: "backlog" });
+  const running = dispatch(f.repo, hiddenReady.identifier);
+  f.repo.updateProject("T", { hidden: 1 });
+  f.repo.updateProject("T", { auto_review: 0, autopilot: 0 });
+  const visible = f.repo.addProject({ key: "VISIBLE", name: "Visible", repo_path: f.path });
+  const visibleReady = f.repo.addTask({ project: visible.key, title: "visible", status: "ready" });
+  f.repo.setSetting("max_parallel", "3");
+  tick(f.repo);
+  expect(f.repo.task(hiddenReady.id).status).toBe("in_progress");
+  expect(f.repo.runs(hiddenReady.id).find((r) => r.status === "running")?.id).toBe(running);
+  expect(f.repo.task(hiddenBacklog.id).status).toBe("backlog");
+  expect(f.repo.task(visibleReady.id).status).toBe("in_progress");
+  expect(f.repo.db.prepare("SELECT COUNT(*) AS n FROM autopilot_jobs WHERE project_id=?").get(f.repo.project("T").id)).toMatchObject({ n: 0 });
 });
 
 it("waits for collect-usage run-now persistence before responding", async () => {

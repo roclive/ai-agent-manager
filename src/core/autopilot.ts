@@ -247,7 +247,7 @@ export function stalledReviews(repo: Repo) {
   const rows = jobs(repo);
   return repo
     .tasks({ status: "in_review" })
-    .filter((t) => repo.project(t.project_id).auto_review)
+    .filter((t) => !repo.project(t.project_id).hidden && repo.project(t.project_id).auto_review)
     .filter((t) => {
       const prior = rows.filter(
         (j) =>
@@ -597,7 +597,7 @@ export function collectAutopilot(repo: Repo) {
     const p = repo.project(job.project_id);
     if (
       (job.kind === "review" &&
-        (!p.auto_review || repo.task(job.task_id!).status !== "in_review")) ||
+        (p.hidden || !p.auto_review || repo.task(job.task_id!).status !== "in_review")) ||
       (job.kind === "plan" &&
         (!p.autopilot || !p.goal.trim() || !drained(repo, p)))
     ) {
@@ -789,7 +789,7 @@ export function promoteIdle(repo: Repo) {
       .tasks({ status: "backlog" })
       .filter(
         (t) =>
-          repo.project(t.project_id).autopilot && dependenciesDone(repo, t),
+          !repo.project(t.project_id).hidden && repo.project(t.project_id).autopilot && dependenciesDone(repo, t),
       );
     candidates.sort(
       (a, b) =>
@@ -875,7 +875,7 @@ export function startAutopilot(repo: Repo, options: { reviewOnly?: boolean } = {
   )
     return;
   if (healthSetting(repo, "ok") !== "1") {
-    if (repo.projects().some((p) => p.auto_review || p.autopilot))
+    if (repo.projects().some((p) => !p.hidden && (p.auto_review || p.autopilot)))
       limitedEvent(
         repo,
         "autopilot_paused",
@@ -902,7 +902,7 @@ export function startAutopilot(repo: Repo, options: { reviewOnly?: boolean } = {
   for (const t of candidates) {
     if (pending >= status.auto_review_concurrency) break;
     const p = repo.project(t.project_id);
-    if (!p.auto_review) continue;
+    if (p.hidden || !p.auto_review) continue;
     const history = rows.filter(
       (j) => j.kind === "review" && j.task_id === t.id,
     );
@@ -1006,7 +1006,7 @@ export function startAutopilot(repo: Repo, options: { reviewOnly?: boolean } = {
     for (const p of repo
       .projects()
       .sort((a, b) => a.autopilot_rank - b.autopilot_rank)) {
-      if (!p.autopilot || !p.goal.trim() || !drained(repo, p)) continue;
+      if (p.hidden || !p.autopilot || !p.goal.trim() || !drained(repo, p)) continue;
       const prev = rows.find((j) => j.kind === "plan" && j.project_id === p.id);
       if (
         prev &&

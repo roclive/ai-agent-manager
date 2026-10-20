@@ -123,7 +123,7 @@ export function liveRunning(repo: Repo) {
 export function statusCounts(repo: Repo, projectId?: number) {
   const rows = repo.db
     .prepare(
-      `SELECT status,COUNT(*) AS n FROM tasks ${projectId === undefined ? "" : "WHERE project_id=?"} GROUP BY status`,
+      `SELECT t.status,COUNT(*) AS n FROM tasks t JOIN projects p ON p.id=t.project_id ${projectId === undefined ? "WHERE p.hidden=0" : "WHERE t.project_id=? AND p.hidden=0"} GROUP BY t.status`,
     )
     .all(...(projectId === undefined ? [] : [projectId])) as {
     status: string;

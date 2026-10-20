@@ -34,6 +34,7 @@ export interface Project {
   autopilot_rank: number;
   context_file: string | null;
   coding_executor: string;
+  hidden: number;
   created_at: string;
 }
 export interface Task {
@@ -123,6 +124,7 @@ export class Repo {
       autopilot_rank: "INTEGER NOT NULL DEFAULT 100",
       context_file: "TEXT",
       coding_executor: "TEXT NOT NULL DEFAULT ''",
+      hidden: "INTEGER NOT NULL DEFAULT 0",
     }))
       if (!projectColumns.some((c) => c.name === name))
         this.db.exec(`ALTER TABLE projects ADD COLUMN ${name} ${declaration}`);
@@ -463,6 +465,9 @@ export class Repo {
       .prepare("SELECT * FROM projects ORDER BY key")
       .all() as Project[];
   }
+  visibleProjectIds() {
+    return new Set(this.db.prepare("SELECT id FROM projects WHERE hidden=0").all().map((r) => (r as { id: number }).id));
+  }
   project(key: string | number) {
     const p = this.db
       .prepare(
@@ -510,6 +515,7 @@ export class Repo {
       "autopilot_rank",
       "context_file",
       "coding_executor",
+      "hidden",
     ];
     if (Object.keys(patch).some((k) => !allowed.includes(k)))
       throw new Error("Unsupported project field");
@@ -525,13 +531,38 @@ export class Repo {
           throw new Error(`Invalid ${k}`);
         data[k] = Number(data[k]);
       }
+    if (data.hidden !== undefined) {
+      if (![0, 1, false, true].includes(data.hidden as number))
+        throw new Error("Invalid hidden");
+      data.hidden = Number(data.hidden);
+    }
+    const p = this.project(key);
+    if ((p.hidden || data.hidden === 1) && (Number(data.auto_review) === 1 || Number(data.autopilot) === 1))
+      throw new Error("Cannot enable automation while project is hidden");
+    if (data.hidden === 1) {
+      const hide = this.db.transaction(() => {
+        const current = this.project(key);
+        if (!current.hidden) {
+          data.auto_review = 0;
+          data.autopilot = 0;
+          this.db.prepare("UPDATE projects SET auto_review=0,autopilot=0 WHERE id=?").run(current.id);
+          this.db.prepare("INSERT INTO events(ts,task_id,kind,message) VALUES (?,?,?,?)").run(new Date().toISOString(), null, "project_hidden", `${current.key}: auto_review=${current.auto_review}, autopilot=${current.autopilot}`);
+        }
+        const rest = { ...data };
+        delete rest.auto_review;
+        delete rest.autopilot;
+        if (Object.keys(rest).length) this.db.prepare(`UPDATE projects SET ${Object.keys(rest).map((k) => `${k}=?`).join(",")} WHERE id=?`).run(...Object.values(rest), current.id);
+      });
+      hide();
+      return this.project(key);
+    }
     if (
       data.autopilot_rank !== undefined &&
       !Number.isSafeInteger(data.autopilot_rank)
     )
       throw new Error("Invalid autopilot_rank");
     for (const k of allowed.filter(
-      (k) => !["auto_review", "autopilot", "autopilot_rank"].includes(k),
+      (k) => !["auto_review", "autopilot", "autopilot_rank", "hidden"].includes(k),
     ))
       if (
         data[k] !== undefined &&
@@ -545,7 +576,6 @@ export class Repo {
     for (const k of ["name", "repo_path", "base_branch"])
       if (data[k] !== undefined && !String(data[k]).trim())
         throw new Error(`Invalid ${k}`);
-    const p = this.project(key);
     if (Object.keys(data).length)
       this.db
         .prepare(

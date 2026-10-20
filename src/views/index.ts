@@ -4,7 +4,7 @@ import { Repo } from "../db/index.js";
 const line = (s: string) => s.split(/\r?\n/)[0].replace(/[\r\n]/g, " ");
 export function backlog(repo: Repo) {
   const out = ["# Backlog", ""];
-  for (const p of repo.projects()) {
+  for (const p of repo.projects().filter((p) => !p.hidden)) {
     out.push(`## ${p.key} — ${p.name}`, "");
     const tasks = repo.tasks({ project: p.key });
     for (const status of [

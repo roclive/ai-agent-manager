@@ -102,9 +102,11 @@ export function uiRoutes(
     return c.json(result);
   });
   app.post("/api/projects", async (c) => {
-    const p = await c.req.json();
+    const p = await c.req.json<Record<string, unknown>>();
+    if (!p || Array.isArray(p) || typeof p !== "object") throw new Error("Invalid project");
     validateProject(p);
-    const project = repo.addProject(p);
+    if (typeof p.key !== "string" || typeof p.name !== "string" || typeof p.repo_path !== "string") throw new Error("Invalid project");
+    const project = repo.addProject(p as { key: string; name: string; repo_path: string; base_branch?: string; test_cmd?: string; setup_cmd?: string });
     repo.event(
       "settings",
       `Created project ${project.key}: ${Object.keys(p).join(", ")}`,
@@ -119,7 +121,10 @@ export function uiRoutes(
   app.patch("/api/projects/:key", async (c) => {
     const p = await c.req.json<Record<string, unknown>>();
     const { integration, ...patch } = p;
-    const next = { ...repo.project(c.req.param("key")), ...patch };
+    const current = repo.project(c.req.param("key"));
+    const next = { ...current, ...patch };
+    if ((current.hidden || next.hidden) && (Number(patch.auto_review) === 1 || Number(patch.autopilot) === 1))
+      throw new Error("Cannot enable automation while project is hidden");
     validateProject(next);
     repo.updateProject(c.req.param("key"), patch);
     if (integration !== undefined)
@@ -221,12 +226,12 @@ export function uiRoutes(
       },
       cooldown_until: repo.getSetting("cooldown_until"),
       executors: executorsView(repo),
-      running_runs: liveRunning(repo).length,
+      running_runs: liveRunning(repo).filter((r) => !repo.project(r.project_id).hidden).length,
       max_parallel: Number(repo.getSetting("max_parallel")),
       counts_by_status: statusCounts(repo),
       autopilot: autopilotStatus(repo),
       keep_awake_pid: Number(repo.getSetting("keep_awake_pid")) || null,
-      review_pending: repo.tasks({ status: "in_review" }).length,
+      review_pending: repo.tasks({ status: "in_review" }).filter((t) => !repo.project(t.project_id).hidden).length,
     });
   });
   app.get("/api/stream", (c) => {

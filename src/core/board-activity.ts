@@ -18,6 +18,7 @@ export type BoardActivityItem = {
 };
 
 function dispatchReason(repo: Repo, task: Task) {
+  if (repo.project(task.project_id).hidden) return "项目已隐藏";
   if (!dependenciesDone(repo, task)) return "任务依赖尚未完成或集成";
   if (resolutionBusy(repo, task)) return "同项目有需串行处理的活动工作或审查";
   if (globalCooldownBlocks(repo, task)) return "编码执行器处于冷却期";
@@ -34,6 +35,7 @@ export function boardActivity(repo: Repo) {
   const active: BoardActivityItem[] = [];
   for (const run of repo.runs().filter((row) => row.status === "running" && runLive(row))) {
     const task = repo.task(run.task_id);
+    if (repo.project(task.project_id).hidden) continue;
     active.push({
       kind: "coding", status: "running", activity_id: run.id, task_id: task.id, identifier: task.identifier, title: task.title,
       started_at: run.started_at, worktree_path: task.worktree_path, branch: task.branch,
@@ -45,6 +47,7 @@ export function boardActivity(repo: Repo) {
   ).all() as ReviewJob[];
   for (const job of reviewJobs) {
     const task = repo.task(job.task_id);
+    if (repo.project(task.project_id).hidden) continue;
     active.push({
       kind: "review", status: "pending", activity_id: job.id, task_id: task.id, identifier: task.identifier, title: task.title,
       started_at: job.started_at, worktree_path: task.worktree_path, branch: task.branch,
@@ -55,7 +58,7 @@ export function boardActivity(repo: Repo) {
   const ready = repo.tasks({ status: "ready" });
   const eligibleReady = eligibleReadyTasks(repo);
   const reviews = repo.tasks({ status: "in_review" });
-  const optedReviews = reviews.filter((task) => repo.project(task.project_id).auto_review);
+  const optedReviews = reviews.filter((task) => !repo.project(task.project_id).hidden && repo.project(task.project_id).auto_review);
   const eligibleReviews = optedReviews.filter(task => !reviewWaitReason(repo, task.id));
   let reason = "当前没有活动工作";
   let action: "dispatch" | "review" | null = null;

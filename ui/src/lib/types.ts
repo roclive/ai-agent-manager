@@ -70,6 +70,7 @@ export interface Project {
   key: string;
   name: string;
   auto_review?: number;
+  hidden?: number;
   autopilot?: number;
   goal?: string;
   autopilot_rank?: number;

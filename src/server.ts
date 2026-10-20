@@ -88,7 +88,7 @@ export function createApp(
         .tasks({
           status: c.req.query("status"),
           project: c.req.query("project"),
-        })
+        }).filter((t) => c.req.query("include_hidden") === "1" || !repo.project(t.project_id).hidden)
         .sort(
           (a, b) =>
             statuses.indexOf(a.status as (typeof statuses)[number]) -

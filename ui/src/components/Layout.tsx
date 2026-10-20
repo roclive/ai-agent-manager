@@ -49,6 +49,7 @@ export function Layout() {
   }, [project]);
   const projects = useProjects(),
     status = useStatus();
+  const visibleProjects = (projects.data ?? []).filter((p) => !p.hidden);
   useEventStream();
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
@@ -85,7 +86,7 @@ export function Layout() {
   }, [navigate]);
   const sidebar = (
     <Sidebar
-      projects={projects.data ?? []}
+      projects={visibleProjects}
       project={project}
       setProject={setProject}
       status={status.data}
@@ -110,7 +111,7 @@ export function Layout() {
       {creating && (
         <NewTaskDialog
           status="backlog"
-          projects={projects.data ?? []}
+          projects={visibleProjects}
           project={project}
           onClose={() => setCreating(false)}
         />

@@ -72,6 +72,7 @@ export function globalCooldownBlocks(repo: Repo, t: Task) {
 }
 // Preview the same provider selection as dispatch without reserving or spawning work.
 export function dispatchAvailability(repo: Repo, task: Task): string | null {
+  if (repo.project(task.project_id).hidden) return "项目已隐藏";
   try {
     // Availability is a read-only preview used by board/API reads. Keep it
     // deterministic and free of manager model calls or call-cap consumption.
